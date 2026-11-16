@@ -22,13 +22,22 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 
 ## 当前状态
 
-计划定稿（草案 v4，见 [docs/plan.md](docs/plan.md)），尚未开工实现。
+计划定稿（草案 v4，见 [docs/plan.md](docs/plan.md)）。
 
-- [ ] P0：脚手架与数据底座（Expo + Expo Router + NativeWind + SQLite + 分层骨架）
+- [~] P0：脚手架与数据底座——代码就绪（Expo + Expo Router + NativeWind + SQLite 迁移 + ports/adapters 分层骨架，15 项 vitest 通过、tsc 与 iOS bundle 构建通过）；**待 Expo Go 双端启动与数据持久化验收**
 - [ ] P1：导入与分章闭环
 - [ ] P2：角色、音色与云端生成（Edge TTS）
 - [ ] P3：播放与助手
 - [ ] P4：加固
+
+## 开发
+
+```bash
+pnpm install
+pnpm typecheck   # tsc --noEmit
+pnpm test        # vitest：domain 纯逻辑 + 纯函数适配器（SSE 解析）
+pnpm start       # Expo Go 扫码真机运行（P0 验收：书架建测试工程 → 杀进程重开 → 数据仍在）
+```
 
 ## 技术栈（概览）
 

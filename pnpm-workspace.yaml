@@ -1,0 +1,8 @@
+# TaleCast 独立为 pnpm workspace 根：避免被上层 ~/pnpm-workspace.yaml 吞掉 install
+packages: []
+# NativeWind 的 babel 产物直接 import 'react-native-css-interop/jsx-runtime'（传递依赖），
+# pnpm 严格布局下 Metro 无法解析，需公共提升（保留 pnpm 默认的 eslint/prettier 提升项）
+public-hoist-pattern:
+  - '*eslint*'
+  - '*prettier*'
+  - '*react-native-css-interop*'
