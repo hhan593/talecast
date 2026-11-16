@@ -190,7 +190,6 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     // 撤销回到采用前的上一版（保留人工改名）
     expect(afterUndo.map((c) => c.title)).toContain('第一章 重逢（改）');
     // 来源不变：文件仍按原哈希存在
-    expect(s.files.text.get(adopted.ok ? '' : '')).toBeUndefined();
     const source = await s.library.getSource('p1');
     expect(s.files.text.get(source!.textSha256)).toContain('第三章 归来');
   });

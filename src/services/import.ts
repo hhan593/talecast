@@ -62,7 +62,8 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
       .then(() =>
         deps.libraryRepository.createSourceWithChapters(
           {
-            id: `src-${rawSha256.slice(0, 16)}`,
+            // 来源 id 按工程隔离（同文件可导入到不同工程；工程内由 service 层保证唯一来源）
+            id: `src-${projectId}-${rawSha256.slice(0, 16)}`,
             projectId,
             filename: command.fileName,
             encoding: 'utf-8',

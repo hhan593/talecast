@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeSegmentTextHash } from '@/domain/jobs';
 import { createBindingsService } from './bindings';
 import { createGenerationService } from './generation';
 import { createVoicesService } from './voices';
@@ -169,7 +168,6 @@ describe('P2 生成任务：段级幂等与重试', () => {
     const progress = await s.generation.getProgress(started.value.jobId);
     expect(progress?.segments[0].filePath).toBe(preview.value.filePath);
     expect(progress?.segments[0].textHash).toBe(preview.value.textHash);
-    void computeSegmentTextHash;
   });
 
   it('未绑定音色时生成给出明确错误', async () => {

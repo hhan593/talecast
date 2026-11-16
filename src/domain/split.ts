@@ -48,14 +48,6 @@ export interface ChapterDraft {
   headingLine: number | null;
 }
 
-/** 兼容旧的行数组入口（测试/工具用） */
-export function detectChapterHeadings(lines: string[]): Array<{ lineIndex: number; title: string }> {
-  return detectChapterHeadingsInText(lines.join('\n')).map((h) => ({
-    lineIndex: h.lineIndex,
-    title: h.title,
-  }));
-}
-
 /**
  * 由标题命中构建章节草案：首个标题前的非空文字归入"前言"，末章收尾到全文末尾。
  * 无命中时整本作为单章（用户可在审阅后人工调整或重新分章）。
