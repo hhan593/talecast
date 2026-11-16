@@ -233,6 +233,14 @@ export default function ProjectWorkbenchScreen() {
           className="mt-2 flex-1 px-4"
           data={assistant.messages ?? []}
           keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            <View className="items-center py-16">
+              <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+                还没有会话记录。助手只提出建议（候选），不会直接修改工程；
+                分章候选需要你在审阅中人工采用。使用前需在 设置 → 服务连接 配置文本模型。
+              </Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <View className={item.role === 'user' ? 'items-end' : 'items-start'}>
               <View

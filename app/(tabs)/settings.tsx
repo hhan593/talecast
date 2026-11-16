@@ -12,16 +12,20 @@ export default function SettingsScreen() {
   const [apiKey, setApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{ ttsOk: number; ttsFailed: number; llmOk: number; llmFailed: number } | null>(null);
+
+  const reload = useCallback(async () => {
+    const config = await services.settings.getLlmConfig();
+    setEndpoint(config.endpoint ?? '');
+    setModel(config.model ?? '');
+    setHasApiKey(config.hasApiKey);
+    setUsage(await services.settings.getUsage());
+    setLoading(false);
+  }, [services]);
 
   useEffect(() => {
-    void (async () => {
-      const config = await services.settings.getLlmConfig();
-      setEndpoint(config.endpoint ?? '');
-      setModel(config.model ?? '');
-      setHasApiKey(config.hasApiKey);
-      setLoading(false);
-    })();
-  }, [services]);
+    void reload();
+  }, [reload]);
 
   const save = useCallback(() => {
     void (async () => {
@@ -31,11 +35,10 @@ export default function SettingsScreen() {
       }
       await services.settings.saveLlmConfig({ endpoint, model, apiKey });
       setApiKey(''); // 不回显密钥
-      const config = await services.settings.getLlmConfig();
-      setHasApiKey(config.hasApiKey);
+      await reload();
       setNotice('已保存。密钥只存系统安全存储，不写入数据库与日志。');
     })();
-  }, [endpoint, model, apiKey, services]);
+  }, [endpoint, model, apiKey, reload, services]);
 
   return (
     <ScrollView
@@ -103,6 +106,19 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
+      {usage ? (
+        <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
+          <Text className="font-semibold text-zinc-900 dark:text-zinc-100">请求用量（本机累计）</Text>
+          <Text className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            · 语音合成（Edge）：成功 {usage.ttsOk} 次 / 失败 {usage.ttsFailed} 次{'\n'}
+            · 文本模型：成功 {usage.llmOk} 次 / 失败 {usage.llmFailed} 次
+          </Text>
+          <Pressable className="mt-2 self-start" onPress={() => void reload()}>
+            <Text className="text-xs text-indigo-500">刷新</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
         <Text className="font-semibold text-zinc-900 dark:text-zinc-100">能力边界</Text>
         <Text className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
@@ -115,7 +131,7 @@ export default function SettingsScreen() {
 
       <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
         <Text className="font-semibold text-zinc-900 dark:text-zinc-100">通用</Text>
-        <Text className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">TaleCast 0.1.0 · P2 原型</Text>
+        <Text className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">TaleCast 0.1.0 · P4 加固原型</Text>
       </View>
     </ScrollView>
   );

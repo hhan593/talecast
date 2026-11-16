@@ -98,6 +98,7 @@ const services = {
   settings: createSettingsService({
     settingsRepository: adapters.settingsRepository,
     keyStore: secureStoreKeyStore,
+    requestLogRepository: adapters.requestLogRepository,
   }),
   playback: createPlaybackService({
     audioPlayer,

@@ -1,15 +1,17 @@
-import type { KeyStore, SettingsRepository } from '@/domain/ports';
+import type { KeyStore, RequestLogRepository, SettingsRepository } from '@/domain/ports';
 
 import { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/adapters/llm/client';
 
 /**
  * 服务连接配置（docs/plan.md 5.3 助手/3.1 密钥）：
  * 端点与模型名是非敏感配置 → SQLite settings；API Key 只存 SecureStore，读回时只报存在性。
+ * 请求用量（P4）：tts/llm 成功与失败计数来自 provider_requests。
  */
 
 export interface SettingsDeps {
   settingsRepository: SettingsRepository;
   keyStore: KeyStore;
+  requestLogRepository: RequestLogRepository;
 }
 
 export interface LlmConfigView {
@@ -36,6 +38,11 @@ export function createSettingsService(deps: SettingsDeps) {
       if (input.apiKey !== undefined && input.apiKey.trim().length > 0) {
         await deps.keyStore.set(LLM_API_KEY, input.apiKey.trim());
       }
+    },
+
+    /** 请求用量（P4）：来自 provider_requests 的成功/失败计数 */
+    async getUsage(): Promise<{ ttsOk: number; ttsFailed: number; llmOk: number; llmFailed: number }> {
+      return deps.requestLogRepository.counts();
     },
   };
 }
