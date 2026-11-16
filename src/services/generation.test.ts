@@ -227,3 +227,49 @@ describe('P2 绑定：人工确认门槛', () => {
     expect(result.error.message).toContain('人工确认');
   });
 });
+
+describe('P4 优化：取消与级联删除', () => {
+  it('取消生成：已完成段保留，任务标记失败，重试续跑到完成', async () => {
+    const s = await setupWithImport();
+    await s.bindingsService.bindVoice({ commandId: 'c-bind', projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural' });
+    const chapters = await s.library.listChapters('p1');
+    s.tts.synthDelayMs = 120; // 放慢合成，为取消留出时间窗
+
+    const started = await s.generation.startGeneration({ commandId: 'c-gen-1', projectId: 'p1', chapterId: chapters[0].id });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    await new Promise((resolve) => setTimeout(resolve, 150)); // 首段完成、次段进行中
+    const cancelled = await s.generation.cancelGeneration({ projectId: 'p1', jobId: started.value.jobId });
+    expect(cancelled.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 100)); // 等循环感知取消
+
+    const afterCancel = await s.generation.getProgress(started.value.jobId);
+    expect(afterCancel?.status).toBe('failed');
+    expect(afterCancel?.error).toContain('已取消');
+    const doneAfterCancel = (afterCancel?.segments ?? []).filter((seg) => seg.status === 'done').length;
+    expect(doneAfterCancel).toBeGreaterThan(0);
+
+    // 重试（不再延迟）→ 续跑到完成，且不重复请求已完成段
+    s.tts.synthDelayMs = 0;
+    const retried = await s.generation.retryGeneration({ projectId: 'p1', jobId: started.value.jobId });
+    expect(retried.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const after = await s.generation.getProgress(started.value.jobId);
+    expect(after?.status).toBe('done');
+    expect(after?.segments.every((seg) => seg.status === 'done')).toBe(true);
+  });
+
+  it('已完成任务取消返回 busy', async () => {
+    const s = await setupWithImport();
+    await s.bindingsService.bindVoice({ commandId: 'c-bind', projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural' });
+    const chapters = await s.library.listChapters('p1');
+    const started = await s.generation.startGeneration({ commandId: 'c-gen-1', projectId: 'p1', chapterId: chapters[0].id });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    if (!started.ok) return;
+    const result = await s.generation.cancelGeneration({ projectId: 'p1', jobId: started.value.jobId });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('busy');
+  });
+});

@@ -111,6 +111,17 @@ export default function ProjectWorkbenchScreen() {
     const index = paragraphs.findIndex((p) => p.startOffset > pendingOffset) - 1;
     return index >= 0 ? index : 0;
   }, [paragraphs, pendingOffset]);
+  // 按文本长度估算行高：滚动定位精度优于固定值（长段/短段混合的章节尤其明显）
+  const layout = useMemo(() => {
+    const lengths = paragraphs.map((p) => Math.ceil(p.text.length / 22) * 24 + 16);
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const length of lengths) {
+      offsets.push(acc);
+      acc += length;
+    }
+    return { lengths, offsets };
+  }, [paragraphs]);
 
   const viewableCallbackRef = useRef<((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null>(null);
   viewableCallbackRef.current = (info) => {
@@ -186,7 +197,11 @@ export default function ProjectWorkbenchScreen() {
             data={paragraphs}
             keyExtractor={(item, index) => `${item.startOffset}-${index}`}
             initialScrollIndex={initialIndex}
-            getItemLayout={(_, index) => ({ length: 96, offset: 96 * index, index })}
+            getItemLayout={(_, index) => ({
+              length: layout.lengths[index] ?? 96,
+              offset: layout.offsets[index] ?? 96 * index,
+              index,
+            })}
             renderItem={({ item }) => {
               const highlightOffset =
                 playback.state.chapterId === current.chapter.id ? playback.state.segmentStartOffset : null;
@@ -359,6 +374,14 @@ export default function ProjectWorkbenchScreen() {
                 onPress={() => void generation.retry(generation.progress!.jobId)}
               >
                 <Text className="text-xs font-semibold text-white">重试缺失段</Text>
+              </Pressable>
+            ) : null}
+            {generation.progress.status === 'running' || generation.progress.status === 'pending' ? (
+              <Pressable
+                className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800"
+                onPress={() => void generation.cancel(generation.progress!.jobId)}
+              >
+                <Text className="text-xs text-zinc-700 dark:text-zinc-300">取消</Text>
               </Pressable>
             ) : null}
           </View>

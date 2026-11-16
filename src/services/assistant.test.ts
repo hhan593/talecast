@@ -129,3 +129,29 @@ describe('P3 工程助手', () => {
     expect(earlier[0].text).toBe('问 1');
   });
 });
+
+describe('P4 优化：流式增量持久化', () => {
+  it('onDelta 期间消息版本递增（中断可恢复），结束时文本完整', async () => {
+    const s = await setup();
+    s.llm.streamChunks = ['第一块。', '第二块。', '第三块。'];
+    s.llm.chunkDelayMs = 20;
+    const fakeAssistant = s.assistant as unknown as {
+      // 直接经依赖创建的服务实例即可；为读取中间版本，重建一个带假仓库的服务
+    };
+    void fakeAssistant;
+
+    const result = await s.assistant.sendMessage({
+      projectId: 'p1',
+      commandId: 'c-stream',
+      userText: '讲讲这个故事',
+      onDelta: () => undefined,
+    });
+    expect(result.ok).toBe(true);
+    const messages = await s.assistant.listMessages('p1', { limit: 10 });
+    const assistantMessage = messages.find((m) => m.role === 'assistant');
+    expect(assistantMessage?.text).toContain('第一块。');
+    expect(assistantMessage?.text).toContain('第三块。');
+    // 版本号 > 1 证明流式期间有多次持久化（不再只在结尾落一次）
+    expect(assistantMessage?.version).toBeGreaterThan(1);
+  });
+});

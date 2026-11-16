@@ -1,11 +1,14 @@
 import { router } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 
+import { EditDialog } from '@/components/edit-dialog';
 import { useProjects } from '@/hooks/use-projects';
 
 /** 书架（docs/plan.md 4.1.1）：P0 只验证数据底座——建库、写入测试工程、重启可恢复。 */
 export default function BookshelfScreen() {
-  const { projects, error, createTestProject, refresh } = useProjects();
+  const { projects, error, createProject, deleteProject, refresh } = useProjects();
+  const [createVisible, setCreateVisible] = useState(false);
 
   if (projects === null && !error) {
     return (
@@ -30,9 +33,9 @@ export default function BookshelfScreen() {
 
       <Pressable
         className="mt-4 items-center rounded-xl bg-indigo-500 py-3 active:bg-indigo-600"
-        onPress={() => void createTestProject()}
+        onPress={() => setCreateVisible(true)}
       >
-        <Text className="font-semibold text-white">新建测试工程</Text>
+        <Text className="font-semibold text-white">新建工程</Text>
       </Pressable>
 
       <FlatList
@@ -43,6 +46,12 @@ export default function BookshelfScreen() {
           <Pressable
             className="rounded-xl bg-white p-4 active:bg-zinc-100 dark:bg-zinc-900 dark:active:bg-zinc-800"
             onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
+            onLongPress={() =>
+              Alert.alert('删除工程', `《${item.title}》的章节、候选、绑定与生成任务将全部删除，且不可恢复。确认删除？`, [
+                { text: '取消', style: 'cancel' },
+                { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
+              ])
+            }
           >
             <Text className="font-semibold text-zinc-900 dark:text-zinc-100">{item.title}</Text>
             <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -54,7 +63,8 @@ export default function BookshelfScreen() {
         ListEmptyComponent={
           <View className="items-center py-16">
             <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              还没有工程。导入小说的完整流程随 P1 到来，先点上方按钮验证数据底座。
+              还没有工程。点"新建工程"创建，再进入工程导入 UTF-8 TXT 小说。
+              {'\n'}长按工程可删除。
             </Text>
           </View>
         }

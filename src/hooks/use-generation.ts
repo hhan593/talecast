@@ -83,6 +83,15 @@ export function useGeneration(projectId: string) {
     [projectId, services, watch],
   );
 
+  const cancel = useCallback(
+    async (jobId: string) => {
+      const result = await services.generation.cancelGeneration({ projectId, jobId });
+      if (!result.ok) setError(result.error.message);
+      return result;
+    },
+    [projectId, services],
+  );
+
   const preview = useCallback(
     async (chapterId: string) => {
       setBusy(true);
@@ -102,5 +111,5 @@ export function useGeneration(projectId: string) {
     [projectId, services],
   );
 
-  return { progress, busy, error, start, retry, preview, stopPreview: () => services.previewPlayer.stop() };
+  return { progress, busy, error, start, retry, cancel, preview, stopPreview: () => services.previewPlayer.stop() };
 }

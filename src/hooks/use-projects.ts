@@ -22,16 +22,28 @@ export function useProjects() {
     void refresh();
   }, [refresh]);
 
-  const createTestProject = useCallback(async () => {
-    const result = await services.projects.createTestProject({
-      commandId: services.newCommandId(),
-      title: `测试工程 ${new Date().toLocaleTimeString('zh-CN')}`,
-      description: 'P0 数据底座验收用的测试工程',
-    });
-    if (!result.ok) setError(result.error.message);
-    await refresh();
-    return result;
-  }, [services, refresh]);
+  const createProject = useCallback(
+    async (title: string) => {
+      const result = await services.projects.createProject({
+        commandId: services.newCommandId(),
+        title,
+      });
+      if (!result.ok) setError(result.error.message);
+      await refresh();
+      return result;
+    },
+    [refresh, services],
+  );
 
-  return { projects, error, refresh, createTestProject };
+  const deleteProject = useCallback(
+    async (projectId: string) => {
+      const result = await services.projects.deleteProject({ projectId });
+      if (!result.ok) setError(result.error.message);
+      await refresh();
+      return result;
+    },
+    [refresh, services],
+  );
+
+  return { projects, error, refresh, createProject, deleteProject };
 }

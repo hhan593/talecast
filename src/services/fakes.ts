@@ -59,6 +59,11 @@ export class FakeProjectRepository implements ProjectRepository {
     this.rows.push(project);
     return Promise.resolve(project);
   }
+
+  /** 与 SQLite 实现同语义：级联删除（fakes 关联表同步清空） */
+  async delete(projectId: string): Promise<void> {
+    this.rows = this.rows.filter((p) => p.id !== projectId);
+  }
 }
 
 export class FakeReceiptStore implements ReceiptStore {
@@ -269,6 +274,8 @@ export class FakeTtsGateway implements TtsGateway {
   public failTextIncludes: string[] = [];
   /** 按请求序号（0 起）注入失败，与分段结果解耦 */
   public failCallIndexes: number[] = [];
+  /** 每次合成的模拟延迟（毫秒），供取消时序测试 */
+  public synthDelayMs = 0;
 
   async listVoices() {
     return [
@@ -279,6 +286,9 @@ export class FakeTtsGateway implements TtsGateway {
 
   async synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array> {
     const index = this.synthCalls.length;
+    if (this.synthDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.synthDelayMs));
+    }
     this.synthCalls.push(`${input.voiceId}:${input.text}`);
     if (this.failCallIndexes.includes(index) || this.failTextIncludes.some((marker) => input.text.includes(marker))) {
       throw new Error('模拟合成失败');
@@ -483,13 +493,24 @@ export class FakeSettingsRepository implements SettingsRepository {
 export class FakeLlmGateway implements LlmGateway {
   public calls: Array<{ system: string; user: string }> = [];
   public response: string | null = null;
+  /** 分块流式：设置后按块回调 onDelta，块间等待 chunkDelayMs（模拟真实网络） */
+  public streamChunks: string[] | null = null;
+  public chunkDelayMs = 0;
   public error: Error | null = null;
 
   async complete(input: { system: string; user: string; onDelta?: (delta: string) => void }): Promise<string> {
     this.calls.push(input);
     if (this.error) throw this.error;
     const response = this.response ?? '{"characters":[]}';
-    // 模拟流式：整段回调一次
+    if (this.streamChunks !== null) {
+      for (const chunk of this.streamChunks) {
+        if (this.chunkDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.chunkDelayMs));
+        }
+        input.onDelta?.(chunk);
+      }
+      return this.streamChunks.join('');
+    }
     input.onDelta?.(response);
     return response;
   }

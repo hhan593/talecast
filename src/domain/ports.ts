@@ -23,6 +23,8 @@ export interface ProjectRepository {
   list(): Promise<Project[]>;
   get(id: Project['id']): Promise<Project | null>;
   create(input: { id: Project['id']; title: string; description: string; createdAt: number }): Promise<Project>;
+  /** 级联删除工程全部数据（章节/来源/候选/编辑/阅读位置/绑定/角色/生成任务与段/助手会话），同一事务 */
+  delete(projectId: Project['id']): Promise<void>;
 }
 
 export interface ReceiptStore {

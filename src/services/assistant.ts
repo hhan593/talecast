@@ -118,25 +118,53 @@ export function createAssistantService(deps: AssistantDeps) {
         (context.chapterMeta || '（还没有章节）') +
         `\n全文共 ${context.textLength} 字。\n开头预览：\n${context.textHead}\n\n【用户消息】\n${command.userText}`;
 
+      // 先落占位消息，流式增量节流持久化（docs/plan.md 5.3：按会话序号写入，中断可恢复）
+      const assistantRecord: AssistantMessageRecord = {
+        id: `msg-${command.commandId}-a`,
+        sessionId: session.id,
+        ordinal: baseOrdinal + 1,
+        role: 'assistant',
+        partsJson: JSON.stringify([{ type: 'text', text: '' }]),
+        version: 0,
+        createdAt: Date.now(),
+      };
+      await deps.assistantRepository.appendMessage(assistantRecord);
+
       let assistantText = '';
+      let version = 0;
+      let lastPersistMs = 0;
+      const persistStream = (): Promise<void> => {
+        version += 1;
+        return deps.assistantRepository.updateMessageParts(
+          session.id,
+          assistantRecord.ordinal,
+          JSON.stringify([{ type: 'text', text: assistantText }]),
+          version,
+        );
+      };
       try {
         assistantText = await deps.llmGateway.complete({
           system: ASSISTANT_SYSTEM_PROMPT,
           user: contextPrompt,
-          onDelta: command.onDelta,
+          onDelta: (delta) => {
+            assistantText += delta;
+            command.onDelta?.(delta);
+            const now = Date.now();
+            if (now - lastPersistMs >= 400) {
+              lastPersistMs = now;
+              void persistStream();
+            }
+          },
         });
+        await persistStream();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const errorRecord: AssistantMessageRecord = {
-          id: `msg-${command.commandId}-a`,
-          sessionId: session.id,
-          ordinal: baseOrdinal + 1,
-          role: 'assistant',
-          partsJson: JSON.stringify([{ type: 'text', text: `（出错）${message}` }]),
-          version: 0,
-          createdAt: Date.now(),
-        };
-        await deps.assistantRepository.appendMessage(errorRecord);
+        await deps.assistantRepository.updateMessageParts(
+          session.id,
+          assistantRecord.ordinal,
+          JSON.stringify([{ type: 'text', text: `${assistantText}（出错）${message}` }]),
+          version + 1,
+        );
         const code = message.includes('未配置文本模型') ? 'invalid' : 'network';
         return err(code as 'invalid' | 'network', message);
       }
@@ -177,16 +205,7 @@ export function createAssistantService(deps: AssistantDeps) {
         { type: 'text', text: assistantText },
       ];
       if (proposalId) parts.push({ type: 'resplit_candidate', proposalId });
-      const assistantRecord: AssistantMessageRecord = {
-        id: `msg-${command.commandId}-a`,
-        sessionId: session.id,
-        ordinal: baseOrdinal + 1,
-        role: 'assistant',
-        partsJson: JSON.stringify(parts),
-        version: 1,
-        createdAt: Date.now(),
-      };
-      await deps.assistantRepository.appendMessage(assistantRecord);
+      await deps.assistantRepository.updateMessageParts(session.id, assistantRecord.ordinal, JSON.stringify(parts), version + 1);
 
       return ok({ assistantText, proposalId });
     },

@@ -60,4 +60,28 @@ export class SqliteProjectRepository implements ProjectRepository {
       updatedAt: input.createdAt,
     });
   }
+
+  /** 级联删除（不含 command_receipts：全局幂等回执保留，防止重放）；沙盒文件按内容寻址共享，不在此删除 */
+  async delete(projectId: string): Promise<void> {
+    this.db.withTransactionSync(() => {
+      this.db.runSync(
+        `DELETE FROM generation_segments WHERE job_id IN (SELECT id FROM generation_jobs WHERE project_id = ?)`,
+        projectId,
+      );
+      this.db.runSync('DELETE FROM generation_jobs WHERE project_id = ?', projectId);
+      this.db.runSync(
+        'DELETE FROM assistant_messages WHERE session_id IN (SELECT id FROM assistant_sessions WHERE project_id = ?)',
+        projectId,
+      );
+      this.db.runSync('DELETE FROM assistant_sessions WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM reading_state WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM chapter_edits WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM split_proposals WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM bindings WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM characters WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM chapters WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM sources WHERE project_id = ?', projectId);
+      this.db.runSync('DELETE FROM projects WHERE id = ?', projectId);
+    });
+  }
 }

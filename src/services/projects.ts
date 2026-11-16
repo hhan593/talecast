@@ -29,6 +29,45 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
       return deps.projectRepository.get(id);
     },
 
+    async createProject(command: CreateProjectCommand): Promise<Result<Project>> {
+      const receipt = await deps.receiptStore.get<Project>(command.commandId);
+      return resolveIdempotent(receipt, async () => {
+        const title = command.title.trim();
+        if (title.length === 0 || title.length > 60) {
+          return err('invalid', '工程标题需为 1-60 个字符');
+        }
+        try {
+          const project = await deps.projectRepository.create({
+            id: command.commandId,
+            title,
+            description: command.description ?? '',
+            createdAt: Date.now(),
+          });
+          await deps.receiptStore.put({
+            commandId: command.commandId,
+            result: ok(project),
+            createdAt: Date.now(),
+          });
+          return ok(project);
+        } catch (error) {
+          return err('storage', `创建工程失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+    },
+
+    /** 删除工程：级联清理全部工程数据（沙盒内容寻址文件共享保留，见 adapters/files.ts） */
+    async deleteProject(command: { projectId: string }): Promise<Result<null>> {
+      try {
+        const project = await deps.projectRepository.get(command.projectId);
+        if (!project) return err('not_found', '工程不存在');
+        await deps.projectRepository.delete(command.projectId);
+        return ok(null);
+      } catch (error) {
+        return err('storage', `删除工程失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+
+    /** 兼容保留：书架快速验证入口（自定义标题见 createProject） */
     async createTestProject(command: CreateProjectCommand): Promise<Result<Project>> {
       const receipt = await deps.receiptStore.get<Project>(command.commandId);
       return resolveIdempotent(receipt, async () => {

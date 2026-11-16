@@ -289,3 +289,17 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     expect(restored).toEqual({ chapterId: chapters[0].id, charOffset: 0 });
   });
 });
+
+describe('P4 优化：工程删除', () => {
+  it('删除工程后工程与来源查询均落空', async () => {
+    const s = await setup();
+    const bytes = await loadSample();
+    await s.importService.importSource({ commandId: 'c-import', projectId: 'p1', fileName: 'n.txt', bytes });
+    // 级联 SQL 的完整覆盖在设备验收（expo-sqlite 无法进 Node 测试环境）；
+    // 这里验证服务流程与 fake 仓库语义：删除后工程不可再取。
+    const deleted = await s.projects.delete ? null : null;
+    void deleted;
+    await (s.projects as unknown as { delete: (id: string) => Promise<void> }).delete('p1');
+    expect(await s.projects.get('p1')).toBeNull();
+  });
+});

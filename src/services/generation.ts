@@ -53,6 +53,9 @@ export interface GenerationProgress {
 }
 
 export function createGenerationService(deps: GenerationDeps) {
+  /** 取消标记：内存态（重启即清空，中断恢复走 markInterruptedJobsFailed） */
+  const cancelledJobs = new Set<string>();
+
   async function loadChapterText(projectId: string, chapterId: string) {
     const chapters = await deps.libraryRepository.listChapters(projectId);
     const chapter = chapters.find((c) => c.id === chapterId) ?? null;
@@ -72,12 +75,31 @@ export function createGenerationService(deps: GenerationDeps) {
     let progress = job.progress;
     for (const segment of segments) {
       if (segment.status === 'done') continue; // 幂等复用：已完成段零请求
+      if (cancelledJobs.has(jobId)) {
+        await deps.generationStore.updateJob(jobId, {
+          status: 'failed',
+          error: `已取消：完成 ${progress}/${job.totalSegments} 段，已完成段保留，可重试续跑`,
+        });
+        return;
+      }
       await deps.generationStore.updateSegment(segment.id, { status: 'generating', error: null });
       try {
         const audio = await deps.ttsGateway.synthesize({
           text: segment.text,
           voiceId: job.voiceId,
         });
+        if (cancelledJobs.has(jobId)) {
+          // 长请求返回后才取消：音频已产出，落盘为缓存不浪费本次请求
+          const filePath = await deps.audioFileStore.write(segment.textHash, audio);
+          await deps.generationStore.updateSegment(segment.id, { status: 'done', filePath, error: null });
+          progress += 1;
+          await deps.generationStore.updateJob(jobId, { progress });
+          await deps.generationStore.updateJob(jobId, {
+            status: 'failed',
+            error: `已取消：完成 ${progress}/${job.totalSegments} 段，已完成段保留，可重试续跑`,
+          });
+          return;
+        }
         const filePath = await deps.audioFileStore.write(segment.textHash, audio);
         await deps.generationStore.updateSegment(segment.id, { status: 'done', filePath, error: null });
         await deps.requestLogRepository.log('tts', true, segment.textHash.slice(0, 16));
@@ -189,9 +211,21 @@ export function createGenerationService(deps: GenerationDeps) {
       if (job.status === 'running' || job.status === 'pending') {
         return err('busy', '任务仍在进行中，稍候刷新进度');
       }
+      cancelledJobs.delete(job.id);
       await deps.generationStore.updateJob(job.id, { status: 'pending', error: null });
       void runJobSegments(job.id);
       return ok({ jobId: job.id });
+    },
+
+    /** 取消进行中的任务：已完成段保留为缓存（未落盘的合成结果也不浪费），重试续跑 */
+    async cancelGeneration(command: { projectId: string; jobId: string }): Promise<Result<null>> {
+      const job = await deps.generationStore.getJob(command.jobId);
+      if (!job || job.projectId !== command.projectId) return err('not_found', '任务不存在');
+      if (job.status !== 'running' && job.status !== 'pending') {
+        return err('busy', '任务已结束，无需取消');
+      }
+      cancelledJobs.add(job.id);
+      return ok(null);
     },
 
     /** 单段试听：不建任务；音频按 text_hash 落盘，生成时自动转正 */
