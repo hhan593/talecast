@@ -87,14 +87,18 @@ export interface ChapterEditRepository {
 
 export interface ReadingState {
   projectId: Project['id'];
-  chapterId: string;
-  charOffset: number;
+  /** 章节落点（文本阅读）；可为 null（只更新音频位置） */
+  chapterId: string | null;
+  charOffset: number | null;
+  audioSegmentOrdinal: number | null;
+  audioOffsetMs: number | null;
   updatedAt: number;
 }
 
+/** set 支持部分更新：未提供的字段保留旧值（文本位置与音频位置互不覆盖） */
 export interface ReadingStateRepository {
   get(projectId: Project['id']): Promise<ReadingState | null>;
-  set(state: ReadingState): Promise<void>;
+  set(state: Omit<ReadingState, 'updatedAt'>): Promise<void>;
 }
 
 /**
@@ -136,9 +140,14 @@ export interface TtsGateway {
   synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array>;
 }
 
-/** 远程文本模型（OpenAI 兼容）；P2 角色抽取与 P3 助手共用 */
+/** 远程文本模型（OpenAI 兼容）；P2 角色抽取与 P3 助手共用。onDelta 提供流式增量（P3 助手） */
 export interface LlmGateway {
-  complete(input: { system: string; user: string; signal?: AbortSignal }): Promise<string>;
+  complete(input: {
+    system: string;
+    user: string;
+    signal?: AbortSignal;
+    onDelta?: (delta: string) => void;
+  }): Promise<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +211,40 @@ export interface AudioPlayer {
   load(uri: string): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
+  /** 跳转到段内毫秒位置（拖动进度/点段跳转） */
+  seek(positionMs: number): Promise<void>;
   onProgress(callback: (positionMs: number) => void): () => void;
   onPlaybackEnd(callback: () => void): () => void;
+  release(): void;
+}
+
+// ---------------------------------------------------------------------------
+// P3：工程助手会话
+// ---------------------------------------------------------------------------
+
+export interface AssistantSessionRecord {
+  id: string;
+  projectId: Project['id'];
+  taskKind: 'general';
+  chapterId: string | null;
+  createdAt: number;
+}
+
+export interface AssistantMessageRecord {
+  id: string;
+  sessionId: string;
+  ordinal: number;
+  role: 'user' | 'assistant';
+  partsJson: string;
+  version: number;
+  createdAt: number;
+}
+
+export interface AssistantRepository {
+  getOrCreateSession(projectId: Project['id']): Promise<AssistantSessionRecord>;
+  listMessages(sessionId: string, options: { limit: number; beforeOrdinal?: number }): Promise<Array<AssistantMessageRecord>>;
+  appendMessage(record: AssistantMessageRecord): Promise<void>;
+  /** 流式追加：更新 parts_json 并 version+1（按会话内 ordinal 定位） */
+  updateMessageParts(sessionId: string, ordinal: number, partsJson: string, nextVersion: number): Promise<void>;
+  countMessages(sessionId: string): Promise<number>;
 }

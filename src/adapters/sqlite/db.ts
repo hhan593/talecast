@@ -170,6 +170,30 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 4,
+    description: 'P3：工程助手会话与消息',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS assistant_sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        task_kind TEXT NOT NULL DEFAULT 'general',
+        chapter_id TEXT,
+        created_at INTEGER NOT NULL,
+        UNIQUE(project_id, task_kind)
+      )`,
+      `CREATE TABLE IF NOT EXISTS assistant_messages (
+        id TEXT PRIMARY KEY NOT NULL,
+        session_id TEXT NOT NULL REFERENCES assistant_sessions(id),
+        ordinal INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        parts_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        UNIQUE(session_id, ordinal)
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

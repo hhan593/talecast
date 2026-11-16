@@ -31,14 +31,14 @@ export function createReadingService(deps: ReadingDeps) {
     async restorePosition(projectId: string, chapters: Chapter[]): Promise<ReadingPosition | null> {
       if (chapters.length === 0) return null;
       const state = await deps.readingStateRepository.get(projectId);
-      if (!state) {
+      if (!state || state.chapterId === null) {
         return { chapterId: chapters[0].id, charOffset: 0 };
       }
       const exists = chapters.some((c) => c.id === state.chapterId);
       if (!exists) {
         return { chapterId: chapters[0].id, charOffset: 0 };
       }
-      return { chapterId: state.chapterId, charOffset: state.charOffset };
+      return { chapterId: state.chapterId, charOffset: state.charOffset ?? 0 };
     },
 
     savePosition(projectId: string, chapterId: string, charOffset: number): Promise<void> {
@@ -46,7 +46,8 @@ export function createReadingService(deps: ReadingDeps) {
         projectId,
         chapterId,
         charOffset,
-        updatedAt: Date.now(),
+        audioSegmentOrdinal: null,
+        audioOffsetMs: null,
       });
     },
 

@@ -7,12 +7,15 @@ import {
   Pressable,
   RefreshControl,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
 import { EditDialog } from '@/components/edit-dialog';
+import { useAssistant } from '@/hooks/use-assistant';
 import { useGeneration } from '@/hooks/use-generation';
 import { useLibrary } from '@/hooks/use-library';
+import { usePlayback } from '@/hooks/use-playback';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
 import { type Paragraph } from '@/domain/source';
@@ -31,7 +34,10 @@ export default function ProjectWorkbenchScreen() {
   const generation = useGeneration(projectId);
   const router = useRouter();
 
-  const [view, setView] = useState<'chapters' | 'reader'>('chapters');
+  const playback = usePlayback(projectId);
+  const assistant = useAssistant(projectId);
+  const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
+  const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{ chapter: Chapter; paragraphs: Paragraph[] } | null>(null);
   const [pendingOffset, setPendingOffset] = useState(0);
   const [restored, setRestored] = useState(false);
@@ -69,6 +75,25 @@ export default function ProjectWorkbenchScreen() {
     [projectId, services, library],
   );
   openChapterRef.current = openChapter;
+
+  // 点段跳转 / 正文跟随（docs/plan.md P3：拖动进度/切章后高亮跟随）
+  const seekToParagraph = useCallback(
+    async (paragraph: Paragraph) => {
+      const st = services.playback.getState();
+      if (st.chapterId !== current?.chapter.id || st.queueOffsets.length === 0) {
+        if (!current) return;
+        const played = await playback.playChapter(current.chapter.id);
+        if (!played.ok) return;
+      }
+      const offsets = services.playback.getState().queueOffsets;
+      let index = 0;
+      for (let i = 0; i < offsets.length; i++) {
+        if (offsets[i] <= paragraph.startOffset) index = i;
+      }
+      await playback.seekToSegment(index);
+    },
+    [current, playback, projectId, services],
+  );
 
   const saveReadingPosition = useCallback(
     (chapterId: string, charOffset: number) => {
@@ -126,6 +151,31 @@ export default function ProjectWorkbenchScreen() {
           </Text>
           <View className="w-16" />
         </View>
+        <View className="mt-2 flex-row items-center gap-2 px-4">
+          {playback.state.chapterId === current.chapter.id && playback.state.status === 'playing' ? (
+            <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={() => void playback.pause()}>
+              <Text className="text-xs text-zinc-700 dark:text-zinc-300">暂停</Text>
+            </Pressable>
+          ) : playback.state.chapterId === current.chapter.id && playback.state.status === 'paused' ? (
+            <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={() => void playback.resume()}>
+              <Text className="text-xs text-zinc-700 dark:text-zinc-300">继续</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              className="rounded-lg bg-indigo-500 px-3 py-1.5"
+              onPress={() => void playback.playChapter(current.chapter.id)}
+            >
+              <Text className="text-xs font-semibold text-white">播放整章</Text>
+            </Pressable>
+          )}
+          {playback.state.chapterId === current.chapter.id && playback.state.segmentCount > 0 ? (
+            <Text className="text-xs text-zinc-500 dark:text-zinc-400">
+              正在朗读第 {playback.state.segmentIndex + 1}/{playback.state.segmentCount} 段（点任意段落跳转）
+            </Text>
+          ) : (
+            <Text className="text-xs text-zinc-400">段级播放：当前段即高亮单元</Text>
+          )}
+        </View>
         {paragraphs.length === 0 ? (
           <View className="flex-1 items-center justify-center">
             <Text className="text-sm text-zinc-500">本章内容为空</Text>
@@ -137,12 +187,115 @@ export default function ProjectWorkbenchScreen() {
             keyExtractor={(item, index) => `${item.startOffset}-${index}`}
             initialScrollIndex={initialIndex}
             getItemLayout={(_, index) => ({ length: 96, offset: 96 * index, index })}
-            renderItem={({ item }) => (
-              <Text className="py-2 text-[15px] leading-6 text-zinc-800 dark:text-zinc-200">{item.text}</Text>
-            )}
+            renderItem={({ item }) => {
+              const highlightOffset =
+                playback.state.chapterId === current.chapter.id ? playback.state.segmentStartOffset : null;
+              const isHighlighted =
+                highlightOffset !== null && item.startOffset <= highlightOffset && highlightOffset < item.endOffset;
+              return (
+                <Pressable onPress={() => void seekToParagraph(item)}>
+                  <Text
+                    className={
+                      isHighlighted
+                        ? 'rounded-lg bg-indigo-50 py-2 text-[15px] leading-6 text-indigo-950 dark:bg-indigo-950 dark:text-indigo-100'
+                        : 'py-2 text-[15px] leading-6 text-zinc-800 dark:text-zinc-200'
+                    }
+                  >
+                    {item.text}
+                  </Text>
+                </Pressable>
+              );
+            }}
             onViewableItemsChanged={(info) => viewableCallbackRef.current?.(info)}
           />
         )}
+      </View>
+    );
+  }
+
+  // ------------------------------------------------------------------ 助手视图
+  if (view === 'assistant') {
+    return (
+      <View className="flex-1 bg-zinc-50 pt-14 dark:bg-zinc-950">
+        <View className="flex-row items-center justify-between px-4">
+          <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={() => setView('chapters')}>
+            <Text className="text-sm text-zinc-700 dark:text-zinc-300">返回目录</Text>
+          </Pressable>
+          <Text className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">工程助手</Text>
+          <View className="w-16" />
+        </View>
+        {assistant.hasEarlier ? (
+          <Pressable className="mt-2 self-center px-4" onPress={() => void assistant.loadEarlier()}>
+            <Text className="text-xs text-indigo-500">加载更早消息</Text>
+          </Pressable>
+        ) : null}
+        <FlatList
+          className="mt-2 flex-1 px-4"
+          data={assistant.messages ?? []}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View className={item.role === 'user' ? 'items-end' : 'items-start'}>
+              <View
+                className={
+                  item.role === 'user'
+                    ? 'max-w-[85%] rounded-2xl bg-indigo-500 px-4 py-2 my-1'
+                    : 'max-w-[85%] rounded-2xl bg-white px-4 py-2 my-1 dark:bg-zinc-900'
+                }
+              >
+                <Text
+                  className={
+                    item.role === 'user' ? 'text-sm text-white' : 'text-sm text-zinc-800 dark:text-zinc-200'
+                  }
+                >
+                  {item.text}
+                </Text>
+                {item.proposalId ? (
+                  <Pressable
+                    className="mt-2 rounded-lg bg-amber-500 px-3 py-1.5 self-start"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/project/[id]/review',
+                        params: { id: projectId, proposalId: item.proposalId! },
+                      })
+                    }
+                  >
+                    <Text className="text-xs font-semibold text-white">去审阅候选（需人工采用）</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          )}
+        />
+        {assistant.streaming ? (
+          <Text className="px-4 pb-1 text-xs text-zinc-400" numberOfLines={4}>
+            {assistant.streamText || '…'}
+          </Text>
+        ) : null}
+        {assistant.error ? (
+          <Text className="mx-4 rounded-lg bg-red-50 p-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
+            {assistant.error}
+          </Text>
+        ) : null}
+        <View className="flex-row items-center gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <TextInput
+            className="flex-1 rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
+            placeholder="向助手提问或请求重新分章（只提议，不直改）"
+            value={assistantInput}
+            onChangeText={setAssistantInput}
+            multiline
+          />
+          <Pressable
+            className="rounded-xl bg-indigo-500 px-4 py-2.5"
+            disabled={assistant.streaming || assistantInput.trim().length === 0}
+            onPress={() => {
+              const text = assistantInput;
+              setAssistantInput('');
+              void assistant.send(text);
+            }}
+          >
+            <Text className="text-sm font-semibold text-white">{assistant.streaming ? '…' : '发送'}</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -164,12 +317,20 @@ export default function ProjectWorkbenchScreen() {
         </Text>
       ) : null}
 
-      <Pressable
-        className="mt-3 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
-        onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
-      >
-        <Text className="text-sm text-zinc-800 dark:text-zinc-200">角色中心（抽取候选 / 确认 / 绑定音色）</Text>
-      </Pressable>
+      <View className="mt-3 flex-row gap-2">
+        <Pressable
+          className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+          onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
+        >
+          <Text className="text-sm text-zinc-800 dark:text-zinc-200">角色中心</Text>
+        </Pressable>
+        <Pressable
+          className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+          onPress={() => setView('assistant')}
+        >
+          <Text className="text-sm text-zinc-800 dark:text-zinc-200">工程助手</Text>
+        </Pressable>
+      </View>
 
       {/* 生成进度卡（docs/plan.md 4.1.5）：真实进度 + 失败重试只补缺失段 */}
       {generation.progress ? (

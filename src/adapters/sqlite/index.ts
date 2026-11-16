@@ -1,4 +1,5 @@
 import { migrateDatabase, openDatabase } from './db';
+import { SqliteAssistantRepository } from './repos/assistant';
 import { SqliteGenerationStore, SqliteBindingRepository, SqliteCharacterRepository, SqliteVoiceRepository } from './repos/generation';
 import { SqliteLibraryRepository } from './repos/library';
 import { SqliteChapterEditRepository, SqliteReadingStateRepository } from './repos/misc';
@@ -25,5 +26,6 @@ export function createSqliteAdapters() {
     generationStore: new SqliteGenerationStore(db),
     settingsRepository: new SqliteSettingsRepository(db),
     requestLogRepository: new SqliteRequestLogRepository(db),
+    assistantRepository: new SqliteAssistantRepository(db),
   };
 }

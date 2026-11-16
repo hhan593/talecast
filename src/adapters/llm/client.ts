@@ -21,7 +21,12 @@ export function createOpenAiCompatibleLlmGateway(deps: {
   settingsRepository: SettingsRepository;
 }): LlmGateway {
   return {
-    async complete(input: { system: string; user: string; signal?: AbortSignal }): Promise<string> {
+    async complete(input: {
+      system: string;
+      user: string;
+      signal?: AbortSignal;
+      onDelta?: (delta: string) => void;
+    }): Promise<string> {
       const endpoint = await deps.settingsRepository.get(LLM_ENDPOINT_KEY);
       const model = await deps.settingsRepository.get(LLM_MODEL_KEY);
       const apiKey = await deps.keyStore.get(LLM_API_KEY);
@@ -58,7 +63,10 @@ export function createOpenAiCompatibleLlmGateway(deps: {
         try {
           const delta = JSON.parse(event.data) as ChatDelta;
           const content = delta.choices?.[0]?.delta?.content;
-          if (typeof content === 'string') assembled += content;
+          if (typeof content === 'string') {
+            assembled += content;
+            input.onDelta?.(content);
+          }
         } catch {
           // 非 JSON 行忽略
         }

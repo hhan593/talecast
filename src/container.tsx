@@ -1,17 +1,19 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
 
-import { ExpoPreviewPlayer } from '@/adapters/audio';
+import { ExpoAudioPlayerService, ExpoPreviewPlayer } from '@/adapters/audio';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
 import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
+import { createAssistantService } from '@/services/assistant';
 import { createChapterEditService } from '@/services/chapter-edits';
 import { createCharactersService } from '@/services/characters';
 import { createGenerationService } from '@/services/generation';
 import { createImportService } from '@/services/import';
 import { createLibraryQueryService } from '@/services/library-query';
+import { createPlaybackService } from '@/services/playback';
 import { createProjectsService } from '@/services/projects';
 import { createReadingService } from '@/services/reading';
 import { createSettingsService } from '@/services/settings';
@@ -34,6 +36,7 @@ const llmGateway = createOpenAiCompatibleLlmGateway({
   keyStore: secureStoreKeyStore,
   settingsRepository: adapters.settingsRepository,
 });
+const audioPlayer = new ExpoAudioPlayerService();
 
 const services = {
   projects: createProjectsService({
@@ -95,6 +98,20 @@ const services = {
   settings: createSettingsService({
     settingsRepository: adapters.settingsRepository,
     keyStore: secureStoreKeyStore,
+  }),
+  playback: createPlaybackService({
+    audioPlayer,
+    generationStore: adapters.generationStore,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    readingStateRepository: adapters.readingStateRepository,
+  }),
+  assistant: createAssistantService({
+    assistantRepository: adapters.assistantRepository,
+    llmGateway,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    splitProposalRepository: adapters.splitProposalRepository,
   }),
   previewPlayer: new ExpoPreviewPlayer(),
   newCommandId,

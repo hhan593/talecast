@@ -1,6 +1,7 @@
 import { bytesToBase64 } from '@/domain/base64';
 import type { CommandReceipt } from '@/domain/commands';
 import type { ChapterDraft } from '@/domain/split';
+import type { AssistantMessageRecord, AssistantSessionRecord } from '@/domain/ports';
 import type {
   BindingRecord,
   BindingTargetType,
@@ -14,6 +15,7 @@ import type {
 } from '@/domain/types';
 import type {
   AudioFileStore,
+  AudioPlayer,
   BindingRepository,
   CharacterRepository,
   ChapterEditRecord,
@@ -29,6 +31,7 @@ import type {
   SplitProposalRecord,
   SplitProposalRepository,
   ReadingState,
+  AssistantRepository,
   ReadingStateRepository,
   SettingsRepository,
   TtsGateway,
@@ -233,8 +236,18 @@ export class FakeReadingStateRepository implements ReadingStateRepository {
     return this.rows.get(projectId) ?? null;
   }
 
-  async set(state: ReadingState): Promise<void> {
-    this.rows.set(state.projectId, state);
+  /** 与 SQLite 实现同语义：部分更新，未提供的字段保留旧值 */
+  async set(state: Omit<ReadingState, 'updatedAt'>): Promise<void> {
+    const existing = this.rows.get(state.projectId);
+    const merged: ReadingState = {
+      projectId: state.projectId,
+      chapterId: state.chapterId ?? existing?.chapterId ?? null,
+      charOffset: state.charOffset ?? existing?.charOffset ?? null,
+      audioSegmentOrdinal: state.audioSegmentOrdinal ?? existing?.audioSegmentOrdinal ?? null,
+      audioOffsetMs: state.audioOffsetMs ?? existing?.audioOffsetMs ?? null,
+      updatedAt: Date.now(),
+    };
+    this.rows.set(state.projectId, merged);
   }
 }
 
@@ -472,9 +485,108 @@ export class FakeLlmGateway implements LlmGateway {
   public response: string | null = null;
   public error: Error | null = null;
 
-  async complete(input: { system: string; user: string }): Promise<string> {
+  async complete(input: { system: string; user: string; onDelta?: (delta: string) => void }): Promise<string> {
     this.calls.push(input);
     if (this.error) throw this.error;
-    return this.response ?? '{"characters":[]}';
+    const response = this.response ?? '{"characters":[]}';
+    // 模拟流式：整段回调一次
+    input.onDelta?.(response);
+    return response;
+  }
+}
+
+export class FakeAudioPlayer implements AudioPlayer {
+  public loaded: string[] = [];
+  public plays = 0;
+  public pauses = 0;
+  public seeks: number[] = [];
+  public released = 0;
+  private progressCb: ((ms: number) => void) | null = null;
+  private endCb: (() => void) | null = null;
+
+  async load(uri: string): Promise<void> {
+    this.loaded.push(uri);
+  }
+
+  async play(): Promise<void> {
+    this.plays += 1;
+  }
+
+  async pause(): Promise<void> {
+    this.pauses += 1;
+  }
+
+  async seek(positionMs: number): Promise<void> {
+    this.seeks.push(positionMs);
+  }
+
+  onProgress(callback: (positionMs: number) => void): () => void {
+    this.progressCb = callback;
+    return () => {
+      this.progressCb = null;
+    };
+  }
+
+  onPlaybackEnd(callback: () => void): () => void {
+    this.endCb = callback;
+    return () => {
+      this.endCb = null;
+    };
+  }
+
+  release(): void {
+    this.released += 1;
+  }
+
+  /** 测试辅助：模拟进度回调 */
+  fireProgress(positionMs: number): void {
+    this.progressCb?.(positionMs);
+  }
+
+  /** 测试辅助：模拟当前文件播放到结尾 */
+  fireEnd(): void {
+    this.endCb?.();
+  }
+}
+
+export class FakeAssistantRepository implements AssistantRepository {
+  public sessions = new Map<string, AssistantSessionRecord>();
+  public messages: AssistantMessageRecord[] = [];
+
+  async getOrCreateSession(projectId: string): Promise<AssistantSessionRecord> {
+    const id = `sess-${projectId}`;
+    let session = this.sessions.get(id);
+    if (!session) {
+      session = { id, projectId, taskKind: 'general', chapterId: null, createdAt: Date.now() };
+      this.sessions.set(id, session);
+    }
+    return { ...session };
+  }
+
+  async listMessages(
+    sessionId: string,
+    options: { limit: number; beforeOrdinal?: number },
+  ): Promise<AssistantMessageRecord[]> {
+    const list = this.messages
+      .filter((m) => m.sessionId === sessionId && (options.beforeOrdinal === undefined || m.ordinal < options.beforeOrdinal))
+      .sort((a, b) => b.ordinal - a.ordinal)
+      .slice(0, options.limit);
+    return list.reverse().map((m) => ({ ...m }));
+  }
+
+  async appendMessage(record: AssistantMessageRecord): Promise<void> {
+    if (this.messages.some((m) => m.id === record.id)) throw new Error('UNIQUE constraint failed');
+    this.messages.push({ ...record });
+  }
+
+  async updateMessageParts(sessionId: string, ordinal: number, partsJson: string, nextVersion: number): Promise<void> {
+    const message = this.messages.find((m) => m.sessionId === sessionId && m.ordinal === ordinal);
+    if (!message) throw new Error('message 不存在');
+    message.partsJson = partsJson;
+    message.version = nextVersion;
+  }
+
+  async countMessages(sessionId: string): Promise<number> {
+    return this.messages.filter((m) => m.sessionId === sessionId).length;
   }
 }
