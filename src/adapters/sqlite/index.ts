@@ -1,8 +1,10 @@
 import { migrateDatabase, openDatabase } from './db';
+import { SqliteGenerationStore, SqliteBindingRepository, SqliteCharacterRepository, SqliteVoiceRepository } from './repos/generation';
 import { SqliteLibraryRepository } from './repos/library';
 import { SqliteChapterEditRepository, SqliteReadingStateRepository } from './repos/misc';
 import { SqliteProjectRepository } from './repos/projects';
 import { SqliteReceiptStore } from './repos/receipts';
+import { SqliteRequestLogRepository, SqliteSettingsRepository } from './repos/settings';
 import { SqliteSplitProposalRepository } from './repos/proposals';
 
 /** SQLite 适配器装配：打开 → 迁移 → 实现各仓储端口。仅由 container.tsx 调用。 */
@@ -17,5 +19,11 @@ export function createSqliteAdapters() {
     splitProposalRepository: new SqliteSplitProposalRepository(db),
     chapterEditRepository: new SqliteChapterEditRepository(db),
     readingStateRepository: new SqliteReadingStateRepository(db),
+    voiceRepository: new SqliteVoiceRepository(db),
+    characterRepository: new SqliteCharacterRepository(db),
+    bindingRepository: new SqliteBindingRepository(db),
+    generationStore: new SqliteGenerationStore(db),
+    settingsRepository: new SqliteSettingsRepository(db),
+    requestLogRepository: new SqliteRequestLogRepository(db),
   };
 }

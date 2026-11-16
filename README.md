@@ -24,9 +24,9 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 
 计划定稿（草案 v4，见 [docs/plan.md](docs/plan.md)）。
 
-- [~] P0：脚手架与数据底座——代码就绪（Expo + Expo Router + NativeWind + SQLite 迁移 + ports/adapters 分层骨架，15 项 vitest 通过、tsc 与 iOS bundle 构建通过）；**待 Expo Go 双端启动与数据持久化验收**
-- [ ] P1：导入与分章闭环
-- [ ] P2：角色、音色与云端生成（Edge TTS）
+- [~] P0：脚手架与数据底座——代码就绪（tsc / 15 vitest / iOS bundle 通过）；**待 Expo Go 双端启动与数据持久化验收**
+- [~] P1：导入与分章闭环——已实现（UTF-8 校验导入、双哈希、分章候选采用/撤销、章节编辑、阅读位置；49 项测试含全流程）
+- [~] P2：角色、音色与云端生成——已实现（Edge TTS 协议纯层+fixture 测试、音色快照、绑定+人工保护、LLM 角色抽取、段级幂等生成、失败只补缺失段、试听转正）
 - [ ] P3：播放与助手
 - [ ] P4：加固
 

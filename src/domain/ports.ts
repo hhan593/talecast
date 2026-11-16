@@ -6,7 +6,18 @@
 
 import type { CommandReceipt } from './commands';
 import type { ChapterDraft, ProposalStatus } from './split';
-import type { Chapter, Project, SourceInfo, VoiceInfo } from './types';
+import type {
+  BindingRecord,
+  BindingTargetType,
+  CharacterRecord,
+  Chapter,
+  GenerationJobRecord,
+  GenerationSegmentRecord,
+  Project,
+  SourceInfo,
+  VoiceInfo,
+  VoiceRecord,
+} from './types';
 
 export interface ProjectRepository {
   list(): Promise<Project[]>;
@@ -121,8 +132,70 @@ export interface KeyStore {
 
 export interface TtsGateway {
   listVoices(): Promise<VoiceInfo[]>;
-  /** 合成单段并写入 outputPath；失败抛错由 services 层转为 Result */
-  synthesizeSegment(input: { text: string; voiceId: string; outputPath: string }): Promise<{ filePath: string }>;
+  /** 合成单段，返回统一格式的音频字节（写入按内容寻址的 AudioFileStore） */
+  synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array>;
+}
+
+/** 远程文本模型（OpenAI 兼容）；P2 角色抽取与 P3 助手共用 */
+export interface LlmGateway {
+  complete(input: { system: string; user: string; signal?: AbortSignal }): Promise<string>;
+}
+
+// ---------------------------------------------------------------------------
+// P2：音色快照、角色、绑定、生成任务存储
+// ---------------------------------------------------------------------------
+
+export interface VoiceRecordRepository {
+  /** 音色快照整体刷新（voices/list 拉取后入库） */
+  replaceAllForProvider(provider: string, voices: Array<Omit<VoiceRecord, 'id'>>): Promise<void>;
+  list(provider: string): Promise<Array<VoiceRecord>>;
+  findByVoiceId(provider: string, voiceId: string): Promise<VoiceRecord | null>;
+}
+
+export interface CharacterRepository {
+  list(projectId: Project['id']): Promise<Array<CharacterRecord>>;
+  get(id: string): Promise<CharacterRecord | null>;
+  insert(record: CharacterRecord): Promise<void>;
+  update(id: string, patch: Partial<Pick<CharacterRecord, 'name' | 'aliasesJson' | 'profileJson' | 'confirmed' | 'manualProtected'>>): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
+export interface BindingRepository {
+  getForTarget(projectId: Project['id'], targetType: BindingTargetType, targetId: string | null): Promise<BindingRecord | null>;
+  list(projectId: Project['id']): Promise<Array<BindingRecord>>;
+  /** 幂等回执语义由 services 层保证；upsert 时 revision+1 */
+  upsert(record: Omit<BindingRecord, 'id' | 'revision' | 'updatedAt'>): Promise<BindingRecord>;
+}
+
+export interface GenerationStore {
+  createJob(job: GenerationJobRecord, segments: Array<GenerationSegmentRecord>): Promise<void>;
+  getJob(id: string): Promise<GenerationJobRecord | null>;
+  findByInputHash(projectId: Project['id'], inputHash: string): Promise<GenerationJobRecord | null>;
+  getActiveJobByChapter(projectId: Project['id'], chapterId: string): Promise<GenerationJobRecord | null>;
+  listJobsByChapter(projectId: Project['id'], chapterId: string): Promise<Array<GenerationJobRecord>>;
+  updateJob(id: string, patch: Partial<Pick<GenerationJobRecord, 'status' | 'progress' | 'error'>>): Promise<void>;
+  listSegments(jobId: string): Promise<Array<GenerationSegmentRecord>>;
+  updateSegment(id: string, patch: Partial<Pick<GenerationSegmentRecord, 'status' | 'filePath' | 'error'>>): Promise<void>;
+  /** 应用启动恢复：运行中任务标记为失败（可重试，已完成段保留） */
+  markInterruptedJobsFailed(): Promise<number>;
+}
+
+export interface SettingsRepository {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  all(): Promise<Record<string, string>>;
+}
+
+export interface RequestLogRepository {
+  log(kind: 'tts' | 'llm', ok: boolean, note: string): Promise<void>;
+  counts(): Promise<{ ttsOk: number; ttsFailed: number; llmOk: number; llmFailed: number }>;
+}
+
+/** 按内容寻址的音频文件存储：audio/<text_hash>.mp3（试听与生成共用 → 试听转正零成本） */
+export interface AudioFileStore {
+  pathFor(textHash: string): string;
+  exists(textHash: string): Promise<boolean>;
+  write(textHash: string, bytes: Uint8Array): Promise<string>;
 }
 
 export interface AudioPlayer {

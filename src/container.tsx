@@ -1,14 +1,23 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
 
-import { documentPickerFilePicker, sandboxSourceFileStore } from '@/adapters/files';
+import { ExpoPreviewPlayer } from '@/adapters/audio';
+import { EdgeTtsGateway } from '@/adapters/edge/tts';
+import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
+import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { createSqliteAdapters } from '@/adapters/sqlite';
+import { secureStoreKeyStore } from '@/adapters/secure-store';
 import { createChapterEditService } from '@/services/chapter-edits';
+import { createCharactersService } from '@/services/characters';
+import { createGenerationService } from '@/services/generation';
 import { createImportService } from '@/services/import';
 import { createLibraryQueryService } from '@/services/library-query';
 import { createProjectsService } from '@/services/projects';
 import { createReadingService } from '@/services/reading';
+import { createSettingsService } from '@/services/settings';
 import { createSplitReviewService } from '@/services/split-review';
+import { createVoicesService } from '@/services/voices';
+import { createBindingsService } from '@/services/bindings';
 
 /**
  * 组合根（docs/plan.md 0.1 #13）：唯一的实例化与装配点。
@@ -19,6 +28,12 @@ import { createSplitReviewService } from '@/services/split-review';
 const adapters = createSqliteAdapters();
 
 const newCommandId = (): string => Crypto.randomUUID();
+
+const edgeTtsGateway = new EdgeTtsGateway();
+const llmGateway = createOpenAiCompatibleLlmGateway({
+  keyStore: secureStoreKeyStore,
+  settingsRepository: adapters.settingsRepository,
+});
 
 const services = {
   projects: createProjectsService({
@@ -52,8 +67,41 @@ const services = {
     libraryRepository: adapters.libraryRepository,
     sourceFileStore: sandboxSourceFileStore,
   }),
+  voices: createVoicesService({ ttsGateway: edgeTtsGateway, voiceRepository: adapters.voiceRepository }),
+  characters: createCharactersService({
+    characterRepository: adapters.characterRepository,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    llmGateway,
+    requestLogRepository: adapters.requestLogRepository,
+    receiptStore: adapters.receiptStore,
+  }),
+  bindings: createBindingsService({
+    bindingRepository: adapters.bindingRepository,
+    characterRepository: adapters.characterRepository,
+    receiptStore: adapters.receiptStore,
+  }),
+  generation: createGenerationService({
+    projectRepository: adapters.projectRepository,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    bindingRepository: adapters.bindingRepository,
+    generationStore: adapters.generationStore,
+    ttsGateway: edgeTtsGateway,
+    audioFileStore: sandboxAudioFileStore,
+    requestLogRepository: adapters.requestLogRepository,
+    receiptStore: adapters.receiptStore,
+  }),
+  settings: createSettingsService({
+    settingsRepository: adapters.settingsRepository,
+    keyStore: secureStoreKeyStore,
+  }),
+  previewPlayer: new ExpoPreviewPlayer(),
   newCommandId,
 };
+
+// 应用启动恢复：中断的生成任务标记失败，保留已完成段供重试（docs/plan.md P2 验收）
+void services.generation.recoverInterrupted();
 
 export type Services = typeof services;
 

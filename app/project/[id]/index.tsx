@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { EditDialog } from '@/components/edit-dialog';
+import { useGeneration } from '@/hooks/use-generation';
 import { useLibrary } from '@/hooks/use-library';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
@@ -27,6 +28,7 @@ export default function ProjectWorkbenchScreen() {
   const { project, loading, notFound } = useProject(projectId);
   const services = useServices();
   const library = useLibrary(projectId, project?.revision ?? -1);
+  const generation = useGeneration(projectId);
   const router = useRouter();
 
   const [view, setView] = useState<'chapters' | 'reader'>('chapters');
@@ -162,6 +164,47 @@ export default function ProjectWorkbenchScreen() {
         </Text>
       ) : null}
 
+      <Pressable
+        className="mt-3 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+        onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
+      >
+        <Text className="text-sm text-zinc-800 dark:text-zinc-200">角色中心（抽取候选 / 确认 / 绑定音色）</Text>
+      </Pressable>
+
+      {/* 生成进度卡（docs/plan.md 4.1.5）：真实进度 + 失败重试只补缺失段 */}
+      {generation.progress ? (
+        <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
+          <View className="flex-row items-center justify-between">
+            <Text className="font-semibold text-zinc-900 dark:text-zinc-100">
+              生成任务 ·{' '}
+              {generation.progress.status === 'done'
+                ? '已完成'
+                : generation.progress.status === 'failed'
+                  ? '失败（已完成段已保留）'
+                  : `生成中 ${generation.progress.progress}/${generation.progress.totalSegments}`}
+            </Text>
+            {generation.progress.status === 'failed' ? (
+              <Pressable
+                className="rounded-lg bg-amber-500 px-3 py-1.5"
+                disabled={generation.busy}
+                onPress={() => void generation.retry(generation.progress!.jobId)}
+              >
+                <Text className="text-xs font-semibold text-white">重试缺失段</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800">
+            <View
+              className="h-2 rounded-full bg-indigo-500"
+              style={{ width: `${Math.round((generation.progress.progress / Math.max(generation.progress.totalSegments, 1)) * 100)}%` }}
+            />
+          </View>
+          <Text className="mt-2 text-xs text-zinc-500 dark:text-zinc-400" numberOfLines={3}>
+            {generation.progress.error ?? `${generation.progress.progress}/${generation.progress.totalSegments} 段完成`}
+          </Text>
+        </View>
+      ) : null}
+
       <View className="mt-3 flex-row flex-wrap gap-2">
         {!library.source ? (
           <Pressable
@@ -226,6 +269,20 @@ export default function ProjectWorkbenchScreen() {
                 </Pressable>
                 <Pressable className="rounded-md bg-zinc-100 px-2 py-1 dark:bg-zinc-800" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
                   <Text className="text-xs text-zinc-600 dark:text-zinc-300">边界</Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-md bg-indigo-50 px-2 py-1 dark:bg-indigo-950"
+                  disabled={generation.busy}
+                  onPress={() => void generation.preview(item.id)}
+                >
+                  <Text className="text-xs text-indigo-600 dark:text-indigo-400">试听首段</Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-md bg-indigo-500 px-2 py-1"
+                  disabled={generation.busy}
+                  onPress={() => void generation.start(item.id)}
+                >
+                  <Text className="text-xs font-semibold text-white">生成本章</Text>
                 </Pressable>
                 <Pressable
                   className="rounded-md bg-red-50 px-2 py-1 dark:bg-red-950"

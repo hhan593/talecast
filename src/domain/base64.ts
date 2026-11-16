@@ -23,6 +23,18 @@ const B64_CODES = (() => {
 
 const PAD_CODE = 61; // '='
 
+/** 拼接字节块（Edge 音频帧聚合用） */
+export function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
 export function bytesToBase64(bytes: Uint8Array): string {
   const len = bytes.length;
   const outLen = Math.ceil(len / 3) * 4;
@@ -47,8 +59,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return text;
 }
 
-export function base64ToBytes(base64: string): Uint8Array {
-  const clean = base64.replace(/\s+/g, '');
+export function base64ToBytes(base64: string): Uint8Array {  const clean = base64.replace(/\s+/g, '');
   const padding = clean.length - clean.replace(/=+$/, '').length;
   // 字节数按含 padding 的总长计算：(L/4)*3 - padding
   const byteLength = Math.max((clean.length / 4) * 3 - padding, 0);

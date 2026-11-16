@@ -46,4 +46,74 @@ export interface VoiceInfo {
   /** provider 内的音色标识，如 Edge TTS 的 zh-CN-XiaoxiaoNeural */
   voiceId: string;
   name: string;
+  description: string;
+}
+
+// ---------------------------------------------------------------------------
+// P2：角色、音色、绑定、生成任务
+// ---------------------------------------------------------------------------
+
+export interface CharacterRecord {
+  id: string;
+  projectId: ProjectId;
+  name: string;
+  aliasesJson: string;
+  profileJson: string;
+  /** 人工确认后才可参与生成；确认即施加人工保护 */
+  confirmed: boolean;
+  /** 人工保护：确认后的身份/绑定不被模型建议覆盖（docs/plan.md 4.1.4） */
+  manualProtected: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface VoiceRecord {
+  id: string;
+  provider: string;
+  voiceId: string;
+  name: string;
+  description: string;
+}
+
+export type BindingTargetType = 'narrator' | 'character';
+
+export interface BindingRecord {
+  id: string;
+  projectId: ProjectId;
+  targetType: BindingTargetType;
+  /** narrator 绑定为 null */
+  targetId: string | null;
+  voiceId: string;
+  /** 绑定修订号：参与生成任务的 input_hash（绑定变更 → 旧缓存失效） */
+  revision: number;
+  updatedAt: number;
+}
+
+export interface GenerationJobRecord {
+  id: string;
+  projectId: ProjectId;
+  chapterId: string;
+  status: import('./jobs').JobStatus;
+  provider: string;
+  inputHash: string;
+  voiceId: string;
+  bindingRevision: number;
+  totalSegments: number;
+  /** 已完成段数 */
+  progress: number;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface GenerationSegmentRecord {
+  id: string;
+  jobId: string;
+  ordinal: number;
+  text: string;
+  textHash: string;
+  status: import('./jobs').SegmentStatus;
+  filePath: string | null;
+  error: string | null;
+  updatedAt: number;
 }

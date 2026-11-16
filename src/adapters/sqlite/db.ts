@@ -95,6 +95,81 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 3,
+    description: 'P2：角色/音色/绑定/生成任务与段/设置/请求用量',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS characters (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        name TEXT NOT NULL,
+        aliases_json TEXT NOT NULL DEFAULT '[]',
+        profile_json TEXT NOT NULL DEFAULT '{}',
+        confirmed INTEGER NOT NULL DEFAULT 0,
+        manual_protected INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS voices (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider TEXT NOT NULL,
+        voice_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        UNIQUE(provider, voice_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS bindings (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        target_type TEXT NOT NULL,
+        target_id TEXT,
+        voice_id TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(project_id, target_type, target_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS generation_jobs (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        chapter_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        voice_id TEXT NOT NULL,
+        binding_revision INTEGER NOT NULL,
+        total_segments INTEGER NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_jobs_chapter ON generation_jobs(project_id, chapter_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_jobs_input ON generation_jobs(project_id, input_hash)`,
+      `CREATE TABLE IF NOT EXISTS generation_segments (
+        id TEXT PRIMARY KEY NOT NULL,
+        job_id TEXT NOT NULL REFERENCES generation_jobs(id),
+        ordinal INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        status TEXT NOT NULL,
+        file_path TEXT,
+        error TEXT,
+        updated_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_segments_job ON generation_segments(job_id, ordinal)`,
+      `CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS provider_requests (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        ok INTEGER NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

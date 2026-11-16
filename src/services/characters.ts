@@ -1,0 +1,171 @@
+import { resolveIdempotent, type Command } from '@/domain/commands';
+import type {
+  CharacterRepository,
+  LlmGateway,
+  LibraryRepository,
+  ReceiptStore,
+  RequestLogRepository,
+  SourceFileStore,
+} from '@/domain/ports';
+import { err, ok, type Result } from '@/domain/result';
+import type { CharacterRecord } from '@/domain/types';
+
+/**
+ * 角色候选与人工确认（docs/plan.md 4.1.4）：
+ * LLM 优先抽取角色候选（confirmed=0，无人工保护）→ 人工确认（confirmed=1 且 manual_protected=1）。
+ * 抽取是建议行为：绝不覆盖/删除已确认角色（人工保护在 confirm 与 insert 环节冻结）。
+ */
+
+export interface CharactersDeps {
+  characterRepository: CharacterRepository;
+  libraryRepository: LibraryRepository;
+  sourceFileStore: SourceFileStore;
+  llmGateway: LlmGateway;
+  requestLogRepository: RequestLogRepository;
+  receiptStore: ReceiptStore;
+}
+
+export interface ExtractCharactersCommand extends Command {
+  projectId: string;
+  /** 抽取样本章节数（默认前 3 章，避免整本超限） */
+  maxChapters?: number;
+  maxCharsPerChapter?: number;
+}
+
+const EXTRACTION_SYSTEM_PROMPT =
+  '你是中文小说的角色分析助手。从给定的章节文本中提取出场角色。' +
+  '只输出 JSON，不要解释。格式：{"characters":[{"name":"角色名","aliases":["别名"],"profile":"一句话身份/性格描述"}]}。' +
+  '要求：1) 只列真实出场且有名字的角色，合并同一角色的不同称呼（主名取最常用者）；' +
+  '2) 无名群众/龙套不列；3) profile 不超过 40 字；4) 如果没有明确角色，返回 {"characters":[]}。';
+
+function parseCharacterJson(raw: string): Array<{ name: string; aliases?: string[]; profile?: string }> {
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('模型未返回可解析的 JSON');
+  }
+  const parsed = JSON.parse(cleaned.slice(start, end + 1)) as {
+    characters?: Array<{ name?: string; aliases?: string[]; profile?: string }>;
+  };
+  const characters = Array.isArray(parsed.characters) ? parsed.characters : [];
+  return characters
+    .filter((c) => typeof c.name === 'string' && c.name.trim().length > 0)
+    .map((c) => ({ name: c.name!.trim(), aliases: c.aliases, profile: c.profile }));
+}
+
+export function createCharactersService(deps: CharactersDeps) {
+  return {
+    async listCharacters(projectId: string): Promise<CharacterRecord[]> {
+      return deps.characterRepository.list(projectId);
+    },
+
+    /** LLM 抽取角色候选：产出未确认候选；已确认且人工保护的同名角色不会被覆盖 */
+    async extractCandidates(command: ExtractCharactersCommand): Promise<Result<{ count: number }>> {
+      const receipt = await deps.receiptStore.get<{ count: number }>(command.commandId);
+      return resolveIdempotent(receipt, async () => {
+        const source = await deps.libraryRepository.getSource(command.projectId);
+        if (!source) return err('invalid', '工程还没有导入来源');
+        const chapters = await deps.libraryRepository.listChapters(command.projectId);
+        if (chapters.length === 0) return err('invalid', '还没有章节');
+
+        const maxChapters = Math.min(Math.max(command.maxChapters ?? 3, 1), chapters.length);
+        const maxChars = command.maxCharsPerChapter ?? 2000;
+        const samples: string[] = [];
+        for (const chapter of chapters.slice(0, maxChapters)) {
+          const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
+          samples.push(text.slice(chapter.startOffset, chapter.endOffset).slice(0, maxChars));
+        }
+        const userPrompt = `章节文本如下（共 ${samples.length} 段样本）：\n\n${samples.join('\n\n---\n\n')}`;
+
+        let raw: string;
+        try {
+          raw = await deps.llmGateway.complete({ system: EXTRACTION_SYSTEM_PROMPT, user: userPrompt });
+          await deps.requestLogRepository.log('llm', true, `characters:${command.projectId}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await deps.requestLogRepository.log('llm', false, message.slice(0, 200));
+          const code = message.includes('未配置文本模型') ? 'invalid' : 'network';
+          return err(code as 'invalid' | 'network', message);
+        }
+
+        let candidates: Array<{ name: string; aliases?: string[]; profile?: string }>;
+        try {
+          candidates = parseCharacterJson(raw);
+        } catch (error) {
+          return err('invalid', `角色抽取结果解析失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        // 人工保护：已确认的同名角色不被覆盖、不重复入库
+        const existing = await deps.characterRepository.list(command.projectId);
+        const protectedNames = new Set(
+          existing.filter((c) => c.manualProtected).map((c) => c.name),
+        );
+        const existingNames = new Set(existing.map((c) => c.name));
+        const now = Date.now();
+        let inserted = 0;
+        for (const candidate of candidates) {
+          if (existingNames.has(candidate.name) || protectedNames.has(candidate.name)) continue;
+          await deps.characterRepository.insert({
+            id: `char-${command.commandId}-${inserted}`,
+            projectId: command.projectId,
+            name: candidate.name,
+            aliasesJson: JSON.stringify(candidate.aliases ?? []),
+            profileJson: JSON.stringify({ profile: candidate.profile ?? '' }),
+            confirmed: false,
+            manualProtected: false,
+            createdAt: now,
+            updatedAt: now,
+          });
+          inserted += 1;
+        }
+        await deps.receiptStore.put({
+          commandId: command.commandId,
+          result: ok({ count: inserted }),
+          createdAt: Date.now(),
+        });
+        return ok({ count: inserted });
+      });
+    },
+
+    /** 人工确认：confirmed + manual_protected 同时施加（之后不被模型建议覆盖） */
+    async confirmCharacter(command: { commandId: string; characterId: string }): Promise<Result<null>> {
+      const receipt = await deps.receiptStore.get<null>(command.commandId);
+      return resolveIdempotent(receipt, async () => {
+        const character = await deps.characterRepository.get(command.characterId);
+        if (!character) return err('not_found', '角色不存在');
+        await deps.characterRepository.update(command.characterId, { confirmed: true, manualProtected: true });
+        await deps.receiptStore.put({
+          commandId: command.commandId,
+          result: ok(null),
+          createdAt: Date.now(),
+        });
+        return ok(null);
+      });
+    },
+
+    async renameCharacter(characterId: string, newName: string): Promise<Result<null>> {
+      const name = newName.trim();
+      if (name.length === 0 || name.length > 30) return err('invalid', '角色名需为 1-30 个字符');
+      const character = await deps.characterRepository.get(characterId);
+      if (!character) return err('not_found', '角色不存在');
+      if (character.manualProtected) {
+        // 人工保护的改名也是用户操作，允许；但保留保护标记
+      }
+      await deps.characterRepository.update(characterId, { name });
+      return ok(null);
+    },
+
+    async deleteCharacter(characterId: string): Promise<Result<null>> {
+      const character = await deps.characterRepository.get(characterId);
+      if (!character) return err('not_found', '角色不存在');
+      if (character.manualProtected && character.confirmed) {
+        return err('busy', '已确认角色受人工保护；请先在工程内解除引用后再删除（P2 提供删除入口前，可直接改名）');
+      }
+      await deps.characterRepository.delete(characterId);
+      return ok(null);
+    },
+  };
+}
+
+export type CharactersService = ReturnType<typeof createCharactersService>;

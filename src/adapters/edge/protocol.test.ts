@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+
+import { buildBinaryFrame, buildSsmlMessage, buildSpeechConfigMessage, computeSecMsGec, parseBinaryFrame, parseTextFrame } from './protocol';
+
+describe('computeSecMsGec', () => {
+  it('与社区算法参照一致（固定时刻，5 分钟窗口取整）', () => {
+    // 参照实现：ticks = floor((ms + 11644473599991) / 300000) * 300000；GEC = SHA256(ticks + TOKEN) 大写
+    const TOKEN = '6A5AA1D4EAFF4E1FB37E23D9EDEDCAAD';
+    const reference = (ms: number) => {
+      const ticks = Math.floor((ms + 11644473599991) / 300000) * 300000;
+      return createHash('sha256').update(String(ticks) + TOKEN).digest('hex').toUpperCase();
+    };
+    for (const ms of [0, 1_700_000_000_000, 1_799_999_999_999, 299_999, 300_000, 300_001]) {
+      expect(computeSecMsGec(ms)).toBe(reference(ms));
+    }
+  });
+
+  it('同一 5 分钟窗口内令牌相同，跨窗口变化', () => {
+    // 窗口相位：Windows 纪元偏移 11644473599991 mod 300000 = 299991，真实窗口边界在 k*300000+9
+    const windowStart = 1_700_000_100_009;
+    const a = computeSecMsGec(windowStart);
+    const b = computeSecMsGec(windowStart + 299_999);
+    const c = computeSecMsGec(windowStart + 300_000);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+});
+
+describe('WS 帧组装/解析对称', () => {
+  it('speech.config 含输出格式与 Path', () => {
+    const message = buildSpeechConfigMessage();
+    expect(message).toContain('Path:speech.config');
+    expect(message).toContain('audio-24khz-48kbitrate-mono-mp3');
+  });
+
+  it('SSML 帧转义文本并带 Path:ssml', () => {
+    const message = buildSsmlMessage('req-1', 'zh-CN-XiaoxiaoNeural', '他说："你好 & 再见"');
+    expect(message).toContain('Path:ssml');
+    expect(message).toContain('zh-CN-XiaoxiaoNeural');
+    // 仅 XML 特殊字符转义：引号与 & ；中文本身不转义
+    expect(message).toContain('&quot;你好 &amp; 再见&quot;');
+    expect(message).not.toContain(' & ');
+    expect(message).not.toContain('"你好');
+  });
+
+  it('二进制音频帧解析：头部剥离，载荷完整', () => {
+    const payload = new Uint8Array([0xff, 0xfb, 0x90, 0x00, 1, 2, 3]);
+    const frame = buildBinaryFrame('audio', payload, 'req-2');
+    const parsed = parseBinaryFrame(frame);
+    expect(parsed.kind).toBe('audio');
+    if (parsed.kind !== 'audio') return;
+    expect(Array.from(parsed.bytes)).toEqual(Array.from(payload));
+  });
+
+  it('文本控制帧：turn.end / turn.start / response', () => {
+    expect(parseTextFrame('X-RequestId:1\r\nPath:turn.end\r\n\r\n').kind).toBe('turnEnd');
+    expect(parseTextFrame('Path:turn.start\r\n\r\n').kind).toBe('turnStart');
+    const response = parseTextFrame('Path:response\r\n\r\n{"a":1}');
+    expect(response.kind).toBe('response');
+  });
+
+  it('非 audio 的二进制帧按 textFrame 处理', () => {
+    const frame = buildBinaryFrame('turn.end', new Uint8Array(0), 'req-3');
+    expect(parseBinaryFrame(frame).kind).toBe('textFrame');
+  });
+});
