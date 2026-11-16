@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
-import { newCommandId } from '@/services/ids';
 import type { Project } from '@/domain/types';
 
 /** 书架页的数据入口：UI 的唯一服务层访问方式（组件不直连 services/adapters） */
@@ -25,7 +24,7 @@ export function useProjects() {
 
   const createTestProject = useCallback(async () => {
     const result = await services.projects.createTestProject({
-      commandId: newCommandId(),
+      commandId: services.newCommandId(),
       title: `测试工程 ${new Date().toLocaleTimeString('zh-CN')}`,
       description: 'P0 数据底座验收用的测试工程',
     });

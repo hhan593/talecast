@@ -1,7 +1,14 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import * as Crypto from 'expo-crypto';
 
+import { documentPickerFilePicker, sandboxSourceFileStore } from '@/adapters/files';
 import { createSqliteAdapters } from '@/adapters/sqlite';
+import { createChapterEditService } from '@/services/chapter-edits';
+import { createImportService } from '@/services/import';
+import { createLibraryQueryService } from '@/services/library-query';
 import { createProjectsService } from '@/services/projects';
+import { createReadingService } from '@/services/reading';
+import { createSplitReviewService } from '@/services/split-review';
 
 /**
  * 组合根（docs/plan.md 0.1 #13）：唯一的实例化与装配点。
@@ -11,11 +18,41 @@ import { createProjectsService } from '@/services/projects';
 
 const adapters = createSqliteAdapters();
 
+const newCommandId = (): string => Crypto.randomUUID();
+
 const services = {
   projects: createProjectsService({
     projectRepository: adapters.projectRepository,
     receiptStore: adapters.receiptStore,
   }),
+  import: createImportService({
+    filePicker: documentPickerFilePicker,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    receiptStore: adapters.receiptStore,
+  }),
+  libraryQuery: createLibraryQueryService({
+    libraryRepository: adapters.libraryRepository,
+    splitProposalRepository: adapters.splitProposalRepository,
+  }),
+  splitReview: createSplitReviewService({
+    projectRepository: adapters.projectRepository,
+    libraryRepository: adapters.libraryRepository,
+    splitProposalRepository: adapters.splitProposalRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    receiptStore: adapters.receiptStore,
+  }),
+  chapterEdits: createChapterEditService({
+    projectRepository: adapters.projectRepository,
+    libraryRepository: adapters.libraryRepository,
+    receiptStore: adapters.receiptStore,
+  }),
+  reading: createReadingService({
+    readingStateRepository: adapters.readingStateRepository,
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
+  }),
+  newCommandId,
 };
 
 export type Services = typeof services;

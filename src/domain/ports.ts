@@ -5,7 +5,8 @@
  */
 
 import type { CommandReceipt } from './commands';
-import type { Project, VoiceInfo } from './types';
+import type { ChapterDraft, ProposalStatus } from './split';
+import type { Chapter, Project, SourceInfo, VoiceInfo } from './types';
 
 export interface ProjectRepository {
   list(): Promise<Project[]>;
@@ -16,6 +17,100 @@ export interface ProjectRepository {
 export interface ReceiptStore {
   get<T>(commandId: string): Promise<CommandReceipt<T> | null>;
   put<T>(receipt: CommandReceipt<T>): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// P1：来源、章节、候选、阅读位置
+// ---------------------------------------------------------------------------
+
+/** 系统文件选择器：P1 只接受 UTF-8 TXT */
+export interface FilePicker {
+  pickTextFile(): Promise<{ name: string; bytes: Uint8Array } | null>;
+}
+
+/** 沙盒文件存储：sources/<raw_sha>.raw 与 <raw_sha>.txt（不可变，按内容寻址） */
+export interface SourceFileStore {
+  writeRawBytes(sha256: string, bytes: Uint8Array): Promise<void>;
+  writeDecodedText(sha256: string, text: string): Promise<void>;
+  readDecodedText(sha256: string): Promise<string>;
+}
+
+export interface ChapterEditKind {
+  kind: 'rename' | 'boundary' | 'split' | 'delete';
+}
+
+export interface SplitProposalRecord {
+  id: string;
+  projectId: Project['id'];
+  sourceId: string;
+  payloadJson: string;
+  previousJson: string;
+  status: ProposalStatus;
+  createdAt: number;
+  adoptedAt: number | null;
+}
+
+export interface SplitProposalRepository {
+  insert(record: SplitProposalRecord): Promise<void>;
+  get(id: string): Promise<SplitProposalRecord | null>;
+  latestAdopted(projectId: Project['id']): Promise<SplitProposalRecord | null>;
+  setStatus(id: string, status: ProposalStatus, adoptedAt: number | null): Promise<void>;
+  /** 采用时点重录"上一版"快照：撤销恢复到采用前一刻（含提出候选后的编辑） */
+  setPreviousJson(id: string, previousJson: string): Promise<void>;
+}
+
+export interface ChapterEditRecord {
+  id: string;
+  projectId: Project['id'];
+  chapterId: string;
+  kind: ChapterEditKind['kind'];
+  payloadJson: string;
+  revision: number;
+  createdAt: number;
+}
+
+export interface ChapterEditRepository {
+  insert(record: ChapterEditRecord): Promise<void>;
+  listByProject(projectId: Project['id']): Promise<ChapterEditRecord[]>;
+}
+
+export interface ReadingState {
+  projectId: Project['id'];
+  chapterId: string;
+  charOffset: number;
+  updatedAt: number;
+}
+
+export interface ReadingStateRepository {
+  get(projectId: Project['id']): Promise<ReadingState | null>;
+  set(state: ReadingState): Promise<void>;
+}
+
+/**
+ * 来源与章节的统一存储端口。
+ * 事务性约定（adapters 用同一 SQLite 事务保证，services 只声明语义）：
+ * - createSourceWithChapters：来源 + 初始章节原子写入；
+ * - replaceChapters：整体替换章节集合，bumpRevision 时 revision+1（采用/撤销）；
+ * - mutateChapters：单章编辑 + 审计行 + revision+1（人工修正不改来源）。
+ */
+export interface LibraryRepository {
+  createSourceWithChapters(
+    source: Omit<SourceInfo, 'id'> & { id: string },
+    drafts: ChapterDraft[],
+  ): Promise<SourceInfo>;
+  getSource(projectId: Project['id']): Promise<SourceInfo | null>;
+  listChapters(projectId: Project['id']): Promise<Chapter[]>;
+  replaceChapters(
+    projectId: Project['id'],
+    sourceId: string,
+    drafts: ChapterDraft[],
+    options: { bumpRevision: boolean },
+  ): Promise<Project>;
+  mutateChapters(
+    projectId: Project['id'],
+    edit: { kind: ChapterEditKind['kind']; chapterId: string; payload: Record<string, unknown> },
+    mutate: (chapters: Chapter[]) => Chapter[],
+  ): Promise<{ chapters: Chapter[]; project: Project }>;
 }
 
 export interface KeyStore {

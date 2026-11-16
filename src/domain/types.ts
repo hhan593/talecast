@@ -16,6 +16,31 @@ export interface Project {
   updatedAt: number;
 }
 
+export interface SourceInfo {
+  id: string;
+  projectId: ProjectId;
+  filename: string;
+  /** 首版恒为 'utf-8'（docs/plan.md 4.2） */
+  encoding: 'utf-8';
+  rawSha256: string;
+  textSha256: string;
+  byteSize: number;
+  createdAt: number;
+}
+
+export interface Chapter {
+  id: string;
+  projectId: ProjectId;
+  sourceId: string;
+  title: string;
+  /** 半开区间 [startOffset, endOffset)，解码文本字符偏移，分区不重叠 */
+  startOffset: number;
+  endOffset: number;
+  volume: number;
+  ordinal: number;
+  headingLine: number | null;
+}
+
 export interface VoiceInfo {
   provider: string;
   /** provider 内的音色标识，如 Edge TTS 的 zh-CN-XiaoxiaoNeural */
