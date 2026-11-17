@@ -45,6 +45,16 @@ export function useLibrary(projectId: string, revision: number) {
     }
   }, []);
 
+  /** 命令包装收口：newCommandId + 可选刷新（M-2） */
+  const runCommand = useCallback(
+    async <T,>(command: (commandId: string) => Promise<Result<T>>, options?: { refresh?: boolean }) => {
+      const result = await run(() => command(services.newCommandId()));
+      if (result.ok && options?.refresh !== false) await refresh();
+      return result;
+    },
+    [refresh, run, services],
+  );
+
   const importTxt = useCallback(
     () =>
       run(async () => {
@@ -72,95 +82,89 @@ export function useLibrary(projectId: string, revision: number) {
 
   const adopt = useCallback(
     (proposalId: string) =>
-      run(async () => {
-        const result = await services.splitReview.adoptProposal({
-          commandId: services.newCommandId(),
-          projectId,
-          proposalId,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.splitReview.adoptProposal({
+            commandId,
+            projectId,
+            proposalId,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   const undo = useCallback(
     (proposalId: string) =>
-      run(async () => {
-        const result = await services.splitReview.undoAdopt({
-          commandId: services.newCommandId(),
-          projectId,
-          proposalId,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.splitReview.undoAdopt({
+            commandId,
+            projectId,
+            proposalId,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   const rename = useCallback(
     (chapterId: string, newTitle: string) =>
-      run(async () => {
-        const result = await services.chapterEdits.renameChapter({
-          commandId: services.newCommandId(),
-          projectId,
-          chapterId,
-          newTitle,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.chapterEdits.renameChapter({
+            commandId,
+            projectId,
+            chapterId,
+            newTitle,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   const splitAt = useCallback(
     (chapterId: string, splitAtOffset: number) =>
-      run(async () => {
-        const result = await services.chapterEdits.splitChapter({
-          commandId: services.newCommandId(),
-          projectId,
-          chapterId,
-          splitAtOffset,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.chapterEdits.splitChapter({
+            commandId,
+            projectId,
+            chapterId,
+            splitAtOffset,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   const moveBoundary = useCallback(
     (chapterId: string, newEndOffset: number) =>
-      run(async () => {
-        const result = await services.chapterEdits.moveBoundary({
-          commandId: services.newCommandId(),
-          projectId,
-          chapterId,
-          newEndOffset,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.chapterEdits.moveBoundary({
+            commandId,
+            projectId,
+            chapterId,
+            newEndOffset,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   const remove = useCallback(
     (chapterId: string) =>
-      run(async () => {
-        const result = await services.chapterEdits.deleteChapter({
-          commandId: services.newCommandId(),
-          projectId,
-          chapterId,
-          expectedRevision: revision,
-        });
-        if (result.ok) await refresh();
-        return result;
-      }),
-    [projectId, refresh, revision, run, services],
+      runCommand(
+        (commandId) =>
+          services.chapterEdits.deleteChapter({
+            commandId,
+            projectId,
+            chapterId,
+            expectedRevision: revision,
+          }),
+      ),
+    [projectId, revision, runCommand, services],
   );
 
   return {

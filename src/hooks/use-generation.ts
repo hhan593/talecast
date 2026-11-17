@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useServices } from '@/container';
+import { type Result } from '@/domain/result';
 import type { GenerationProgress } from '@/services/generation';
 
 export function useGeneration(projectId: string) {
@@ -47,76 +48,61 @@ export function useGeneration(projectId: string) {
     [poll, stopPolling],
   );
 
-  const start = useCallback(
-    async (chapterId: string) => {
+  /** busy/error 脚手架收口：三份 try/finally 样板合一（M-2） */
+  const runGuarded = useCallback(
+    async <T,>(action: () => Promise<Result<T>>, onOk?: (value: T) => void): Promise<Result<T>> => {
       setBusy(true);
       setError(null);
       try {
+        const result = await action();
+        if (!result.ok) setError(result.error.message);
+        else onOk?.(result.value);
+        return result;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
+
+  const start = useCallback(
+    (chapterId: string) =>
+      runGuarded(async () => {
         const result = await services.generation.startGeneration({
           commandId: services.newCommandId(),
           projectId,
           chapterId,
         });
-        if (!result.ok) {
-          setError(result.error.message);
-          return result;
-        }
-        watch(result.value.jobId);
+        if (result.ok) watch(result.value.jobId);
         return result;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [projectId, services, watch],
+      }),
+    [projectId, runGuarded, services, watch],
   );
 
   const retry = useCallback(
-    async (jobId: string) => {
-      setBusy(true);
-      setError(null);
-      try {
+    (jobId: string) =>
+      runGuarded(async () => {
         const result = await services.generation.retryGeneration({ projectId, jobId });
-        if (!result.ok) {
-          setError(result.error.message);
-          return result;
-        }
-        watch(jobId);
+        if (result.ok) watch(jobId);
         return result;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [projectId, services, watch],
+      }),
+    [projectId, runGuarded, services, watch],
   );
 
   const cancel = useCallback(
-    async (jobId: string) => {
-      const result = await services.generation.cancelGeneration({ projectId, jobId });
-      if (!result.ok) setError(result.error.message);
-      return result;
-    },
-    [projectId, services],
+    (jobId: string) => runGuarded(() => services.generation.cancelGeneration({ projectId, jobId })),
+    [projectId, runGuarded, services],
   );
 
   const preview = useCallback(
-    async (chapterId: string) => {
-      setBusy(true);
-      setError(null);
-      try {
+    (chapterId: string) =>
+      // 试听统一走全局播放服务（独占音频设备，避免与整章播放叠音）
+      runGuarded(async () => {
         const result = await services.generation.previewSegment({ projectId, chapterId });
-        if (!result.ok) {
-          setError(result.error.message);
-          return result;
-        }
-        // 试听统一走全局播放服务（独占音频设备，避免与整章播放叠音）
-        const played = await services.playback.playStandalone(result.value.filePath);
-        if (!played.ok) setError(played.error.message);
+        if (result.ok) await services.playback.playStandalone(result.value.filePath);
         return result;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [projectId, services],
+      }),
+    [projectId, runGuarded, services],
   );
 
   return { progress, busy, error, start, retry, cancel, preview, stopPreview: () => services.playback.stop() };
