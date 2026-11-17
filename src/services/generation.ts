@@ -1,7 +1,7 @@
-import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash } from '@/domain/jobs';
+import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash } from '@/domain/jobs';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
-import { segmentForTts } from '@/domain/segmenter';
+import { firstSegmentForTts, segmentForTts } from '@/domain/segmenter';
 import { sha256Text } from '@/domain/hash';
 import type {
   AudioFileStore,
@@ -230,8 +230,12 @@ export function createGenerationService(deps: GenerationDeps) {
       if (!binding) return err('invalid', '请先在角色中心给旁白绑定音色，再试听');
       const chapterText = loaded.chapterText;
       if (chapterText.length === 0) return err('invalid', '本章内容为空');
-      const plan = buildSegmentPlan(chapterText, { voiceId: binding.voiceId, provider: PROVIDER, providerParamsJson: PROVIDER_PARAMS_JSON }, segmentForTts);
-      const first = plan[0];
+      const firstText = firstSegmentForTts(chapterText)?.text;
+      if (!firstText) return err('invalid', '本章内容为空');
+      const first = {
+        text: firstText,
+        textHash: computeSegmentTextHash({ segmentText: firstText, voiceId: binding.voiceId, provider: PROVIDER, providerParamsJson: PROVIDER_PARAMS_JSON }),
+      };
       const existingPath = deps.audioFileStore.pathFor(first.textHash);
       if (await deps.audioFileStore.exists(first.textHash)) {
         return ok({ filePath: existingPath, textHash: first.textHash, cached: true });

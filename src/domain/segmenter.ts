@@ -17,6 +17,27 @@ function splitSentences(text: string): string[] {
   return text.match(/[^。！？；…\n]*[。！？；…\n]+|[^。！？；…\n]+$/g) ?? [];
 }
 
+/**
+ * 只求首段：与 segmentForTts(text, maxLength)[0] 逐字等价，
+ * 但在产出首段后立即返回（试听场景避免整章切分与全量哈希）。
+ */
+export function firstSegmentForTts(text: string, maxLength: number = DEFAULT_MAX_LENGTH): Segment | null {
+  if (maxLength <= 0) throw new RangeError('maxLength 必须为正数');
+  if (text.length === 0) return null;
+  let current = '';
+  for (const sentence of splitSentences(text)) {
+    if (sentence.length > maxLength) {
+      if (current) return { ordinal: 0, text: current };
+      return { ordinal: 0, text: sentence.slice(0, maxLength) };
+    }
+    if (current.length + sentence.length > maxLength) {
+      return { ordinal: 0, text: current };
+    }
+    current += sentence;
+  }
+  return current ? { ordinal: 0, text: current } : null;
+}
+
 export function segmentForTts(text: string, maxLength: number = DEFAULT_MAX_LENGTH): Segment[] {
   if (maxLength <= 0) throw new RangeError('maxLength 必须为正数');
   if (text.length === 0) return [];
