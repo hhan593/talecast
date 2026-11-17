@@ -30,14 +30,44 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - [~] P3：播放与助手——已实现（全局段队列播放/切页不中断、正文按段高亮+点段跳转、助手 SSE 流式+历史分页、候选必须人工采用）
 - [~] P4：加固——已实现（Secure Store 密钥、请求用量展示、空/错误状态清扫、能力边界文案；**真机最小化验证待用户执行**）
 
-## 开发
+## 开发与运行
 
 ```bash
 pnpm install
 pnpm typecheck   # tsc --noEmit
 pnpm test        # vitest：domain 纯逻辑 + 纯函数适配器（SSE 解析）
-pnpm start       # Expo Go 扫码真机运行（P0 验收：书架建测试工程 → 杀进程重开 → 数据仍在）
+pnpm start       # 开发服务器 → 手机装 Expo Go 扫码运行
 ```
+
+日常运行（Expo Go，最快验证）：
+1. `pnpm start`，终端出现二维码
+2. 手机装 Expo Go（App Store / 各应用商店），扫二维码
+3. 书架 → 新建工程 → 导入 UTF-8 TXT → 按里程碑流程使用
+（注意：手机与电脑需同一局域网；`pnpm start --tunnel` 可走隧道）
+
+## 构建发版（本地产物）
+
+```bash
+# 1. 生成原生工程（改动 app.json / 原生配置后需重跑；产物目录已被 .gitignore）
+pnpm expo prebuild --platform android --no-install
+pnpm expo prebuild --platform ios --no-install
+
+# 2. Android APK（调试签名，可直接安装分发；pnpm 严格布局需补 NODE_PATH）
+cd android
+NODE_PATH="$(cd .. && pwd)/node_modules/.pnpm/node_modules" \
+  JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew assembleRelease --no-daemon
+# 产物：android/app/build/outputs/apk/release/app-release.apk
+
+# 3. iOS（模拟器包，无需开发者账号；需 Xcode 26+ / Swift 6.2）
+cd ios && pod install
+xcodebuild -workspace TaleCast.xcworkspace -scheme TaleCast -configuration Release \
+  -sdk iphonesimulator -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+# 产物：ios/build/Build/Products/Release-iphonesimulator/TaleCast.app
+
+# 4. 真机 iOS / 上架：需 Apple 开发者账号，走 EAS（eas build）或本地签名打包
+```
+
+`releases/` 目录存放当期编译产物，不入库。
 
 ## 技术栈（概览）
 

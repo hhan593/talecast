@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# 本地编译产物
+releases/
