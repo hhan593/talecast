@@ -101,7 +101,7 @@ export function assertAdoptable(
   expectedRevision: number,
 ): string | null {
   if (status !== 'pending') return '该候选已被采用或撤销';
-  if (currentRevision !== expectedRevision) return '工程已被其他操作修改，请刷新后重试';
+  if (currentRevision !== expectedRevision) return '书籍已被其他操作修改，请刷新后重试';
   return null;
 }
 
@@ -111,6 +111,6 @@ export function assertUndoable(
   expectedRevision: number,
 ): string | null {
   if (status !== 'adopted') return '只有已采用的候选才能撤销';
-  if (currentRevision !== expectedRevision) return '工程已被其他操作修改，请刷新后重试';
+  if (currentRevision !== expectedRevision) return '书籍已被其他操作修改，请刷新后重试';
   return null;
 }

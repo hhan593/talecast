@@ -134,7 +134,7 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     expect(result.error.message).toContain('UTF-8');
   });
 
-  it('一个工程只接受一份来源', async () => {
+  it('一本书只接受一份文本来源', async () => {
     const s = setup();
     const bytes = await loadSample();
     await s.importService.importSource({ commandId: 'c1', projectId: 'p1', fileName: 'a.txt', bytes });
@@ -146,7 +146,7 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).toContain('一份来源');
+    expect(result.error.message).toContain('只支持一份');
   });
 
   it('重新分章 → 采用推进 revision → 撤销回退上一版；来源文本不变', async () => {

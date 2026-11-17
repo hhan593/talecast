@@ -34,7 +34,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
       return resolveIdempotent(receipt, async () => {
         const title = command.title.trim();
         if (title.length === 0 || title.length > 60) {
-          return err('invalid', '工程标题需为 1-60 个字符');
+          return err('invalid', '书名需为 1-60 个字符');
         }
         try {
           const project = await deps.projectRepository.create({
@@ -50,7 +50,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
           });
           return ok(project);
         } catch (error) {
-          return err('storage', `创建工程失败：${error instanceof Error ? error.message : String(error)}`);
+          return err('storage', `创建小说失败：${error instanceof Error ? error.message : String(error)}`);
         }
       });
     },
@@ -59,11 +59,11 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
     async deleteProject(command: { projectId: string }): Promise<Result<null>> {
       try {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '工程不存在');
+        if (!project) return err('not_found', '书籍不存在');
         await deps.projectRepository.delete(command.projectId);
         return ok(null);
       } catch (error) {
-        return err('storage', `删除工程失败：${error instanceof Error ? error.message : String(error)}`);
+        return err('storage', `删除小说失败：${error instanceof Error ? error.message : String(error)}`);
       }
     },
 

@@ -47,7 +47,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<ResplitResult>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const source = await deps.libraryRepository.getSource(command.projectId);
-        if (!source) return err('invalid', '工程还没有导入来源，先导入 TXT');
+        if (!source) return err('invalid', '还没有导入文本，先导入 TXT');
 
         const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
         const drafts = buildInitialChapterDrafts(text);
@@ -79,7 +79,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<{ chapterCount: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '工程不存在');
+        if (!project) return err('not_found', '书籍不存在');
         const proposal = await deps.splitProposalRepository.get(command.proposalId);
         if (!proposal || proposal.projectId !== command.projectId) {
           return err('not_found', '候选不存在');
@@ -113,7 +113,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<{ chapterCount: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '工程不存在');
+        if (!project) return err('not_found', '书籍不存在');
         const proposal = await deps.splitProposalRepository.get(command.proposalId);
         if (!proposal || proposal.projectId !== command.projectId) {
           return err('not_found', '候选不存在');

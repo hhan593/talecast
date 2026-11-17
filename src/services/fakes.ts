@@ -151,7 +151,7 @@ export class FakeLibraryRepository implements LibraryRepository {
   ): Promise<Project> {
     this.calls.push(`replaceChapters(${options.bumpRevision ? '+rev' : 'keep-rev'})`);
     const project = this.projects.find((p) => p.id === projectId);
-    if (!project) throw new Error('工程不存在');
+    if (!project) throw new Error('书籍不存在');
     this.chapters = drafts.map((draft, ordinal) => ({
       id: `ch-${projectId}-${ordinal}-${draft.startOffset}`,
       projectId,
@@ -179,7 +179,7 @@ export class FakeLibraryRepository implements LibraryRepository {
     const current = await this.listChapters(projectId);
     this.chapters = mutate(current);
     const project = this.projects.find((p) => p.id === projectId);
-    if (!project) throw new Error('工程不存在');
+    if (!project) throw new Error('书籍不存在');
     project.revision += 1;
     project.updatedAt = Date.now();
     return { chapters: this.chapters, project: { ...project } };

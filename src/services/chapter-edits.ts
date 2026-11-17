@@ -52,9 +52,9 @@ function runEdit<T extends Command & { projectId: string; chapterId: string }>(
   return deps.receiptStore.get<EditResult>(command.commandId).then((receipt) =>
     resolveIdempotent(receipt, async () => {
       const project = await deps.projectRepository.get(command.projectId);
-      if (!project) return err('not_found', '工程不存在');
+      if (!project) return err('not_found', '书籍不存在');
       if (project.revision !== command.expectedRevision) {
-        return err('conflict', '工程已被其他操作修改，请刷新后重试');
+        return err('conflict', '书籍已被其他操作修改，请刷新后重试');
       }
       try {
         const result = await deps.libraryRepository.mutateChapters(

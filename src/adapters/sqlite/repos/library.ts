@@ -57,7 +57,7 @@ function toChapter(row: ChapterRow): Chapter {
 
 function getProjectSync(db: TalecastDatabase, id: string): Project {
   const row = db.getFirstSync<ProjectRow>('SELECT * FROM projects WHERE id = ?', id);
-  if (!row) throw new Error(`工程不存在：${id}`);
+  if (!row) throw new Error(`书籍不存在：${id}`);
   return toProject(row);
 }
 
@@ -155,7 +155,7 @@ export class SqliteLibraryRepository implements LibraryRepository {
     let nextProject: Project;
     this.db.withTransactionSync(() => {
       const projectRow = this.db.getFirstSync<ProjectRow>('SELECT * FROM projects WHERE id = ?', projectId);
-      if (!projectRow) throw new Error(`工程不存在：${projectId}`);
+      if (!projectRow) throw new Error(`书籍不存在：${projectId}`);
       const nextRevision = projectRow.revision + 1;
       nextProject = { ...toProject(projectRow), revision: nextRevision, updatedAt: now };
       const rows = this.db.getAllSync<ChapterRow>(

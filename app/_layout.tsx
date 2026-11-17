@@ -12,7 +12,7 @@ export default function RootLayout() {
       <ServicesProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="project" />
+          <Stack.Screen name="project/[id]" />
         </Stack>
       </ServicesProvider>
     </ThemeProvider>

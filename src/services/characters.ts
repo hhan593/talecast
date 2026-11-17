@@ -58,7 +58,7 @@ export function createCharactersService(deps: CharactersDeps) {
       const receipt = await deps.receiptStore.get<{ count: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const source = await deps.libraryRepository.getSource(command.projectId);
-        if (!source) return err('invalid', '工程还没有导入来源');
+        if (!source) return err('invalid', '本书还没有导入文本');
         const chapters = await deps.libraryRepository.listChapters(command.projectId);
         if (chapters.length === 0) return err('invalid', '还没有章节');
 
@@ -146,7 +146,7 @@ export function createCharactersService(deps: CharactersDeps) {
       const character = await deps.characterRepository.get(characterId);
       if (!character) return err('not_found', '角色不存在');
       if (character.manualProtected && character.confirmed) {
-        return err('busy', '已确认角色受人工保护；请先在工程内解除引用后再删除（P2 提供删除入口前，可直接改名）');
+        return err('busy', '已确认角色受人工保护；请先在书籍内解除引用后再删除（P2 提供删除入口前，可直接改名）');
       }
       await deps.characterRepository.delete(characterId);
       return ok(null);

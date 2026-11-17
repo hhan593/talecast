@@ -50,7 +50,7 @@ export default function SettingsScreen() {
       <View className="mt-6 rounded-xl bg-white p-4 dark:bg-zinc-900">
         <Text className="font-semibold text-zinc-900 dark:text-zinc-100">服务连接 · 文本模型（OpenAI 兼容）</Text>
         <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          用于角色抽取与工程助手。原文会发送给该服务商（docs/plan.md 风险表）。
+          用于角色抽取与书籍助手。原文会发送给该服务商（docs/plan.md 风险表）。
         </Text>
         {loading ? (
           <ActivityIndicator className="mt-4" />
@@ -102,7 +102,7 @@ export default function SettingsScreen() {
       <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
         <Text className="font-semibold text-zinc-900 dark:text-zinc-100">语音生成</Text>
         <Text className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          Edge TTS（免费、无需密钥）。音色库请在工程内 角色中心 → 刷新音色库 拉取。
+          Edge TTS（免费、无需密钥）。音色库请在书籍内 角色中心 → 刷新音色库 拉取。
         </Text>
       </View>
 

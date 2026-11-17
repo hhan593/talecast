@@ -167,7 +167,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 4,
-    description: 'P3：工程助手会话与消息',
+    description: 'P3：书籍助手会话与消息',
     statements: [
       `CREATE TABLE IF NOT EXISTS assistant_sessions (
         id TEXT PRIMARY KEY NOT NULL,

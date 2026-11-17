@@ -137,7 +137,7 @@ export default function ProjectWorkbenchScreen() {
   if (notFound || !project) {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-zinc-50 dark:bg-zinc-950">
-        <Text className="text-base text-zinc-700 dark:text-zinc-300">该工程不存在或已被删除</Text>
+        <Text className="text-base text-zinc-700 dark:text-zinc-300">这本书不存在或已被删除</Text>
         <Pressable className="rounded-xl bg-indigo-500 px-4 py-2" onPress={() => router.back()}>
           <Text className="font-semibold text-white">返回书架</Text>
         </Pressable>
@@ -232,7 +232,7 @@ export default function ProjectWorkbenchScreen() {
           <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={() => setView('chapters')}>
             <Text className="text-sm text-zinc-700 dark:text-zinc-300">返回目录</Text>
           </Pressable>
-          <Text className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">工程助手</Text>
+          <Text className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">书籍助手</Text>
           <View className="w-16" />
         </View>
         {assistant.hasEarlier ? (
@@ -247,7 +247,7 @@ export default function ProjectWorkbenchScreen() {
           ListEmptyComponent={
             <View className="items-center py-16">
               <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-                还没有会话记录。助手只提出建议（候选），不会直接修改工程；
+                还没有会话记录。助手只提出建议（候选），不会直接修改书籍内容；
                 分章候选需要你在审阅中人工采用。使用前需在 设置 → 服务连接 配置文本模型。
               </Text>
             </View>
@@ -347,7 +347,7 @@ export default function ProjectWorkbenchScreen() {
           className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
           onPress={() => setView('assistant')}
         >
-          <Text className="text-sm text-zinc-800 dark:text-zinc-200">工程助手</Text>
+          <Text className="text-sm text-zinc-800 dark:text-zinc-200">书籍助手</Text>
         </Pressable>
       </View>
 

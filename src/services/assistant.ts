@@ -110,7 +110,7 @@ export function createAssistantService(deps: AssistantDeps) {
       await deps.assistantRepository.appendMessage(userRecord);
 
       const contextPrompt =
-        '【工程上下文】\n章节目录（字符偏移，半开区间）：\n' +
+        '【书籍上下文】\n章节目录（字符偏移，半开区间）：\n' +
         (context.chapterMeta || '（还没有章节）') +
         `\n全文共 ${context.textLength} 字。\n开头预览：\n${context.textHead}\n\n【用户消息】\n${command.userText}`;
 

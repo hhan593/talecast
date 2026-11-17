@@ -47,7 +47,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
 
   return deps.libraryRepository.getSource(projectId).then((existing) => {
     if (existing) {
-      return err('invalid', `该工程已导入《${existing.filename}》。P1 一个工程只支持一份来源`);
+      return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
     }
 
     const text = decodeUtf8(bytes);

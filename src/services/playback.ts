@@ -126,7 +126,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       if (segments.length === 0) return err('invalid', '本章没有可用音频段');
 
       const source = await deps.libraryRepository.getSource(projectId);
-      if (!source) return err('invalid', '工程还没有导入来源');
+      if (!source) return err('invalid', '本书还没有导入文本');
       const chapters = await deps.libraryRepository.listChapters(projectId);
       const chapter = chapters.find((c) => c.id === chapterId);
       if (!chapter) return err('not_found', '章节不存在');

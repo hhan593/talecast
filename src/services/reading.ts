@@ -57,7 +57,7 @@ export function createReadingService(deps: ReadingDeps) {
       const chapter = chapters.find((c) => c.id === chapterId) ?? null;
       if (!chapter) return err('not_found', '章节不存在');
       const source = await deps.libraryRepository.getSource(projectId);
-      if (!source) return err('invalid', '工程还没有导入来源');
+      if (!source) return err('invalid', '本书还没有导入文本');
       const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
       const chapterText = text.slice(chapter.startOffset, chapter.endOffset);
       return ok({

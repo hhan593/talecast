@@ -13,7 +13,7 @@ export default function ReviewModal() {
 
   const statusText =
     proposal.status === 'pending'
-      ? '待审阅：采用后写入工程目录，revision +1'
+      ? '待审阅：采用后写入章节目录，revision +1'
       : proposal.status === 'adopted'
         ? '已采用：撤销将回到采用前的目录（含采用时的编辑）'
         : '已撤销：可重新发起"重新分章"生成新候选';
@@ -38,7 +38,7 @@ export default function ReviewModal() {
               onPress={() => {
                 void proposal.adopt().then((result) => {
                   if (result.ok) {
-                    Alert.alert('已采用', '候选目录已写入工程。', [
+                    Alert.alert('已采用', '候选目录已写入本书。', [
                       { text: '好的', onPress: () => router.back() },
                     ]);
                   }
