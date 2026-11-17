@@ -117,7 +117,6 @@ export interface TtsGateway {
   synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array>;
 }
 
-/** 远程文本模型（OpenAI 兼容）；P2 角色抽取与 P3 助手共用。onDelta 提供流式增量（P3 助手） */
 export interface LlmGateway {
   complete(input: {
     system: string;

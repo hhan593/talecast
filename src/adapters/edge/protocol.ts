@@ -1,8 +1,7 @@
 /**
  * Edge TTS 协议纯层（docs/plan.md 5.3 Edge 协议要点）。
  * Sec-MS-GEC 令牌与 WebSocket 帧的组装/解析都是确定性纯函数，
- * 由 gec.test.ts / frames.test.ts 用固定输入覆盖（5.4 录制帧 fixture 思路的离线等价物）。
- * 网络传输（RN WebSocket）在 tts.ts，薄到不做逻辑。
+ * protocol.test.ts 用固定输入离线覆盖；网络传输（RN WebSocket）在 tts.ts，薄到不做逻辑。
  */
 
 import { EDGE_AUDIO_FORMAT } from '@/domain/contracts';

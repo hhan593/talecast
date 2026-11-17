@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createGenerationService } from './generation';
 import { createImportService } from './import';
@@ -143,11 +143,18 @@ describe('P3 播放服务', () => {
     const s = await setupWithGeneratedChapter();
     // 先保存文本阅读位置
     await s.readingStates.set({ projectId: 'p1', chapterId: s.chapters[0].id, charOffset: 123, audioSegmentOrdinal: null, audioOffsetMs: null });
-    await s.playback.playChapter('p1', s.chapters[0].id);
-    s.audioPlayer.fireProgress(500); // 进度回调触发音频位置持久化
-    const state = await s.readingStates.get('p1');
-    expect(state).not.toBeNull();
-    expect(state!.charOffset).toBe(123); // 文本位置保留
-    expect(state!.audioSegmentOrdinal).not.toBeNull(); // 音频位置已写
+    vi.useFakeTimers();
+    try {
+      await s.playback.playChapter('p1', s.chapters[0].id);
+      // loadAndPlay 的写入占满 1500ms 节流窗：推进时间越过窗口后进度写入才生效
+      vi.advanceTimersByTime(1500);
+      s.audioPlayer.fireProgress(500);
+      const state = await s.readingStates.get('p1');
+      expect(state).not.toBeNull();
+      expect(state!.charOffset).toBe(123); // 文本位置保留
+      expect(state!.audioOffsetMs).toBe(500); // 进度回调持久化音频位置
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

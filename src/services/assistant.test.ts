@@ -146,7 +146,7 @@ describe('P4 优化：流式增量持久化', () => {
     const assistantMessage = messages.find((m) => m.role === 'assistant');
     expect(assistantMessage?.text).toContain('第一块。');
     expect(assistantMessage?.text).toContain('第三块。');
-    // 版本号 > 1 证明流式期间有多次持久化（不再只在结尾落一次）
-    expect(assistantMessage?.version).toBeGreaterThan(1);
+    // 结尾至少两次持久化（流式节流 + 收尾），>2 才能捕获"删掉流式期间持久化"的回归
+    expect(assistantMessage?.version).toBeGreaterThan(2);
   });
 });
