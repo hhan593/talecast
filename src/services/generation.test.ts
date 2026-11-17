@@ -164,9 +164,9 @@ describe('P2 生成任务：段级幂等与重试', () => {
     expect(started.value.reusedSegments).toBe(1); // 试听段转正
     expect(s.tts.synthCalls.length).toBe(callsAfterPreview + (started.value.totalSegments - 1));
     // 首段文件路径与试听一致（同一 text_hash）
-    const progress = await s.generation.getProgress(started.value.jobId);
-    expect(progress?.segments[0].filePath).toBe(preview.value.filePath);
-    expect(progress?.segments[0].textHash).toBe(preview.value.textHash);
+    const jobSegments = await s.generationStore.listSegments(started.value.jobId);
+    expect(jobSegments[0].filePath).toBe(preview.value.filePath);
+    expect(jobSegments[0].textHash).toBe(preview.value.textHash);
   });
 
   it('未绑定音色时生成给出明确错误', async () => {
