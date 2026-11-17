@@ -1,6 +1,9 @@
 import { migrateDatabase, openDatabase } from './db';
 import { SqliteAssistantRepository } from './repos/assistant';
-import { SqliteGenerationStore, SqliteBindingRepository, SqliteCharacterRepository, SqliteVoiceRepository } from './repos/generation';
+import { SqliteBindingRepository } from './repos/bindings';
+import { SqliteCharacterRepository } from './repos/characters';
+import { SqliteGenerationStore } from './repos/generation';
+import { SqliteVoiceRepository } from './repos/voices';
 import { SqliteLibraryRepository } from './repos/library';
 import { SqliteReadingStateRepository } from './repos/misc';
 import { SqliteProjectRepository } from './repos/projects';
