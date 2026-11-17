@@ -15,6 +15,9 @@ import type { AudioFileStore, FilePicker, SourceFileStore } from '@/domain/ports
 const SOURCES_DIR = 'sources';
 const AUDIO_DIR = 'audio';
 
+/** 解码文本缓存：键为内容哈希、值不可变；生成/播放/阅读/助手 6 个场景共用（M-4） */
+const decodedTextCache = new Map<string, string>();
+
 /** 系统文件选择器实现：只接受文本类文件；用户取消返回 null */
 export const documentPickerFilePicker: FilePicker = {
   async pickTextFile() {
@@ -76,8 +79,17 @@ export const sandboxSourceFileStore: SourceFileStore = {
   },
 
   async readDecodedText(sha256) {
+    const cached = decodedTextCache.get(sha256);
+    if (cached !== undefined) return cached;
     const target = `${sourcesDirectoryUri()}${sha256}.txt`;
-    return FileSystem.readAsStringAsync(target, { encoding: FileSystem.EncodingType.UTF8 });
+    const text = await FileSystem.readAsStringAsync(target, { encoding: FileSystem.EncodingType.UTF8 });
+    // 键是内容哈希（写后不可变），缓存无失效问题；仅保留最近 2 份防内存膨胀
+    decodedTextCache.set(sha256, text);
+    if (decodedTextCache.size > 2) {
+      const oldest = decodedTextCache.keys().next().value;
+      if (oldest !== undefined) decodedTextCache.delete(oldest);
+    }
+    return text;
   },
 };
 
