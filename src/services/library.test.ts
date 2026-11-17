@@ -7,6 +7,7 @@ import { createImportService } from './import';
 import { createChapterEditService } from './chapter-edits';
 import { createReadingService } from './reading';
 import { createProjectsService } from './projects';
+import { createLibraryQueryService } from './library-query';
 import { createSplitReviewService } from './split-review';
 import {
   FakeFilePicker,
@@ -69,8 +70,11 @@ function setup() {
     }),
     reading: createReadingService({
       readingStateRepository: readingStates,
-      libraryRepository: library,
-      sourceFileStore: files,
+      libraryQuery: createLibraryQueryService({
+        libraryRepository: library,
+        splitProposalRepository: proposals,
+        sourceFileStore: files,
+      }),
     }),
     projectsService: createProjectsService({
       projectRepository: projects,

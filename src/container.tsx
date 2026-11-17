@@ -38,6 +38,12 @@ const llmGateway = createOpenAiCompatibleLlmGateway({
 });
 const audioPlayer = new ExpoAudioPlayerService();
 
+const libraryQuery = createLibraryQueryService({
+  libraryRepository: adapters.libraryRepository,
+  splitProposalRepository: adapters.splitProposalRepository,
+  sourceFileStore: sandboxSourceFileStore,
+});
+
 const services = {
   projects: createProjectsService({
     projectRepository: adapters.projectRepository,
@@ -49,11 +55,7 @@ const services = {
     sourceFileStore: sandboxSourceFileStore,
     receiptStore: adapters.receiptStore,
   }),
-  libraryQuery: createLibraryQueryService({
-    libraryRepository: adapters.libraryRepository,
-    splitProposalRepository: adapters.splitProposalRepository,
-  }),
-  splitReview: createSplitReviewService({
+  libraryQuery,  splitReview: createSplitReviewService({
     projectRepository: adapters.projectRepository,
     libraryRepository: adapters.libraryRepository,
     splitProposalRepository: adapters.splitProposalRepository,
@@ -67,8 +69,7 @@ const services = {
   }),
   reading: createReadingService({
     readingStateRepository: adapters.readingStateRepository,
-    libraryRepository: adapters.libraryRepository,
-    sourceFileStore: sandboxSourceFileStore,
+    libraryQuery,
   }),
   voices: createVoicesService({ ttsGateway: edgeTtsGateway, voiceRepository: adapters.voiceRepository }),
   characters: createCharactersService({
@@ -87,6 +88,7 @@ const services = {
   generation: createGenerationService({
     projectRepository: adapters.projectRepository,
     libraryRepository: adapters.libraryRepository,
+    libraryQuery,
     sourceFileStore: sandboxSourceFileStore,
     bindingRepository: adapters.bindingRepository,
     generationStore: adapters.generationStore,
@@ -103,8 +105,7 @@ const services = {
   playback: createPlaybackService({
     audioPlayer,
     generationStore: adapters.generationStore,
-    libraryRepository: adapters.libraryRepository,
-    sourceFileStore: sandboxSourceFileStore,
+    libraryQuery,
     readingStateRepository: adapters.readingStateRepository,
   }),
   assistant: createAssistantService({

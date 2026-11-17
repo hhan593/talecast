@@ -10,8 +10,7 @@ import type { Chapter } from '@/domain/types';
 
 export interface ReadingDeps {
   readingStateRepository: ReadingStateRepository;
-  libraryRepository: LibraryRepository;
-  sourceFileStore: SourceFileStore;
+  libraryQuery: import('@/services/library-query').LibraryQueryService;
 }
 
 export interface ReadingPosition {
@@ -53,13 +52,9 @@ export function createReadingService(deps: ReadingDeps) {
 
     /** 章节正文读取：解码文本按章节偏移切片 + 分段（正文高亮/播放映射共用） */
     async getChapterText(projectId: string, chapterId: string): Promise<Result<ChapterTextResult>> {
-      const chapters = await deps.libraryRepository.listChapters(projectId);
-      const chapter = chapters.find((c) => c.id === chapterId) ?? null;
-      if (!chapter) return err('not_found', '章节不存在');
-      const source = await deps.libraryRepository.getSource(projectId);
-      if (!source) return err('invalid', '本书还没有导入文本');
-      const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
-      const chapterText = text.slice(chapter.startOffset, chapter.endOffset);
+      const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
+      if (!slice) return err('not_found', '章节不存在');
+      const { chapter, chapterText } = slice;
       return ok({
         chapter,
         chapterText,

@@ -34,6 +34,17 @@ async function setupWithImport() {
     sourceFileStore: files,
     receiptStore: receipts,
   });
+  const libraryQuery = (await import('./library-query')).createLibraryQueryService({
+    libraryRepository: library,
+    splitProposalRepository: {
+      insert: async () => undefined,
+      get: async () => null,
+      latestAdopted: async () => null,
+      setStatus: async () => undefined,
+      setPreviousJson: async () => undefined,
+    },
+    sourceFileStore: files,
+  });
   const filler = '夜里落了细雨，屋檐下的灯忽明忽暗，街上行人渐渐少了，远处传来更夫的梆子声，一声一声敲进心里。';
   const sample =
     '第一章 起\n' +
@@ -66,6 +77,7 @@ async function setupWithImport() {
   const generation = createGenerationService({
     projectRepository: projects,
     libraryRepository: library,
+    libraryQuery,
     sourceFileStore: files,
     bindingRepository: bindings,
     generationStore,

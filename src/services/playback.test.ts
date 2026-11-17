@@ -45,9 +45,21 @@ async function setupWithGeneratedChapter() {
   });
   await bindings.upsert({ projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural' });
   const chapters = await library.listChapters('p1');
+  const libraryQuery = (await import('./library-query')).createLibraryQueryService({
+    libraryRepository: library,
+    splitProposalRepository: {
+      insert: async () => undefined,
+      get: async () => null,
+      latestAdopted: async () => null,
+      setStatus: async () => undefined,
+      setPreviousJson: async () => undefined,
+    },
+    sourceFileStore: files,
+  });
   const generation = createGenerationService({
     projectRepository: projects,
     libraryRepository: library,
+    libraryQuery,
     sourceFileStore: files,
     bindingRepository: bindings,
     generationStore,
@@ -64,8 +76,7 @@ async function setupWithGeneratedChapter() {
   const playback = createPlaybackService({
     audioPlayer,
     generationStore,
-    libraryRepository: library,
-    sourceFileStore: files,
+    libraryQuery,
     readingStateRepository: readingStates,
   });
   return { projects, library, files, generationStore, readingStates, chapters, started, audioPlayer, playback };
