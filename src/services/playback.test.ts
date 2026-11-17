@@ -50,7 +50,6 @@ async function setupWithGeneratedChapter() {
     splitProposalRepository: {
       insert: async () => undefined,
       get: async () => null,
-      latestAdopted: async () => null,
       setStatus: async () => undefined,
       setPreviousJson: async () => undefined,
     },
