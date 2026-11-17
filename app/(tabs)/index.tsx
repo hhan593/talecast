@@ -33,7 +33,7 @@ export default function BookshelfScreen() {
         className="mt-4 items-center rounded-xl bg-indigo-500 py-3 active:bg-indigo-600"
         onPress={() => setCreateVisible(true)}
       >
-        <Text className="font-semibold text-white">＋ 添加小说</Text>
+        <Text className="font-semibold text-white">＋ 添加书籍</Text>
       </Pressable>
 
       <FlatList
@@ -45,7 +45,7 @@ export default function BookshelfScreen() {
             className="rounded-xl bg-white p-4 active:bg-zinc-100 dark:bg-zinc-900 dark:active:bg-zinc-800"
             onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
             onLongPress={() =>
-              Alert.alert('删除小说', `《${item.title}》的章节、候选与生成任务将全部删除，且不可恢复。确认删除？`, [
+              Alert.alert('删除书籍', `《${item.title}》的章节、候选与生成任务将全部删除，且不可恢复。确认删除？`, [
                 { text: '取消', style: 'cancel' },
                 { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
               ])
@@ -61,7 +61,7 @@ export default function BookshelfScreen() {
         ListEmptyComponent={
           <View className="items-center py-16">
             <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              书架还是空的。点"添加小说"创建一本小说，再导入 UTF-8 TXT 文本。
+              书架还是空的。点"添加小说"创建一本书籍，再导入 UTF-8 TXT 文本。
               {'\n'}长按书籍可删除。
             </Text>
           </View>

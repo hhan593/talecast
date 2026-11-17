@@ -1,10 +1,10 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { ProjectRepository, ReceiptStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { Project } from '@/domain/types';
 
 /**
- * 工程相关用例编排（薄层：每用例一函数，依赖经参数注入，可被 in-memory fake 测试）。
+ * 书籍相关用例编排（薄层：每用例一函数，依赖经参数注入，可被 in-memory fake 测试）。
  * 事务、幂等回执的推进只发生在 services 层，UI 不直接触碰仓储。
  */
 
@@ -50,7 +50,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
           });
           return ok(project);
         } catch (error) {
-          return err('storage', `创建小说失败：${error instanceof Error ? error.message : String(error)}`);
+          return err('storage', `创建书籍失败：${errorMessage(error)}`);
         }
       });
     },
@@ -63,7 +63,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
         await deps.projectRepository.delete(command.projectId);
         return ok(null);
       } catch (error) {
-        return err('storage', `删除小说失败：${error instanceof Error ? error.message : String(error)}`);
+        return err('storage', `删除书籍失败：${errorMessage(error)}`);
       }
     },
 

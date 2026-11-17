@@ -8,7 +8,7 @@ import type {
   SourceFileStore,
   SplitProposalRepository,
 } from '@/domain/ports';
-import { err, ok, remoteErrorCode, type Result } from '@/domain/result';
+import { errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
 
 
 export interface AssistantDeps {
@@ -154,7 +154,7 @@ export function createAssistantService(deps: AssistantDeps) {
         });
         await persistStream();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         await deps.assistantRepository.updateMessageParts(
           session.id,
           assistantRecord.ordinal,

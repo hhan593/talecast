@@ -1,26 +1,4 @@
 
-export interface AssistantSession {
-  id: string;
-  projectId: string;
-  /** 会话固定用途：general 问答 / resplit 候选提议（P3 只用 general） */
-  taskKind: 'general';
-  chapterId: string | null;
-  createdAt: number;
-}
-
-export interface AssistantMessage {
-  id: string;
-  sessionId: string;
-  /** 会话内自增序号：网络流按序号写入，重连从历史恢复 */
-  ordinal: number;
-  role: 'user' | 'assistant';
-  /** 内容块：[{type:'text',text}]（后续可扩展候选卡等结构块） */
-  partsJson: string;
-  /** 乐观并发版本：流式追加时 +1 */
-  version: number;
-  createdAt: number;
-}
-
 export const ASSISTANT_SYSTEM_PROMPT =
   '你是 TaleCast 的书籍助手，服务于有声书制作流程。规则：\n' +
   '1. 你只提出建议（候选），绝不直接修改书籍数据；用户在审阅界面显式采用后才会生效。\n' +

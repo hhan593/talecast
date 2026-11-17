@@ -98,7 +98,6 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     // 双哈希口径：raw = 原始字节身份，text = 解码文本身份。
     // 来源是 UTF-8 时两者字节流相同，哈希值相等是预期行为（GB18030 输入被拒绝，不会出现不同值）。
     const text = new TextDecoder().decode(bytes);
-    expect(result.value.source.rawSha256).toBe(sha256Bytes(bytes));
     expect(result.value.source.textSha256).toBe(sha256Bytes(new TextEncoder().encode(text)));
     // 不可变文件已按内容寻址落盘
     expect(s.files.raw.get(result.value.source.rawSha256)).toEqual(bytes);

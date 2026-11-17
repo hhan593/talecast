@@ -65,8 +65,9 @@ export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder('utf-8').decode(bytes);
 }
 
-export function encodeUtf8(text: string): Uint8Array {
-  return utf8Bytes(text);
+/** 调用方已用 isValidUtf8 放行时的快速解码：避免 16MB 字节二次扫描 */
+export function decodeValidatedUtf8(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 /** 首版单文件上限：16MB（docs/plan.md 4.2 不做 128MiB/一万章大容量目标） */

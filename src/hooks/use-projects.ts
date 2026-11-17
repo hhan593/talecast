@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
+import { errorMessage, type Result } from '@/domain/result';
 import type { Project } from '@/domain/types';
 
 export function useProjects() {
@@ -13,7 +14,7 @@ export function useProjects() {
       setProjects(await services.projects.listProjects());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }, [services]);
 

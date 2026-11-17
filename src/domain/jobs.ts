@@ -1,6 +1,6 @@
 /**
  * 生成任务状态机与幂等哈希构成（docs/plan.md 5.3 生成流程）。
- * P2 落地；哈希规则用纯函数冻结在 domain，services 与 adapters 共用，防止口径漂移。
+ * 哈希规则用纯函数冻结在 domain，services 与 adapters 共用，防止口径漂移。
  *
  * input_hash = SHA-256(章节文本哈希 + 绑定 revision + voice_id + provider + 参数
  *                      + 音频格式 + SEGMENTER_VERSION)

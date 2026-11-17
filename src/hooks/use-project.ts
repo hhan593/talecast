@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useServices } from '@/container';
 import type { Project } from '@/domain/types';
 
-/** 工程详情加载：notFound = 未加载到且已完成加载（外壳收口空状态用） */
+/** 书籍详情加载：notFound = 未加载到且已完成加载（外壳收口空状态用） */
 export function useProject(id: string) {
   const services = useServices();
   const [loading, setLoading] = useState(true);

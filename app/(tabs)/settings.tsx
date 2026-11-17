@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { useServices } from '@/container';
 
-/** 设置（docs/plan.md 4.2 / P4）：P2 落服务连接（LLM），密钥只进 SecureStore。 */
+/** 设置（docs/plan.md 4.2 / P4）：服务连接（LLM），密钥只进 SecureStore。 */
 export default function SettingsScreen() {
   const services = useServices();
   const [loading, setLoading] = useState(true);

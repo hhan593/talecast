@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
+import { errorMessage, type Result } from '@/domain/result';
 import type { BindingRecord, CharacterRecord, VoiceRecord } from '@/domain/types';
 
 export function useCharacters(projectId: string) {
@@ -23,7 +24,7 @@ export function useCharacters(projectId: string) {
       setVoices(voiceRows);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }, [projectId, services]);
 

@@ -16,7 +16,6 @@ export const VOICES_ENDPOINT = 'https://speech.platform.bing.com/consumer/speech
 export const SEC_MS_GEC_VERSION = '1-130.0.2849.68';
 
 /** 音频输出锁定统一格式（段间播放衔接的前提，docs/plan.md 5.3） */
-export { EDGE_AUDIO_FORMAT } from '@/domain/contracts';
 
 /**
  * Sec-MS-GEC：当前 UTC 时间自 1601-01-01 起的毫秒数，向下取整到 5 分钟窗口，

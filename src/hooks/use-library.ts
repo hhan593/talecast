@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
+import { errorMessage, type Result } from '@/domain/result';
 import type { Chapter, SourceInfo } from '@/domain/types';
-
-type AnyResult = { ok: true; value: unknown } | { ok: false; error: { message: string } };
 
 /**
  * 工作台数据入口（docs/plan.md 4.1）：目录、来源、导入、重新分章、章节编辑。
@@ -26,7 +25,7 @@ export function useLibrary(projectId: string, revision: number) {
       setSource(sourceInfo);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }, [projectId, services]);
 
@@ -34,7 +33,7 @@ export function useLibrary(projectId: string, revision: number) {
     void refresh();
   }, [refresh]);
 
-  const run = useCallback(async (action: () => Promise<AnyResult>) => {
+  const run = useCallback(async <T,>(action: () => Promise<Result<T>>): Promise<Result<T>> => {
     setBusy(true);
     try {
       const result = await action();

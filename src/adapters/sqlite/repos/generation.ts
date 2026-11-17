@@ -58,14 +58,6 @@ export class SqliteVoiceRepository implements VoiceRecordRepository {
     return rows.map(toVoice);
   }
 
-  async findByVoiceId(provider: string, voiceId: string): Promise<VoiceRecord | null> {
-    const row = this.db.getFirstSync<VoiceRow>(
-      'SELECT * FROM voices WHERE provider = ? AND voice_id = ?',
-      provider,
-      voiceId,
-    );
-    return row ? toVoice(row) : null;
-  }
 }
 
 // 角色

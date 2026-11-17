@@ -7,7 +7,7 @@ import type {
   RequestLogRepository,
   SourceFileStore,
 } from '@/domain/ports';
-import { err, ok, remoteErrorCode, type Result } from '@/domain/result';
+import { errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
 import type { CharacterRecord } from '@/domain/types';
 
 export interface CharactersDeps {
@@ -75,7 +75,7 @@ export function createCharactersService(deps: CharactersDeps) {
           raw = await deps.llmGateway.complete({ system: EXTRACTION_SYSTEM_PROMPT, user: userPrompt });
           await deps.requestLogRepository.log('llm', true, `characters:${command.projectId}`);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = errorMessage(error);
           await deps.requestLogRepository.log('llm', false, message.slice(0, 200));
           return err(remoteErrorCode(error), message);
         }
@@ -84,7 +84,7 @@ export function createCharactersService(deps: CharactersDeps) {
         try {
           candidates = parseCharacterJson(raw);
         } catch (error) {
-          return err('invalid', `角色抽取结果解析失败：${error instanceof Error ? error.message : String(error)}`);
+          return err('invalid', `角色抽取结果解析失败：${errorMessage(error)}`);
         }
 
         const existing = await deps.characterRepository.list(command.projectId);

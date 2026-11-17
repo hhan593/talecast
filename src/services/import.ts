@@ -1,15 +1,15 @@
 import { buildInitialChapterDrafts, type ChapterDraft } from '@/domain/split';
-import { checkImportSize, decodeUtf8, isValidUtf8 } from '@/domain/source';
+import { checkImportSize, decodeValidatedUtf8, isValidUtf8 } from '@/domain/source';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { FilePicker, LibraryRepository, ReceiptStore, SourceFileStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { SourceInfo } from '@/domain/types';
 
 /**
  * 导入用例（docs/plan.md 5.3 导入流程）：
  * 系统选择器取文件 → 校验 UTF-8 → 双哈希 → 写不可变文件 → 同一事务写 sources + 初始 chapters → 回执。
- * P1 约束：一个工程一份来源；重复导入给出明确错误。
+ * 一个书籍一份来源；重复导入给出明确错误。
  */
 
 export interface ImportDeps {
@@ -50,7 +50,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
       return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
     }
 
-    const text = decodeUtf8(bytes);
+    const text = decodeValidatedUtf8(bytes);
     const rawSha256 = sha256Bytes(bytes);
     const textSha256 = sha256Text(text);
     const drafts = buildInitialChapterDrafts(text);
@@ -82,7 +82,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
           .then(() => ok(result));
       })
       .catch((error: unknown) =>
-        err('storage', `导入写入失败：${error instanceof Error ? error.message : String(error)}`),
+        err('storage', `导入写入失败：${errorMessage(error)}`),
       );
   });
 }

@@ -135,11 +135,6 @@ describe('P4 优化：流式增量持久化', () => {
     const s = await setup();
     s.llm.streamChunks = ['第一块。', '第二块。', '第三块。'];
     s.llm.chunkDelayMs = 20;
-    const fakeAssistant = s.assistant as unknown as {
-      // 直接经依赖创建的服务实例即可；为读取中间版本，重建一个带假仓库的服务
-    };
-    void fakeAssistant;
-
     const result = await s.assistant.sendMessage({
       projectId: 'p1',
       commandId: 'c-stream',

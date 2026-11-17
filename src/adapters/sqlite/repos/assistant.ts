@@ -42,7 +42,7 @@ function toMessage(row: MessageRow): AssistantMessageRecord {
   };
 }
 
-/** 工程助手会话存储：单一会话（UNIQUE project+task），消息按序号写入 */
+/** 书籍助手会话存储：单一会话（UNIQUE project+task），消息按序号写入 */
 export class SqliteAssistantRepository implements AssistantRepository {
   constructor(private readonly db: TalecastDatabase) {}
 

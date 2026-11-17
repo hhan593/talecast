@@ -1,7 +1,7 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { ChapterEditKind, LibraryRepository, ProjectRepository } from '@/domain/ports';
 import type { ReceiptStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { Chapter, Project } from '@/domain/types';
 
 
@@ -64,7 +64,7 @@ function runEdit<T extends Command & { projectId: string; chapterId: string }>(
         );
         return ok(result);
       } catch (error) {
-        return err('invalid', error instanceof Error ? error.message : String(error));
+        return err('invalid', errorMessage(error));
       }
     }),
   );

@@ -10,7 +10,6 @@ import { LlmNotConfiguredError } from '@/domain/result';
  * 端点/模型为非敏感配置走 SQLite settings；密钥只存 SecureStore（KeyStore）。
  */
 
-export { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/domain/contracts';
 
 interface ChatDelta {
   choices?: Array<{ delta?: { content?: string } }>;

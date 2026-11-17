@@ -1,6 +1,6 @@
 import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import type { TtsGateway, VoiceRecordRepository } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { VoiceRecord } from '@/domain/types';
 
 export interface VoicesDeps {
@@ -8,7 +8,6 @@ export interface VoicesDeps {
   voiceRepository: VoiceRecordRepository;
 }
 
-export { EDGE_TTS_PROVIDER };
 
 export function createVoicesService(deps: VoicesDeps) {
   return {
@@ -27,7 +26,7 @@ export function createVoicesService(deps: VoicesDeps) {
         );
         return ok({ count: voices.length });
       } catch (error) {
-        return err('network', `音色列表获取失败：${error instanceof Error ? error.message : String(error)}`);
+        return err('network', `音色列表获取失败：${errorMessage(error)}`);
       }
     },
 
@@ -35,9 +34,6 @@ export function createVoicesService(deps: VoicesDeps) {
       return deps.voiceRepository.list(provider);
     },
 
-    async findVoice(provider: string, voiceId: string): Promise<VoiceRecord | null> {
-      return deps.voiceRepository.findByVoiceId(provider, voiceId);
-    },
   };
 }
 

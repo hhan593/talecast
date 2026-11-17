@@ -8,12 +8,14 @@ import type {
   BindingRepository,
   GenerationStore,
   LibraryRepository,
+  ProjectRepository,
+  ReceiptStore,
   RequestLogRepository,
   SourceFileStore,
   TtsGateway,
 } from '@/domain/ports';
 import type { GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
  * 生成任务（docs/plan.md 4.1.5 / 5.3 生成流程）：
@@ -27,7 +29,7 @@ const PROVIDER = EDGE_TTS_PROVIDER;
 const PROVIDER_PARAMS_JSON = '{}';
 
 export interface GenerationDeps {
-  projectRepository: import('@/domain/ports').ProjectRepository;
+  projectRepository: ProjectRepository;
   libraryRepository: LibraryRepository;
   sourceFileStore: SourceFileStore;
   bindingRepository: BindingRepository;
@@ -35,7 +37,7 @@ export interface GenerationDeps {
   ttsGateway: TtsGateway;
   audioFileStore: AudioFileStore;
   requestLogRepository: RequestLogRepository;
-  receiptStore: import('@/domain/ports').ReceiptStore;
+  receiptStore: ReceiptStore;
 }
 
 export interface StartGenerationCommand extends Command {
@@ -73,13 +75,12 @@ export function createGenerationService(deps: GenerationDeps) {
     await deps.generationStore.updateJob(jobId, { status: 'running' });
 
     let progress = job.progress;
+    const cancelMessage = () =>
+      `已取消：完成 ${progress}/${job.totalSegments} 段，已完成段保留，可重试续跑`;
     for (const segment of segments) {
-      if (segment.status === 'done') continue; // 幂等复用：已完成段零请求
+      if (segment.status === 'done') continue;
       if (cancelledJobs.has(jobId)) {
-        await deps.generationStore.updateJob(jobId, {
-          status: 'failed',
-          error: `已取消：完成 ${progress}/${job.totalSegments} 段，已完成段保留，可重试续跑`,
-        });
+        await deps.generationStore.updateJob(jobId, { status: 'failed', error: cancelMessage() });
         return;
       }
       await deps.generationStore.updateSegment(segment.id, { status: 'generating', error: null });
@@ -88,25 +89,21 @@ export function createGenerationService(deps: GenerationDeps) {
           text: segment.text,
           voiceId: job.voiceId,
         });
-        if (cancelledJobs.has(jobId)) {
-          // 长请求返回后才取消：音频已产出，落盘为缓存不浪费本次请求
-          const filePath = await deps.audioFileStore.write(segment.textHash, audio);
-          await deps.generationStore.updateSegment(segment.id, { status: 'done', filePath, error: null });
-          progress += 1;
-          await deps.generationStore.updateJob(jobId, { progress });
-          await deps.generationStore.updateJob(jobId, {
-            status: 'failed',
-            error: `已取消：完成 ${progress}/${job.totalSegments} 段，已完成段保留，可重试续跑`,
-          });
-          return;
-        }
+        const cancelledNow = cancelledJobs.has(jobId);
+        // 取消时已产出的音频仍落盘为缓存，不浪费本次请求
         const filePath = await deps.audioFileStore.write(segment.textHash, audio);
         await deps.generationStore.updateSegment(segment.id, { status: 'done', filePath, error: null });
-        await deps.requestLogRepository.log('tts', true, segment.textHash.slice(0, 16));
+        if (!cancelledNow) {
+          await deps.requestLogRepository.log('tts', true, segment.textHash.slice(0, 16));
+        }
         progress += 1;
         await deps.generationStore.updateJob(jobId, { progress });
+        if (cancelledNow) {
+          await deps.generationStore.updateJob(jobId, { status: 'failed', error: cancelMessage() });
+          return;
+        }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         await deps.requestLogRepository.log('tts', false, message.slice(0, 200));
         await deps.generationStore.updateSegment(segment.id, { status: 'failed', error: message });
         await deps.generationStore.updateJob(jobId, {
@@ -245,7 +242,7 @@ export function createGenerationService(deps: GenerationDeps) {
         await deps.requestLogRepository.log('tts', true, first.textHash.slice(0, 16));
         return ok({ filePath, textHash: first.textHash, cached: false });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         await deps.requestLogRepository.log('tts', false, message.slice(0, 200));
         return err('network', `试听合成失败：${message}`);
       }

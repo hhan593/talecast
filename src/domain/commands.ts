@@ -9,7 +9,7 @@ import type { Result } from './result';
 export interface Command {
   /** 客户端生成的唯一命令 id：幂等回执的主键，重复提交返回旧结果 */
   commandId: string;
-  /** 期望的工程修订号；不匹配返回 conflict（乐观并发） */
+  /** 期望的书籍修订号；不匹配返回 conflict（乐观并发） */
   expectedRevision?: number;
 }
 

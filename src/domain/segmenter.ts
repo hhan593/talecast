@@ -1,7 +1,6 @@
 /**
  * TTS 分段器：按句切分并打包到长度上限内。
  * 必须确定性输出（同输入同段序同文本），段文本哈希才能作为幂等单元稳定命中（docs/plan.md 5.3）。
- * P0 落地基础实现并配测试；provider 字数上限参数化，P2 接 Edge TTS 时按协议微调。
  */
 
 export const SEGMENTER_VERSION = 'p0-1';

@@ -1,4 +1,3 @@
-import { bytesToBase64 } from '@/domain/base64';
 import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { utf8Bytes } from '@/domain/hash';
 import type { CommandReceipt } from '@/domain/commands';
@@ -56,7 +55,6 @@ export class FakeProjectRepository implements ProjectRepository {
     return Promise.resolve(project);
   }
 
-  /** 与 SQLite 实现同语义：级联删除（fakes 关联表同步清空） */
   async delete(projectId: string): Promise<void> {
     this.rows = this.rows.filter((p) => p.id !== projectId);
   }
@@ -235,8 +233,6 @@ export class FakeReadingStateRepository implements ReadingStateRepository {
 
 /** 测试辅助：文本 → bytes（走真实编码路径） */
 export const textToBytes = utf8Bytes;
-
-export { bytesToBase64 };
 
 
 export class FakeTtsGateway implements TtsGateway {

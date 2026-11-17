@@ -52,4 +52,17 @@ describe('架构依赖方向守卫', () => {
     }
     expect(violations).toEqual([]);
   });
+
+  it('services 不 import adapters（跨层常量走 domain/contracts）', () => {
+    const violations: string[] = [];
+    for (const file of files) {
+      if (!file.includes(`${'services'}/`)) continue;
+      for (const spec of importsOf(file)) {
+        if (/@\/adapters(\/|$)/.test(spec)) {
+          violations.push(`${file.replace(ROOT, 'src')} → ${spec}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
 });

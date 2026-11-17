@@ -1,6 +1,6 @@
 /**
  * SSE 帧解析：纯函数，与传输解耦，可被 vitest 直接覆盖。
- * 真实流式传输用 expo/fetch（RN 全局 fetch 不支持响应体流式），设备端验收随 P0 冒烟进行。
+ * 真实流式传输用 expo/fetch（RN 全局 fetch 不支持响应体流式）。
  */
 
 export interface SseEvent {

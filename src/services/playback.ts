@@ -5,7 +5,7 @@ import type {
   ReadingStateRepository,
   SourceFileStore,
 } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 
 
 export interface PlaybackState {
@@ -194,7 +194,6 @@ export function createPlaybackService(deps: PlaybackDeps) {
 
     /**
      * 单文件播放（试听场景）：停掉段队列，独占音频设备。
-     * 收编 P2 的独立 PreviewPlayer，消除"试听与整章播放同时出声"的并行音轨。
      */
     async playStandalone(uri: string): Promise<Result<null>> {
       queue = [];
@@ -213,7 +212,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
         return ok(null);
       } catch (error) {
         setState({ status: 'idle' });
-        return err('network', `播放失败：${error instanceof Error ? error.message : String(error)}`);
+        return err('network', `播放失败：${errorMessage(error)}`);
       }
     },
 

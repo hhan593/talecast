@@ -4,7 +4,7 @@ import type { KeyStore } from '@/domain/ports';
 
 /**
  * 密钥存储（docs/plan.md 3.1 / 7）：只存 SecureStore；
- * 不打印、不写日志、不进 SQLite（P4 加固项已随 P2 提前落地，供 LLM 配置使用）。
+ * 不打印、不写日志、不进 SQLite。
  */
 export const secureStoreKeyStore: KeyStore = {
   async get(key: string): Promise<string | null> {

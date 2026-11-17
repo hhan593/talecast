@@ -1,6 +1,6 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { BindingRepository, CharacterRepository, ReceiptStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { BindingRecord, BindingTargetType } from '@/domain/types';
 
 /**
@@ -50,13 +50,9 @@ export function createBindingsService(deps: BindingDeps) {
           });
           return ok(binding);
         } catch (error) {
-          return err('storage', `绑定写入失败：${error instanceof Error ? error.message : String(error)}`);
+          return err('storage', `绑定写入失败：${errorMessage(error)}`);
         }
       });
-    },
-
-    async getBinding(projectId: string, targetType: BindingTargetType, targetId: string | null): Promise<BindingRecord | null> {
-      return deps.bindingRepository.getForTarget(projectId, targetType, targetId);
     },
 
     async listBindings(projectId: string): Promise<BindingRecord[]> {
