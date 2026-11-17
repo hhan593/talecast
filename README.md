@@ -29,6 +29,7 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - [~] P2：角色、音色与云端生成——已实现（Edge TTS 协议纯层+fixture 测试、音色快照、绑定+人工保护、LLM 角色抽取、段级幂等生成、失败只补缺失段、试听转正）
 - [~] P3：播放与助手——已实现（全局段队列播放/切页不中断、正文按段高亮+点段跳转、助手 SSE 流式+历史分页、候选必须人工采用）
 - [~] P4：加固——已实现（Secure Store 密钥、请求用量展示、空/错误状态清扫、能力边界文案；**真机最小化验证待用户执行**）
+- [x] 工程化收敛（v0.1.1）：六路评审（复用/质量/效率/结构/测试价值/注释）40+ 项发现，27 项行为保持简化已应用；9 个模块修复走 PR 流程合并（M-1..M-8/E-1，见 docs/module-assessment.md）；**GitHub Actions CI 上线**（typecheck+test 进质量门）；发现清单见 docs/review/2026-11-17-findings.md，复盘见 docs/knowledge/lessons/2026-11-18-engineering-retrospective.md
 
 ## 开发与运行
 
