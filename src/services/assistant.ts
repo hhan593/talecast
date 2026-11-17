@@ -1,4 +1,5 @@
 import { parseResplitProposalBlock, ASSISTANT_SYSTEM_PROMPT } from '@/domain/assistant';
+import { toChapterDrafts } from '@/domain/split';
 import type {
   AssistantMessageRecord,
   AssistantRepository,
@@ -7,13 +8,8 @@ import type {
   SourceFileStore,
   SplitProposalRepository,
 } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { err, ok, remoteErrorCode, type Result } from '@/domain/result';
 
-/**
- * 工程助手（docs/plan.md 4.1.7 / 5.3 助手流程）：
- * 单一会话 + SSE 流式消息 + 候选产出。
- * 分章候选只写入 split_proposals（pending），采用必须走显式命令——助手无直改权限。
- */
 
 export interface AssistantDeps {
   assistantRepository: AssistantRepository;
@@ -165,8 +161,7 @@ export function createAssistantService(deps: AssistantDeps) {
           JSON.stringify([{ type: 'text', text: `${assistantText}（出错）${message}` }]),
           version + 1,
         );
-        const code = message.includes('未配置文本模型') ? 'invalid' : 'network';
-        return err(code as 'invalid' | 'network', message);
+        return err(remoteErrorCode(error), message);
       }
 
       // 候选产出：分章候选 → pending 提案；绝不直接改章节
@@ -183,14 +178,7 @@ export function createAssistantService(deps: AssistantDeps) {
               projectId: command.projectId,
               sourceId: source.id,
               payloadJson: JSON.stringify(proposalBlock.chapters),
-              previousJson: JSON.stringify(
-                currentChapters.map((chapter) => ({
-                  title: chapter.title,
-                  startOffset: chapter.startOffset,
-                  endOffset: chapter.endOffset,
-                  headingLine: chapter.headingLine,
-                })),
-              ),
+              previousJson: JSON.stringify(toChapterDrafts(currentChapters)),
               status: 'pending',
               createdAt: Date.now(),
               adoptedAt: null,

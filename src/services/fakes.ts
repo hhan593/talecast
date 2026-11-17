@@ -1,4 +1,6 @@
 import { bytesToBase64 } from '@/domain/base64';
+import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
+import { utf8Bytes } from '@/domain/hash';
 import type { CommandReceipt } from '@/domain/commands';
 import type { ChapterDraft } from '@/domain/split';
 import type { AssistantMessageRecord, AssistantSessionRecord } from '@/domain/ports';
@@ -18,8 +20,6 @@ import type {
   AudioPlayer,
   BindingRepository,
   CharacterRepository,
-  ChapterEditRecord,
-  ChapterEditRepository,
   FilePicker,
   GenerationStore,
   LibraryRepository,
@@ -38,10 +38,6 @@ import type {
   VoiceRecordRepository,
 } from '@/domain/ports';
 
-/**
- * in-memory fakes：services 用例测试用（docs/plan.md 5.4 services 编排测试）。
- * 语义贴近 SQLite 实现：replaceChapters/mutateChapters 按端口约定推进 revision。
- */
 
 export class FakeProjectRepository implements ProjectRepository {
   constructor(public rows: Project[]) {}
@@ -222,18 +218,6 @@ export class FakeSplitProposalRepository implements SplitProposalRepository {
   }
 }
 
-export class FakeChapterEditRepository implements ChapterEditRepository {
-  public rows: ChapterEditRecord[] = [];
-
-  async insert(record: ChapterEditRecord): Promise<void> {
-    this.rows.push(record);
-  }
-
-  async listByProject(projectId: string): Promise<ChapterEditRecord[]> {
-    return this.rows.filter((r) => r.projectId === projectId);
-  }
-}
-
 export class FakeReadingStateRepository implements ReadingStateRepository {
   public rows = new Map<string, ReadingState>();
 
@@ -257,15 +241,10 @@ export class FakeReadingStateRepository implements ReadingStateRepository {
 }
 
 /** 测试辅助：文本 → bytes（走真实编码路径） */
-export function textToBytes(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
-}
+export const textToBytes = utf8Bytes;
 
 export { bytesToBase64 };
 
-// ---------------------------------------------------------------------------
-// P2 fakes：TTS/LLM 网关、音频存储、绑定、角色、生成存储、设置、请求日志
-// ---------------------------------------------------------------------------
 
 export class FakeTtsGateway implements TtsGateway {
   /** 合成请求计数：验证"重试请求数 = 缺失段数" */
@@ -279,8 +258,8 @@ export class FakeTtsGateway implements TtsGateway {
 
   async listVoices() {
     return [
-      { provider: 'edge-tts', voiceId: 'zh-CN-XiaoxiaoNeural', name: '晓晓', description: '女' },
-      { provider: 'edge-tts', voiceId: 'zh-CN-YunxiNeural', name: '云希', description: '男' },
+      { provider: EDGE_TTS_PROVIDER, voiceId: 'zh-CN-XiaoxiaoNeural', name: '晓晓', description: '女' },
+      { provider: EDGE_TTS_PROVIDER, voiceId: 'zh-CN-YunxiNeural', name: '云希', description: '男' },
     ];
   }
 

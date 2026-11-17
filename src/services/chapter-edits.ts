@@ -4,12 +4,6 @@ import type { ReceiptStore } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 import type { Chapter, Project } from '@/domain/types';
 
-/**
- * 章节人工编辑（docs/plan.md 4.1.3：改标题、调边界、增删章节；5.2 chapter_edits 审计）。
- * 约束：只改章节集合（解码文本的偏移区间），来源正文不变；每次编辑 revision +1 并留审计行。
- * 边界只在相邻章节之间移动（末章收尾固定），因此不需要读源文本即可校验。
- * 校验失败在 mutate 闭包内 throw，由 runEdit 统一转为 err('invalid')，不产生任何写。
- */
 
 export interface ChapterEditDeps {
   projectRepository: ProjectRepository;

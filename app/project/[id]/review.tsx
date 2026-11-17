@@ -4,7 +4,6 @@ import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { useProposal } from '@/hooks/use-proposal';
 import { useProject } from '@/hooks/use-project';
 
-/** 候选审阅（docs/plan.md 5.3）：modal 人工关口，采用/撤销均为显式命令。 */
 export default function ReviewModal() {
   const params = useLocalSearchParams<{ id: string; proposalId: string }>();
   const projectId = params.id;

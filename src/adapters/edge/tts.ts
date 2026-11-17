@@ -11,6 +11,7 @@ import {
   requestHeaders,
 } from './protocol';
 import { concatBytes } from '@/domain/base64';
+import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import type { TtsGateway } from '@/domain/ports';
 import type { VoiceInfo } from '@/domain/types';
 
@@ -56,7 +57,7 @@ export class EdgeTtsGateway implements TtsGateway {
     return data
       .filter((voice) => voice.Locale.startsWith('zh'))
       .map((voice) => ({
-        provider: 'edge-tts',
+        provider: EDGE_TTS_PROVIDER,
         voiceId: voice.ShortName,
         name: `${voice.LocalName}（${voice.Locale}）`,
         description: `${voice.DisplayName} · ${voice.Gender} · ${voice.VoiceType}`,
@@ -89,7 +90,6 @@ export class EdgeTtsGateway implements TtsGateway {
         try {
           ws.close();
         } catch {
-          // 已关闭
         }
         if (error) reject(error);
         else resolve(audio as Uint8Array);

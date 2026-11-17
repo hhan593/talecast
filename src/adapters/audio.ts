@@ -2,12 +2,6 @@ import { createAudioPlayer, type AudioPlayer as ExpoAudioPlayerInstance } from '
 
 import type { AudioPlayer } from '@/domain/ports';
 
-/**
- * expo-audio 适配（docs/plan.md 3.1 播放 / P3 播放流程）：
- * load 单文件 → play/pause/seek → 进度与段尾回调。
- * 进度用 200ms 轮询（跨平台行为一致的稳态做法），段尾用 duration 判定。
- * 服务层（playback-service）负责队列与高亮映射；本类只封装单个音频文件。
- */
 export class ExpoAudioPlayerService implements AudioPlayer {
   private player: ExpoAudioPlayerInstance | null = null;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
@@ -29,6 +23,7 @@ export class ExpoAudioPlayerService implements AudioPlayer {
 
   async pause(): Promise<void> {
     this.player?.pause();
+    this.stopProgressPolling();
   }
 
   async seek(positionMs: number): Promise<void> {
@@ -69,22 +64,26 @@ export class ExpoAudioPlayerService implements AudioPlayer {
       const durationMs = (player.duration ?? 0) * 1000;
       if (!this.endFired && durationMs > 0 && positionMs >= durationMs - 80) {
         this.endFired = true;
+        this.stopProgressPolling();
         this.endCallback?.();
       }
     }, 200);
   }
 
-  private stopInternal(): void {
+  private stopProgressPolling(): void {
     if (this.progressTimer) {
       clearInterval(this.progressTimer);
       this.progressTimer = null;
     }
+  }
+
+  private stopInternal(): void {
+    this.stopProgressPolling();
     if (this.player) {
       try {
         this.player.pause();
         this.player.release();
       } catch {
-        // 已释放
       }
       this.player = null;
     }
@@ -110,7 +109,6 @@ export class ExpoPreviewPlayer {
         this.player.pause();
         this.player.release();
       } catch {
-        // 已释放
       }
       this.player = null;
     }

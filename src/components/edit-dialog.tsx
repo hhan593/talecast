@@ -26,7 +26,6 @@ export function EditDialog(props: {
         <Pressable
           className="w-full rounded-2xl bg-white p-5 dark:bg-zinc-900"
           onPress={() => {
-            // 拦截冒泡，不关闭
           }}
         >
           <Text className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{props.title}</Text>

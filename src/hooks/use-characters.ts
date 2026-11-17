@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useServices } from '@/container';
 import type { BindingRecord, CharacterRecord, VoiceRecord } from '@/domain/types';
 
-/** 角色中心数据入口：旁白/角色绑定、LLM 抽取候选、人工确认（docs/plan.md 4.1.4） */
 export function useCharacters(projectId: string) {
   const services = useServices();
   const [characters, setCharacters] = useState<CharacterRecord[] | null>(null);

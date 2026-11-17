@@ -1,9 +1,3 @@
-/**
- * 工程助手规则（docs/plan.md 4.1.7 / 5.3 助手流程）：
- * 单一工程会话；流式消息按会话序号持久化；
- * 助手产出永远是候选（分章候选写入 split_proposals，pending），
- * 采用必须走显式命令——与分章候选同一套审阅/采用/撤销架构。
- */
 
 export interface AssistantSession {
   id: string;

@@ -58,7 +58,6 @@ export function isValidUtf8(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** 校验后的解码；调用方必须先用 isValidUtf8 放行（导入流程保证顺序） */
 export function decodeUtf8(bytes: Uint8Array): string {
   if (!isValidUtf8(bytes)) {
     throw new Error('不是有效的 UTF-8 字节序列');

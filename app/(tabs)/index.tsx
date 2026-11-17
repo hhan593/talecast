@@ -2,10 +2,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 
-import { EditDialog } from '@/components/edit-dialog';
 import { useProjects } from '@/hooks/use-projects';
 
-/** 书架（docs/plan.md 4.1.1）：P0 只验证数据底座——建库、写入测试工程、重启可恢复。 */
 export default function BookshelfScreen() {
   const { projects, error, createProject, deleteProject, refresh } = useProjects();
   const [createVisible, setCreateVisible] = useState(false);

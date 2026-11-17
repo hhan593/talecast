@@ -18,7 +18,6 @@ import {
   textToBytes,
 } from './fakes';
 
-/** P3 播放服务测试：段队列推进、正文偏移映射、切段、完成态 */
 async function setupWithGeneratedChapter() {
   const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);

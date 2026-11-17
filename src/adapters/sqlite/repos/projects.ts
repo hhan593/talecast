@@ -3,7 +3,7 @@ import type { Project } from '@/domain/types';
 
 import type { TalecastDatabase } from '../db';
 
-interface ProjectRow {
+export interface ProjectRow {
   id: string;
   title: string;
   description: string;
@@ -12,7 +12,7 @@ interface ProjectRow {
   updated_at: number;
 }
 
-function toProject(row: ProjectRow): Project {
+export function toProject(row: ProjectRow): Project {
   return {
     id: row.id,
     title: row.title,

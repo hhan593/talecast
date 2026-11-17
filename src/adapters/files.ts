@@ -32,37 +32,40 @@ export const documentPickerFilePicker: FilePicker = {
   },
 };
 
-function sourcesDirectoryUri(): string {
-  return `${FileSystem.documentDirectory ?? ''}${SOURCES_DIR}/`;
+function directoryUri(name: string): string {
+  return `${FileSystem.documentDirectory ?? ''}${name}/`;
 }
 
-async function ensureSourcesDir(): Promise<string> {
-  const dir = sourcesDirectoryUri();
-  const info = await FileSystem.getInfoAsync(dir);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  }
+/** makeDirectoryAsync(intermediates) 对已存在目录幂等，无需预检存在性（TOCTOU） */
+async function ensureDir(dir: string): Promise<string> {
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   return dir;
+}
+
+/** 先写临时文件再原子改名，避免半写文件占据正式路径 */
+async function writeFileAtomically(targetPath: string, data: string, encoding: FileSystem.EncodingType): Promise<void> {
+  const temp = `${targetPath}.tmp`;
+  await FileSystem.writeAsStringAsync(temp, data, { encoding });
+  await FileSystem.moveAsync({ from: temp, to: targetPath });
+}
+
+function sourcesDirectoryUri(): string {
+  return directoryUri(SOURCES_DIR);
 }
 
 /** 沙盒按内容寻址存储实现：写后不可变；同哈希重复导入直接复用 */
 export const sandboxSourceFileStore: SourceFileStore = {
   async writeRawBytes(sha256, bytes) {
-    const dir = await ensureSourcesDir();
+    const dir = await ensureDir(directoryUri(SOURCES_DIR));
     const target = `${dir}${sha256}.raw`;
     const info = await FileSystem.getInfoAsync(target);
     if (!info.exists) {
-      // 写临时文件后改名，避免半写文件占据正式路径
-      const temp = `${dir}${sha256}.raw.tmp`;
-      await FileSystem.writeAsStringAsync(temp, bytesToBase64(bytes), {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      await FileSystem.moveAsync({ from: temp, to: target });
+      await writeFileAtomically(target, bytesToBase64(bytes), FileSystem.EncodingType.Base64);
     }
   },
 
   async writeDecodedText(sha256, text) {
-    const dir = await ensureSourcesDir();
+    const dir = await ensureDir(directoryUri(SOURCES_DIR));
     const target = `${dir}${sha256}.txt`;
     const info = await FileSystem.getInfoAsync(target);
     if (!info.exists) {
@@ -79,16 +82,7 @@ export const sandboxSourceFileStore: SourceFileStore = {
 };
 
 function audioDirectoryUri(): string {
-  return `${FileSystem.documentDirectory ?? ''}${AUDIO_DIR}/`;
-}
-
-async function ensureAudioDir(): Promise<string> {
-  const dir = audioDirectoryUri();
-  const info = await FileSystem.getInfoAsync(dir);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  }
-  return dir;
+  return directoryUri(AUDIO_DIR);
 }
 
 /** 生成与试听共用的音频存储：同一 text_hash 只有一份文件（重试零请求、试听直接转正） */
@@ -103,15 +97,11 @@ export const sandboxAudioFileStore: AudioFileStore = {
   },
 
   async write(textHash, bytes) {
-    const dir = await ensureAudioDir();
+    const dir = await ensureDir(directoryUri(AUDIO_DIR));
     const target = `${dir}${textHash}.mp3`;
     const info = await FileSystem.getInfoAsync(target);
     if (info.exists) return target;
-    const temp = `${dir}${textHash}.mp3.tmp`;
-    await FileSystem.writeAsStringAsync(temp, bytesToBase64(bytes), {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    await FileSystem.moveAsync({ from: temp, to: target });
+    await writeFileAtomically(target, bytesToBase64(bytes), FileSystem.EncodingType.Base64);
     return target;
   },
 };

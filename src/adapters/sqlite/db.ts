@@ -1,10 +1,5 @@
 import * as SQLite from 'expo-sqlite';
 
-/**
- * SQLite 打开与迁移（docs/plan.md 5.2）。
- * 版本策略：user_version 标识结构版本，只前进不降级；
- * 遇到高于本应用支持的版本直接拒绝并提示，不做自动迁移、不删除用户数据。
- */
 
 export type TalecastDatabase = SQLite.SQLiteDatabase;
 

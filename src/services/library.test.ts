@@ -6,6 +6,7 @@ import { sha256Bytes } from '@/domain/hash';
 import { createImportService } from './import';
 import { createChapterEditService } from './chapter-edits';
 import { createReadingService } from './reading';
+import { createProjectsService } from './projects';
 import { createSplitReviewService } from './split-review';
 import {
   FakeFilePicker,
@@ -18,7 +19,6 @@ import {
   textToBytes,
 } from './fakes';
 
-/** 用示例小说驱动 P1 全流程用例测试（docs/plan.md 6 P1 验收的服务层等价验证） */
 const SAMPLE_NOVEL_PATH = join(__dirname, '..', '..', 'tests', 'fixtures', 'sample-novel.txt');
 
 async function loadSample(): Promise<Uint8Array> {
@@ -71,6 +71,10 @@ function setup() {
       readingStateRepository: readingStates,
       libraryRepository: library,
       sourceFileStore: files,
+    }),
+    projectsService: createProjectsService({
+      projectRepository: projects,
+      receiptStore: receipts,
     }),
   };
 }
@@ -290,16 +294,15 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
   });
 });
 
-describe('P4 优化：工程删除', () => {
-  it('删除工程后工程与来源查询均落空', async () => {
-    const s = await setup();
-    const bytes = await loadSample();
-    await s.importService.importSource({ commandId: 'c-import', projectId: 'p1', fileName: 'n.txt', bytes });
-    // 级联 SQL 的完整覆盖在设备验收（expo-sqlite 无法进 Node 测试环境）；
-    // 这里验证服务流程与 fake 仓库语义：删除后工程不可再取。
-    const deleted = await s.projects.delete ? null : null;
-    void deleted;
-    await (s.projects as unknown as { delete: (id: string) => Promise<void> }).delete('p1');
+describe('工程删除服务', () => {
+  it('删除工程后工程不可再取，重复删除返回 not_found', async () => {
+    const s = setup();
+    const first = await s.projectsService.deleteProject({ projectId: 'p1' });
+    expect(first.ok).toBe(true);
     expect(await s.projects.get('p1')).toBeNull();
+
+    const second = await s.projectsService.deleteProject({ projectId: 'p1' });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.code).toBe('not_found');
   });
 });

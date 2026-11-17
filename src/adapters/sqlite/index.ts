@@ -2,7 +2,7 @@ import { migrateDatabase, openDatabase } from './db';
 import { SqliteAssistantRepository } from './repos/assistant';
 import { SqliteGenerationStore, SqliteBindingRepository, SqliteCharacterRepository, SqliteVoiceRepository } from './repos/generation';
 import { SqliteLibraryRepository } from './repos/library';
-import { SqliteChapterEditRepository, SqliteReadingStateRepository } from './repos/misc';
+import { SqliteReadingStateRepository } from './repos/misc';
 import { SqliteProjectRepository } from './repos/projects';
 import { SqliteReceiptStore } from './repos/receipts';
 import { SqliteRequestLogRepository, SqliteSettingsRepository } from './repos/settings';
@@ -18,7 +18,6 @@ export function createSqliteAdapters() {
     receiptStore: new SqliteReceiptStore(db),
     libraryRepository: new SqliteLibraryRepository(db),
     splitProposalRepository: new SqliteSplitProposalRepository(db),
-    chapterEditRepository: new SqliteChapterEditRepository(db),
     readingStateRepository: new SqliteReadingStateRepository(db),
     voiceRepository: new SqliteVoiceRepository(db),
     characterRepository: new SqliteCharacterRepository(db),

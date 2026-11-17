@@ -11,9 +11,7 @@ import type {
 
 import type { TalecastDatabase } from '../db';
 
-// ---------------------------------------------------------------------------
 // 音色快照
-// ---------------------------------------------------------------------------
 
 interface VoiceRow {
   id: string;
@@ -21,6 +19,16 @@ interface VoiceRow {
   voice_id: string;
   name: string;
   description: string;
+}
+
+function toVoice(row: VoiceRow): VoiceRecord {
+  return {
+    id: row.id,
+    provider: row.provider,
+    voiceId: row.voice_id,
+    name: row.name,
+    description: row.description,
+  };
 }
 
 export class SqliteVoiceRepository implements VoiceRecordRepository {
@@ -47,13 +55,7 @@ export class SqliteVoiceRepository implements VoiceRecordRepository {
       'SELECT * FROM voices WHERE provider = ? ORDER BY voice_id ASC',
       provider,
     );
-    return rows.map((row) => ({
-      id: row.id,
-      provider: row.provider,
-      voiceId: row.voice_id,
-      name: row.name,
-      description: row.description,
-    }));
+    return rows.map(toVoice);
   }
 
   async findByVoiceId(provider: string, voiceId: string): Promise<VoiceRecord | null> {
@@ -62,15 +64,11 @@ export class SqliteVoiceRepository implements VoiceRecordRepository {
       provider,
       voiceId,
     );
-    return row
-      ? { id: row.id, provider: row.provider, voiceId: row.voice_id, name: row.name, description: row.description }
-      : null;
+    return row ? toVoice(row) : null;
   }
 }
 
-// ---------------------------------------------------------------------------
 // 角色
-// ---------------------------------------------------------------------------
 
 interface CharacterRow {
   id: string;
@@ -156,9 +154,7 @@ export class SqliteCharacterRepository implements CharacterRepository {
   }
 }
 
-// ---------------------------------------------------------------------------
 // 绑定
-// ---------------------------------------------------------------------------
 
 interface BindingRow {
   id: string;
@@ -228,9 +224,7 @@ export class SqliteBindingRepository implements BindingRepository {
   }
 }
 
-// ---------------------------------------------------------------------------
 // 生成任务与段
-// ---------------------------------------------------------------------------
 
 interface JobRow {
   id: string;

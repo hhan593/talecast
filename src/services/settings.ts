@@ -1,6 +1,5 @@
+import { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/domain/contracts';
 import type { KeyStore, RequestLogRepository, SettingsRepository } from '@/domain/ports';
-
-import { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/adapters/llm/client';
 
 /**
  * 服务连接配置（docs/plan.md 5.3 助手/3.1 密钥）：

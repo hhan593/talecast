@@ -48,6 +48,16 @@ export interface ChapterDraft {
   headingLine: number | null;
 }
 
+/** 把章节（正式章节或草案）投影为草案快照：只保留分章结构的四个字段，剥离 id/sourceId 等元数据 */
+export function toChapterDrafts(chapters: readonly ChapterDraft[]): ChapterDraft[] {
+  return chapters.map((chapter) => ({
+    title: chapter.title,
+    startOffset: chapter.startOffset,
+    endOffset: chapter.endOffset,
+    headingLine: chapter.headingLine,
+  }));
+}
+
 /**
  * 由标题命中构建章节草案：首个标题前的非空文字归入"前言"，末章收尾到全文末尾。
  * 无命中时整本作为单章（用户可在审阅后人工调整或重新分章）。
@@ -81,9 +91,7 @@ export function buildInitialChapterDrafts(text: string): ChapterDraft[] {
   return buildChapterDrafts(text, detectChapterHeadingsInText(text));
 }
 
-// ---------------------------------------------------------------------------
 // 候选与采用/撤销的状态规则
-// ---------------------------------------------------------------------------
 
 export type ProposalStatus = 'pending' | 'adopted' | 'withdrawn';
 

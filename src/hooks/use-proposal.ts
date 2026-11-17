@@ -4,7 +4,6 @@ import { useServices } from '@/container';
 import type { ChapterDraft, ProposalStatus } from '@/domain/split';
 import type { SplitProposalRecord } from '@/domain/ports';
 
-/** 审阅 modal 的数据入口：候选章节 + 采用/撤销（docs/plan.md 5.3 分章流程） */
 export function useProposal(projectId: string, proposalId: string, revision: number) {
   const services = useServices();
   const [record, setRecord] = useState<SplitProposalRecord | null>(null);

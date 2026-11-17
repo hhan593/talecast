@@ -1,8 +1,3 @@
-/**
- * 领域实体类型集中定义。
- * 约束：domain 模块之间只 import 类型（types/ports/commands/result），不 import 实现，防止循环依赖。
- * 实体随里程碑逐步落地：P0 只有工程；来源/章节/角色/绑定/生成任务随 P1/P2 扩展（见 docs/plan.md 5.2）。
- */
 
 export type ProjectId = string;
 
@@ -49,9 +44,6 @@ export interface VoiceInfo {
   description: string;
 }
 
-// ---------------------------------------------------------------------------
-// P2：角色、音色、绑定、生成任务
-// ---------------------------------------------------------------------------
 
 export interface CharacterRecord {
   id: string;

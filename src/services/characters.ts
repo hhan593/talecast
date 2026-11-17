@@ -7,14 +7,8 @@ import type {
   RequestLogRepository,
   SourceFileStore,
 } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { err, ok, remoteErrorCode, type Result } from '@/domain/result';
 import type { CharacterRecord } from '@/domain/types';
-
-/**
- * 角色候选与人工确认（docs/plan.md 4.1.4）：
- * LLM 优先抽取角色候选（confirmed=0，无人工保护）→ 人工确认（confirmed=1 且 manual_protected=1）。
- * 抽取是建议行为：绝不覆盖/删除已确认角色（人工保护在 confirm 与 insert 环节冻结）。
- */
 
 export interface CharactersDeps {
   characterRepository: CharacterRepository;
@@ -60,7 +54,6 @@ export function createCharactersService(deps: CharactersDeps) {
       return deps.characterRepository.list(projectId);
     },
 
-    /** LLM 抽取角色候选：产出未确认候选；已确认且人工保护的同名角色不会被覆盖 */
     async extractCandidates(command: ExtractCharactersCommand): Promise<Result<{ count: number }>> {
       const receipt = await deps.receiptStore.get<{ count: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
@@ -71,11 +64,10 @@ export function createCharactersService(deps: CharactersDeps) {
 
         const maxChapters = Math.min(Math.max(command.maxChapters ?? 3, 1), chapters.length);
         const maxChars = command.maxCharsPerChapter ?? 2000;
-        const samples: string[] = [];
-        for (const chapter of chapters.slice(0, maxChapters)) {
-          const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
-          samples.push(text.slice(chapter.startOffset, chapter.endOffset).slice(0, maxChars));
-        }
+        const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
+        const samples = chapters
+          .slice(0, maxChapters)
+          .map((chapter) => text.slice(chapter.startOffset, chapter.endOffset).slice(0, maxChars));
         const userPrompt = `章节文本如下（共 ${samples.length} 段样本）：\n\n${samples.join('\n\n---\n\n')}`;
 
         let raw: string;
@@ -85,8 +77,7 @@ export function createCharactersService(deps: CharactersDeps) {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await deps.requestLogRepository.log('llm', false, message.slice(0, 200));
-          const code = message.includes('未配置文本模型') ? 'invalid' : 'network';
-          return err(code as 'invalid' | 'network', message);
+          return err(remoteErrorCode(error), message);
         }
 
         let candidates: Array<{ name: string; aliases?: string[]; profile?: string }>;
@@ -96,7 +87,6 @@ export function createCharactersService(deps: CharactersDeps) {
           return err('invalid', `角色抽取结果解析失败：${error instanceof Error ? error.message : String(error)}`);
         }
 
-        // 人工保护：已确认的同名角色不被覆盖、不重复入库
         const existing = await deps.characterRepository.list(command.projectId);
         const protectedNames = new Set(
           existing.filter((c) => c.manualProtected).map((c) => c.name),
@@ -128,7 +118,6 @@ export function createCharactersService(deps: CharactersDeps) {
       });
     },
 
-    /** 人工确认：confirmed + manual_protected 同时施加（之后不被模型建议覆盖） */
     async confirmCharacter(command: { commandId: string; characterId: string }): Promise<Result<null>> {
       const receipt = await deps.receiptStore.get<null>(command.commandId);
       return resolveIdempotent(receipt, async () => {
@@ -149,9 +138,6 @@ export function createCharactersService(deps: CharactersDeps) {
       if (name.length === 0 || name.length > 30) return err('invalid', '角色名需为 1-30 个字符');
       const character = await deps.characterRepository.get(characterId);
       if (!character) return err('not_found', '角色不存在');
-      if (character.manualProtected) {
-        // 人工保护的改名也是用户操作，允许；但保留保护标记
-      }
       await deps.characterRepository.update(characterId, { name });
       return ok(null);
     },

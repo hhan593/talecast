@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { LlmNotConfiguredError } from '@/domain/result';
 import { createAssistantService } from './assistant';
 import { createImportService } from './import';
 import { createSplitReviewService } from './split-review';
@@ -14,7 +15,6 @@ import {
   textToBytes,
 } from './fakes';
 
-/** P3 助手测试：流式候选产出 → pending 提案 → 必须人工采用才改目录 */
 async function setup() {
   const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);
@@ -103,7 +103,7 @@ describe('P3 工程助手', () => {
 
   it('未配置文本模型时给出明确指引并落错误消息', async () => {
     const s = await setup();
-    s.llm.error = new Error('未配置文本模型：请到 设置 → 服务连接 填写端点、模型与密钥');
+    s.llm.error = new LlmNotConfiguredError();
     const result = await s.assistant.sendMessage({ projectId: 'p1', commandId: 'c-send-2', userText: '你好' });
     expect(result.ok).toBe(false);
     if (result.ok) return;

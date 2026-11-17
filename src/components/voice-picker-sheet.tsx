@@ -3,7 +3,6 @@ import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native'
 
 import type { VoiceRecord } from '@/domain/types';
 
-/** 音色选择弹层（docs/plan.md 4.1.4）：搜索 + 点选绑定；瞬时选择不走路由（5.5 原则 2） */
 export function VoicePickerSheet(props: {
   visible: boolean;
   title: string;

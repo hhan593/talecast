@@ -7,13 +7,6 @@ import type {
 } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 
-/**
- * 全局播放服务（docs/plan.md 4.1.6 / 5.3 播放流程）：
- * - 段队列顺序播放：当前段 ordinal 即正文高亮单元（段内不逐字对齐）；
- * - 实例是全局单例（不挂在屏幕组件上）——播放中切页不中断；
- * - 位置权威来源是 reading_state（audio_segment_ordinal / audio_offset_ms）；
- * - 段与正文的对齐：段文本在章节文本中顺序 indexOf（生成段就是正文切片）。
- */
 
 export interface PlaybackState {
   projectId: string | null;
@@ -93,7 +86,6 @@ export function createPlaybackService(deps: PlaybackDeps) {
     });
   }
 
-  // 段尾推进队列；进度持久化节流
   deps.audioPlayer.onProgress((positionMs) => {
     const item = queue[state.segmentIndex];
     if (item && state.status === 'playing') {
@@ -141,7 +133,6 @@ export function createPlaybackService(deps: PlaybackDeps) {
       const fullText = await deps.sourceFileStore.readDecodedText(source.textSha256);
       const chapterText = fullText.slice(chapter.startOffset, chapter.endOffset);
 
-      // 顺序回定位：段文本是正文切片，从游标处 indexOf
       let cursor = 0;
       queue = [];
       for (const segment of segments) {

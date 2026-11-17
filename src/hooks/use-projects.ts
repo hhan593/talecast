@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useServices } from '@/container';
 import type { Project } from '@/domain/types';
 
-/** 书架页的数据入口：UI 的唯一服务层访问方式（组件不直连 services/adapters） */
 export function useProjects() {
   const services = useServices();
   const [projects, setProjects] = useState<Project[] | null>(null);

@@ -2,6 +2,7 @@ import {
   assertAdoptable,
   assertUndoable,
   buildInitialChapterDrafts,
+  toChapterDrafts,
   type ChapterDraft,
 } from '@/domain/split';
 import { resolveIdempotent, type Command } from '@/domain/commands';
@@ -14,11 +15,6 @@ import type {
 } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 
-/**
- * 分章候选流程（docs/plan.md 5.3 分章流程）：
- * 重新分章产出 pending 候选（携带采用前快照）→ 人工审阅 → 采用推进 revision → 撤销回退目录。
- * 撤销只回退章节集合，不改来源。守卫（状态 + expectedRevision）在任何写操作之前完成。
- */
 
 export interface SplitReviewDeps {
   projectRepository: ProjectRepository;
@@ -44,15 +40,6 @@ export interface ResplitResult {
   chapterCount: number;
 }
 
-function toDrafts(chapters: ChapterDraft[]): ChapterDraft[] {
-  return chapters.map((chapter) => ({
-    title: chapter.title,
-    startOffset: chapter.startOffset,
-    endOffset: chapter.endOffset,
-    headingLine: chapter.headingLine,
-  }));
-}
-
 export function createSplitReviewService(deps: SplitReviewDeps) {
   return {
     /** 重新分章：正则重扫全文形成 pending 候选；不改当前目录，审阅后才生效 */
@@ -64,7 +51,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
 
         const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
         const drafts = buildInitialChapterDrafts(text);
-        const previous = toDrafts(await deps.libraryRepository.listChapters(command.projectId));
+        const previous = toChapterDrafts(await deps.libraryRepository.listChapters(command.projectId));
 
         const proposalId = `prop-${command.commandId}`;
         await deps.splitProposalRepository.insert({
@@ -102,7 +89,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
 
         const drafts = JSON.parse(proposal.payloadJson) as ChapterDraft[];
         // 撤销语义：回到"采用时点"的目录（采用与提出候选之间的编辑也被保留）
-        const previousAtAdopt = toDrafts(await deps.libraryRepository.listChapters(command.projectId));
+        const previousAtAdopt = toChapterDrafts(await deps.libraryRepository.listChapters(command.projectId));
         await deps.splitProposalRepository.setPreviousJson(command.proposalId, JSON.stringify(previousAtAdopt));
         await deps.libraryRepository.replaceChapters(
           command.projectId,

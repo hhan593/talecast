@@ -21,10 +21,6 @@ import { useServices } from '@/container';
 import { type Paragraph } from '@/domain/source';
 import type { Chapter } from '@/domain/types';
 
-/**
- * 章节工作台（docs/plan.md 4.1.3-4.1.6）：目录 / 正文两个内部视图，章节切换不走路由。
- * 打开工程时恢复上次阅读位置（reading_state）；章节编辑走命令 + revision 守卫。
- */
 export default function ProjectWorkbenchScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const projectId = params.id;
@@ -355,7 +351,6 @@ export default function ProjectWorkbenchScreen() {
         </Pressable>
       </View>
 
-      {/* 生成进度卡（docs/plan.md 4.1.5）：真实进度 + 失败重试只补缺失段 */}
       {generation.progress ? (
         <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
           <View className="flex-row items-center justify-between">

@@ -1,5 +1,5 @@
 import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash } from '@/domain/jobs';
-import { EDGE_AUDIO_FORMAT } from '@/adapters/edge/protocol';
+import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { segmentForTts } from '@/domain/segmenter';
 import { sha256Text } from '@/domain/hash';
@@ -23,7 +23,7 @@ import { err, ok, type Result } from '@/domain/result';
  * - 统一音频格式由 Edge 协议层锁定。
  */
 
-const PROVIDER = 'edge-tts';
+const PROVIDER = EDGE_TTS_PROVIDER;
 const PROVIDER_PARAMS_JSON = '{}';
 
 export interface GenerationDeps {
@@ -163,25 +163,23 @@ export function createGenerationService(deps: GenerationDeps) {
         const plan = buildSegmentPlan(chapterText, { voiceId, provider: PROVIDER, providerParamsJson: PROVIDER_PARAMS_JSON }, segmentForTts);
         const now = Date.now();
         const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等
+        const existences = await Promise.all(plan.map((s) => deps.audioFileStore.exists(s.textHash)));
         let reusedSegments = 0;
-        const segments: Array<GenerationSegmentRecord> = [];
-        for (const segment of plan) {
-          const audioExists = await deps.audioFileStore.exists(segment.textHash);
-          // 试听转正 & 断点续跑：文件已存在（同 text_hash）→ 直接标 done，零请求
-          const status = audioExists ? 'done' : 'pending';
+        const segments: Array<GenerationSegmentRecord> = plan.map((segment, i) => {
+          const audioExists = existences[i];
           if (audioExists) reusedSegments += 1;
-          segments.push({
+          return {
             id: `seg-${jobId}-${segment.ordinal}`,
             jobId,
             ordinal: segment.ordinal,
             text: segment.text,
             textHash: segment.textHash,
-            status,
+            status: audioExists ? 'done' : 'pending',
             filePath: audioExists ? deps.audioFileStore.pathFor(segment.textHash) : null,
             error: null,
             updatedAt: now,
-          });
-        }
+          };
+        });
         const job: GenerationJobRecord = {
           id: jobId,
           projectId: command.projectId,
@@ -198,7 +196,6 @@ export function createGenerationService(deps: GenerationDeps) {
           updatedAt: now,
         };
         await deps.generationStore.createJob(job, segments);
-        // 后台推进；UI 通过 getProgress 轮询
         void runJobSegments(jobId);
         return ok({ jobId, totalSegments: plan.length, reusedSegments });
       });

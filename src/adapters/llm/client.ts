@@ -1,16 +1,16 @@
 import { fetch } from 'expo/fetch';
 
 import { createSseParser } from './parse-sse';
+import { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/domain/contracts';
 import type { KeyStore, LlmGateway, SettingsRepository } from '@/domain/ports';
+import { LlmNotConfiguredError } from '@/domain/result';
 
 /**
  * OpenAI 兼容文本模型网关（docs/plan.md 3.1 网络）：流式调用并聚合为完整文本。
  * 端点/模型为非敏感配置走 SQLite settings；密钥只存 SecureStore（KeyStore）。
  */
 
-export const LLM_ENDPOINT_KEY = 'llm-endpoint';
-export const LLM_MODEL_KEY = 'llm-model';
-export const LLM_API_KEY = 'llm-api-key';
+export { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/domain/contracts';
 
 interface ChatDelta {
   choices?: Array<{ delta?: { content?: string } }>;
@@ -31,7 +31,7 @@ export function createOpenAiCompatibleLlmGateway(deps: {
       const model = await deps.settingsRepository.get(LLM_MODEL_KEY);
       const apiKey = await deps.keyStore.get(LLM_API_KEY);
       if (!endpoint || !model || !apiKey) {
-        throw new Error('未配置文本模型：请到 设置 → 服务连接 填写端点、模型与密钥');
+        throw new LlmNotConfiguredError();
       }
 
       const response = await fetch(`${endpoint.replace(/\/$/, '')}/chat/completions`, {
@@ -68,7 +68,6 @@ export function createOpenAiCompatibleLlmGateway(deps: {
             input.onDelta?.(content);
           }
         } catch {
-          // 非 JSON 行忽略
         }
       });
       const reader = response.body.getReader();

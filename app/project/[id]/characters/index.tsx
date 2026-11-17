@@ -4,9 +4,9 @@ import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react
 
 import { EditDialog } from '@/components/edit-dialog';
 import { VoicePickerSheet } from '@/components/voice-picker-sheet';
+import { characterProfileText } from '@/domain/character';
 import { useCharacters } from '@/hooks/use-characters';
 
-/** 角色中心（docs/plan.md 4.1.4）：旁白绑定 + LLM 抽取候选 + 人工确认 + 绑定音色 */
 export default function CharactersScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const projectId = params.id;
@@ -83,14 +83,7 @@ export default function CharactersScreen() {
                 <Text className="text-xs text-zinc-400">{binding ? characters.voiceName(binding.voiceId) : '未绑定'}</Text>
               </View>
               <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400" numberOfLines={2}>
-                {(() => {
-                  try {
-                    const parsed = JSON.parse(item.profileJson) as { profile?: string };
-                    return parsed.profile || '（无描述）';
-                  } catch {
-                    return '（无描述）';
-                  }
-                })()}
+                {characterProfileText(item.profileJson)}
               </Text>
               <View className="mt-2 flex-row flex-wrap gap-2">
                 {!item.confirmed ? (

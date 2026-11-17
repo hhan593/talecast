@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useServices } from '@/container';
 import type { AssistantMessageView } from '@/services/assistant';
 
-/** 助手会话入口（docs/plan.md 4.1.7）：流式回复 + 历史分页 + 候选卡 */
 export function useAssistant(projectId: string) {
   const services = useServices();
   const [messages, setMessages] = useState<AssistantMessageView[] | null>(null);

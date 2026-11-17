@@ -3,6 +3,7 @@ import type { LibraryRepository } from '@/domain/ports';
 import type { Chapter, Project, SourceInfo } from '@/domain/types';
 
 import type { TalecastDatabase } from '../db';
+import { toProject, type ProjectRow } from './projects';
 
 interface SourceRow {
   id: string;
@@ -25,15 +26,6 @@ interface ChapterRow {
   volume: number;
   ordinal: number;
   heading_line: number | null;
-}
-
-interface ProjectRow {
-  id: string;
-  title: string;
-  description: string;
-  revision: number;
-  created_at: number;
-  updated_at: number;
 }
 
 function toSource(row: SourceRow): SourceInfo {
@@ -60,17 +52,6 @@ function toChapter(row: ChapterRow): Chapter {
     volume: row.volume,
     ordinal: row.ordinal,
     headingLine: row.heading_line,
-  };
-}
-
-function toProject(row: ProjectRow): Project {
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    revision: row.revision,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -171,7 +152,12 @@ export class SqliteLibraryRepository implements LibraryRepository {
   ): Promise<{ chapters: Chapter[]; project: Project }> {
     const now = Date.now();
     let chapters: Chapter[] = [];
+    let nextProject: Project;
     this.db.withTransactionSync(() => {
+      const projectRow = this.db.getFirstSync<ProjectRow>('SELECT * FROM projects WHERE id = ?', projectId);
+      if (!projectRow) throw new Error(`工程不存在：${projectId}`);
+      const nextRevision = projectRow.revision + 1;
+      nextProject = { ...toProject(projectRow), revision: nextRevision, updatedAt: now };
       const rows = this.db.getAllSync<ChapterRow>(
         'SELECT * FROM chapters WHERE project_id = ? ORDER BY ordinal ASC',
         projectId,
@@ -201,8 +187,7 @@ export class SqliteLibraryRepository implements LibraryRepository {
         edit.chapterId,
         edit.kind,
         JSON.stringify(edit.payload),
-        // mutation 结束后读取 revision（mutate 闭包内不能写库），用当前值 +1 记账
-        this.getFirstSyncRevision(projectId) + 1,
+        nextRevision,
         now,
       );
       this.db.runSync(
@@ -211,14 +196,6 @@ export class SqliteLibraryRepository implements LibraryRepository {
         projectId,
       );
     });
-    return { chapters, project: getProjectSync(this.db, projectId) };
-  }
-
-  private getFirstSyncRevision(projectId: string): number {
-    const row = this.db.getFirstSync<{ revision: number }>(
-      'SELECT revision FROM projects WHERE id = ?',
-      projectId,
-    );
-    return row?.revision ?? 0;
+    return { chapters, project: nextProject! };
   }
 }

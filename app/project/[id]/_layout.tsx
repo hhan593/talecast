@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router';
 
-/** 工程外壳（docs/plan.md 5.5）：加载与空状态在 index 收口；审阅为 modal 人工关口。 */
 export default function ProjectLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>

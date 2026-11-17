@@ -5,6 +5,7 @@
  * 网络传输（RN WebSocket）在 tts.ts，薄到不做逻辑。
  */
 
+import { EDGE_AUDIO_FORMAT } from '@/domain/contracts';
 import { sha256HexUpper } from '@/domain/hash';
 
 /** Edge 官方客户端令牌（公开常量，非密钥） */
@@ -15,7 +16,7 @@ export const VOICES_ENDPOINT = 'https://speech.platform.bing.com/consumer/speech
 export const SEC_MS_GEC_VERSION = '1-130.0.2849.68';
 
 /** 音频输出锁定统一格式（段间播放衔接的前提，docs/plan.md 5.3） */
-export const EDGE_AUDIO_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
+export { EDGE_AUDIO_FORMAT } from '@/domain/contracts';
 
 /**
  * Sec-MS-GEC：当前 UTC 时间自 1601-01-01 起的毫秒数，向下取整到 5 分钟窗口，
@@ -48,9 +49,7 @@ export function requestHeaders(): Record<string, string> {
   };
 }
 
-// ---------------------------------------------------------------------------
 // WebSocket 文本帧组装
-// ---------------------------------------------------------------------------
 
 export function buildSpeechConfigMessage(): string {
   const config = {
@@ -85,9 +84,7 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
-// ---------------------------------------------------------------------------
 // WebSocket 入站帧解析（二进制音频帧与文本控制帧）
-// ---------------------------------------------------------------------------
 
 export type EdgeFrame =
   | { kind: 'audio'; bytes: Uint8Array }
@@ -129,16 +126,4 @@ function parseHeaderBlock(block: string): Record<string, string> {
     headers[line.slice(0, colon)] = line.slice(colon + 1);
   }
   return headers;
-}
-
-/** 组装二进制音频帧（fixture/测试用：服务端不会发，但需要对称验证解析） */
-export function buildBinaryFrame(path: string, payload: Uint8Array, requestId: string): Uint8Array {
-  const header = `X-RequestId:${requestId}\r\nContent-Type:application/octet-stream\r\nPath:${path}\r\n`;
-  const headerBytes = new TextEncoder().encode(header);
-  const out = new Uint8Array(2 + headerBytes.length + payload.length);
-  out[0] = (headerBytes.length >> 8) & 0xff;
-  out[1] = headerBytes.length & 0xff;
-  out.set(headerBytes, 2);
-  out.set(payload, 2 + headerBytes.length);
-  return out;
 }

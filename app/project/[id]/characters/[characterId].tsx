@@ -4,9 +4,9 @@ import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { VoicePickerSheet } from '@/components/voice-picker-sheet';
 import { EditDialog } from '@/components/edit-dialog';
+import { characterProfileText } from '@/domain/character';
 import { useCharacters } from '@/hooks/use-characters';
 
-/** 角色详情：身份 + 音色绑定（确认后才可绑定，docs/plan.md 4.1.4） */
 export default function CharacterDetailScreen() {
   const params = useLocalSearchParams<{ id: string; characterId: string }>();
   const projectId = params.id;
@@ -36,12 +36,7 @@ export default function CharacterDetailScreen() {
     );
   }
 
-  let profileText = '（无描述）';
-  try {
-    profileText = (JSON.parse(character.profileJson) as { profile?: string }).profile || '（无描述）';
-  } catch {
-    // 保持默认
-  }
+  const profileText = characterProfileText(character.profileJson);
 
   return (
     <View className="flex-1 bg-zinc-50 px-4 py-4 dark:bg-zinc-950">

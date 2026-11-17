@@ -21,7 +21,7 @@ const B64_CODES = (() => {
   return codes;
 })();
 
-const PAD_CODE = 61; // '='
+const PAD_CODE = '='.charCodeAt(0);
 
 /** 拼接字节块（Edge 音频帧聚合用） */
 export function concatBytes(chunks: Uint8Array[]): Uint8Array {

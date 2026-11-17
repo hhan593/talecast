@@ -1,18 +1,14 @@
+import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import type { TtsGateway, VoiceRecordRepository } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 import type { VoiceRecord } from '@/domain/types';
-
-/**
- * 音色快照（docs/plan.md 4.1.4 / P2）：voices/list 拉取 → 入库为快照；
- * 绑定与音色选择只读快照，不实时请求。
- */
 
 export interface VoicesDeps {
   ttsGateway: TtsGateway;
   voiceRepository: VoiceRecordRepository;
 }
 
-export const EDGE_TTS_PROVIDER = 'edge-tts';
+export { EDGE_TTS_PROVIDER };
 
 export function createVoicesService(deps: VoicesDeps) {
   return {

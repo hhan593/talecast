@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useServices } from '@/container';
 import type { PlaybackState } from '@/services/playback';
 
-/** 播放状态订阅 + 控制（全局单例服务：切页不中断，docs/plan.md 4.1.6） */
 export function usePlayback(projectId: string) {
   const services = useServices();
   const [state, setState] = useState<PlaybackState>(services.playback.getState());

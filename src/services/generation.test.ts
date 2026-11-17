@@ -16,7 +16,6 @@ import {
   textToBytes,
 } from './fakes';
 
-/** P2 验收的服务层等价验证（docs/plan.md 6 P2）：段级幂等、重试只补缺失段、试听转正 */
 async function setupWithImport() {
   const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);

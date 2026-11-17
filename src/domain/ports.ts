@@ -1,9 +1,3 @@
-/**
- * 端口（ports & adapters）：domain 需要什么由这里定义，adapters 负责实现。
- * 依赖方向唯一：services 依赖 ports，adapters 实现 ports，domain 不 import 任何上层（docs/plan.md 5.1）。
- * P0 只落地仓储与回执存储；KeyStore/TtsGateway/AudioPlayer 的实现随 P2/P3/P4 接入。
- */
-
 import type { CommandReceipt } from './commands';
 import type { ChapterDraft, ProposalStatus } from './split';
 import type {
@@ -32,9 +26,6 @@ export interface ReceiptStore {
   put<T>(receipt: CommandReceipt<T>): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
-// P1：来源、章节、候选、阅读位置
-// ---------------------------------------------------------------------------
 
 /** 系统文件选择器：P1 只接受 UTF-8 TXT */
 export interface FilePicker {
@@ -70,21 +61,6 @@ export interface SplitProposalRepository {
   setStatus(id: string, status: ProposalStatus, adoptedAt: number | null): Promise<void>;
   /** 采用时点重录"上一版"快照：撤销恢复到采用前一刻（含提出候选后的编辑） */
   setPreviousJson(id: string, previousJson: string): Promise<void>;
-}
-
-export interface ChapterEditRecord {
-  id: string;
-  projectId: Project['id'];
-  chapterId: string;
-  kind: ChapterEditKind['kind'];
-  payloadJson: string;
-  revision: number;
-  createdAt: number;
-}
-
-export interface ChapterEditRepository {
-  insert(record: ChapterEditRecord): Promise<void>;
-  listByProject(projectId: Project['id']): Promise<ChapterEditRecord[]>;
 }
 
 export interface ReadingState {
@@ -152,9 +128,6 @@ export interface LlmGateway {
   }): Promise<string>;
 }
 
-// ---------------------------------------------------------------------------
-// P2：音色快照、角色、绑定、生成任务存储
-// ---------------------------------------------------------------------------
 
 export interface VoiceRecordRepository {
   /** 音色快照整体刷新（voices/list 拉取后入库） */
@@ -220,9 +193,6 @@ export interface AudioPlayer {
   release(): void;
 }
 
-// ---------------------------------------------------------------------------
-// P3：工程助手会话
-// ---------------------------------------------------------------------------
 
 export interface AssistantSessionRecord {
   id: string;

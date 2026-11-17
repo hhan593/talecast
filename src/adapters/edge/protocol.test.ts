@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 
-import { buildBinaryFrame, buildSsmlMessage, buildSpeechConfigMessage, computeSecMsGec, parseBinaryFrame, parseTextFrame } from './protocol';
+import { buildSsmlMessage, buildSpeechConfigMessage, computeSecMsGec, parseBinaryFrame, parseTextFrame } from './protocol';
+
+/** 手写二进制帧字节夹具：独立构造，不与被测的 parseBinaryFrame 共享组装逻辑 */
+function binaryFrameFixture(headerText: string, payload: Uint8Array): Uint8Array {
+  const headerBytes = new TextEncoder().encode(headerText);
+  const out = new Uint8Array(2 + headerBytes.length + payload.length);
+  out[0] = (headerBytes.length >> 8) & 0xff;
+  out[1] = headerBytes.length & 0xff;
+  out.set(headerBytes, 2);
+  out.set(payload, 2 + headerBytes.length);
+  return out;
+}
 
 describe('computeSecMsGec', () => {
   it('与社区算法参照一致（固定时刻，5 分钟窗口取整）', () => {
@@ -46,7 +57,8 @@ describe('WS 帧组装/解析对称', () => {
 
   it('二进制音频帧解析：头部剥离，载荷完整', () => {
     const payload = new Uint8Array([0xff, 0xfb, 0x90, 0x00, 1, 2, 3]);
-    const frame = buildBinaryFrame('audio', payload, 'req-2');
+    const header = 'X-RequestId:req-2\r\nContent-Type:application/octet-stream\r\nPath:audio\r\n';
+    const frame = binaryFrameFixture(header, payload);
     const parsed = parseBinaryFrame(frame);
     expect(parsed.kind).toBe('audio');
     if (parsed.kind !== 'audio') return;
@@ -61,7 +73,7 @@ describe('WS 帧组装/解析对称', () => {
   });
 
   it('非 audio 的二进制帧按 textFrame 处理', () => {
-    const frame = buildBinaryFrame('turn.end', new Uint8Array(0), 'req-3');
+    const frame = binaryFrameFixture('Path:turn.end\r\n', new Uint8Array(0));
     expect(parseBinaryFrame(frame).kind).toBe('textFrame');
   });
 });

@@ -3,10 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useServices } from '@/container';
 import type { GenerationProgress } from '@/services/generation';
 
-/**
- * 生成任务进度入口（docs/plan.md 4.1.5）：启动/重试/试听 + 轮询进度。
- * 轮询在任务终态（done/failed）自动停止。
- */
 export function useGeneration(projectId: string) {
   const services = useServices();
   const [progress, setProgress] = useState<GenerationProgress | null>(null);
@@ -26,7 +22,17 @@ export function useGeneration(projectId: string) {
   const poll = useCallback(
     async (jobId: string) => {
       const p = await services.generation.getProgress(jobId);
-      if (p) setProgress(p);
+      if (p) {
+        setProgress((prev) =>
+          prev &&
+          prev.status === p.status &&
+          prev.progress === p.progress &&
+          prev.totalSegments === p.totalSegments &&
+          prev.error === p.error
+            ? prev
+            : p,
+        );
+      }
       if (p && (p.status === 'done' || p.status === 'failed')) stopPolling();
     },
     [services, stopPolling],
