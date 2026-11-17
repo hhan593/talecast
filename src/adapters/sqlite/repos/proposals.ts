@@ -53,15 +53,6 @@ export class SqliteSplitProposalRepository implements SplitProposalRepository {
     return row ? toRecord(row) : null;
   }
 
-  async latestAdopted(projectId: string): Promise<SplitProposalRecord | null> {
-    const row = this.db.getFirstSync<ProposalRow>(
-      `SELECT * FROM split_proposals WHERE project_id = ? AND status = 'adopted'
-       ORDER BY adopted_at DESC LIMIT 1`,
-      projectId,
-    );
-    return row ? toRecord(row) : null;
-  }
-
   async setStatus(id: string, status: ProposalStatus, adoptedAt: number | null): Promise<void> {
     this.db.runSync(
       'UPDATE split_proposals SET status = ?, adopted_at = ? WHERE id = ?',

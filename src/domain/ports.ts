@@ -57,7 +57,6 @@ export interface SplitProposalRecord {
 export interface SplitProposalRepository {
   insert(record: SplitProposalRecord): Promise<void>;
   get(id: string): Promise<SplitProposalRecord | null>;
-  latestAdopted(projectId: Project['id']): Promise<SplitProposalRecord | null>;
   setStatus(id: string, status: ProposalStatus, adoptedAt: number | null): Promise<void>;
   /** 采用时点重录"上一版"快照：撤销恢复到采用前一刻（含提出候选后的编辑） */
   setPreviousJson(id: string, previousJson: string): Promise<void>;

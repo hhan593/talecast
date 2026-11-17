@@ -197,13 +197,6 @@ export class FakeSplitProposalRepository implements SplitProposalRepository {
     return this.rows.find((r) => r.id === id) ?? null;
   }
 
-  async latestAdopted(projectId: string): Promise<SplitProposalRecord | null> {
-    const adopted = this.rows
-      .filter((r) => r.projectId === projectId && r.status === 'adopted')
-      .sort((a, b) => (b.adoptedAt ?? 0) - (a.adoptedAt ?? 0));
-    return adopted[0] ?? null;
-  }
-
   async setStatus(id: string, status: SplitProposalRecord['status'], adoptedAt: number | null): Promise<void> {
     const row = this.rows.find((r) => r.id === id);
     if (!row) throw new Error('proposal 不存在');

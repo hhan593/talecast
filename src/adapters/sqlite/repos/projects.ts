@@ -61,9 +61,17 @@ export class SqliteProjectRepository implements ProjectRepository {
     });
   }
 
-  /** 级联删除（不含 command_receipts：全局幂等回执保留，防止重放）；沙盒文件按内容寻址共享，不在此删除 */
+  /**
+   * 级联删除。command_receipts 一并清理：回执 result_json 含业务数据快照，
+   * 与"已删工程的数据不留本地"的隐私口径一致（docs/plan.md P4）；
+   * 清理后重放旧命令得到 not_found，属可接受语义。沙盒文件按内容寻址共享，不在此删除。
+   */
   async delete(projectId: string): Promise<void> {
     this.db.withTransactionSync(() => {
+      this.db.runSync(
+        'DELETE FROM command_receipts WHERE result_json LIKE ?',
+        `%"${projectId}"%`,
+      );
       this.db.runSync(
         `DELETE FROM generation_segments WHERE job_id IN (SELECT id FROM generation_jobs WHERE project_id = ?)`,
         projectId,
