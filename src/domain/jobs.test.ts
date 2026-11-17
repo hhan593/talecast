@@ -38,9 +38,15 @@ describe('buildSegmentPlan', () => {
     const planA = buildSegmentPlan(text, baseInput, segmentForTts, 10);
     const planB = buildSegmentPlan(text, baseInput, segmentForTts, 10);
     expect(planA).toEqual(planB);
-    expect(planA.every((s) => s.text.length <= 10)).toBe(true);
-    expect(planA.map((s) => s.ordinal)).toEqual([0, 1]);
-    expect(planA.every((s) => s.textHash.length === 64)).toBe(true);
+    // 映射契约：text_hash 必须等于对"该段文本"独立计算的结果
+    expect(
+      planA.map((s) => [s.text, s.textHash]),
+    ).toEqual(
+      planA.map((s) => [
+        s.text,
+        computeSegmentTextHash({ ...baseInput, segmentText: s.text }),
+      ]),
+    );
   });
 });
 

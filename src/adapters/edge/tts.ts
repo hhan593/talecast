@@ -17,7 +17,7 @@ import type { VoiceInfo } from '@/domain/types';
 
 /**
  * Edge TTS 网关（docs/plan.md 5.3 Edge 协议要点）。
- * 协议纯层在 protocol.ts（已被 fixture 测试覆盖）；本文件只做传输与聚合。
+ * 协议纯层在 protocol.ts；本文件只做传输与聚合。
  * RN 原生 WebSocket 支持自定义头与 arraybuffer 二进制。
  */
 
