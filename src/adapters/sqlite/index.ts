@@ -5,7 +5,7 @@ import { SqliteCharacterRepository } from './repos/characters';
 import { SqliteGenerationStore } from './repos/generation';
 import { SqliteVoiceRepository } from './repos/voices';
 import { SqliteLibraryRepository } from './repos/library';
-import { SqliteReadingStateRepository } from './repos/misc';
+import { SqliteReadingStateRepository } from './repos/reading-state';
 import { SqliteProjectRepository } from './repos/projects';
 import { SqliteReceiptStore } from './repos/receipts';
 import { SqliteRequestLogRepository, SqliteSettingsRepository } from './repos/settings';
