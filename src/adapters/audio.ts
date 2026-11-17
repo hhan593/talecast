@@ -89,28 +89,3 @@ export class ExpoAudioPlayerService implements AudioPlayer {
     }
   }
 }
-
-/**
- * 试听播放器（P2 最小实现）：单文件即点即播。
- * 与段队列播放（上方 ExpoAudioPlayerService + services/playback）相互独立、互不抢占。
- */
-export class ExpoPreviewPlayer {
-  private player: ExpoAudioPlayerInstance | null = null;
-
-  play(uri: string): void {
-    this.stop();
-    this.player = createAudioPlayer({ uri });
-    this.player.play();
-  }
-
-  stop(): void {
-    if (this.player) {
-      try {
-        this.player.pause();
-        this.player.release();
-      } catch {
-      }
-      this.player = null;
-    }
-  }
-}

@@ -192,6 +192,31 @@ export function createPlaybackService(deps: PlaybackDeps) {
       return ok(null);
     },
 
+    /**
+     * 单文件播放（试听场景）：停掉段队列，独占音频设备。
+     * 收编 P2 的独立 PreviewPlayer，消除"试听与整章播放同时出声"的并行音轨。
+     */
+    async playStandalone(uri: string): Promise<Result<null>> {
+      queue = [];
+      setState({
+        projectId: null,
+        chapterId: null,
+        status: 'playing',
+        segmentIndex: 0,
+        segmentCount: 0,
+        segmentStartOffset: null,
+        queueOffsets: [],
+      });
+      try {
+        await deps.audioPlayer.load(uri);
+        await deps.audioPlayer.play();
+        return ok(null);
+      } catch (error) {
+        setState({ status: 'idle' });
+        return err('network', `播放失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+
     stop(): void {
       deps.audioPlayer.release();
       queue = [];

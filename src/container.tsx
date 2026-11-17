@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
 
-import { ExpoAudioPlayerService, ExpoPreviewPlayer } from '@/adapters/audio';
+import { ExpoAudioPlayerService } from '@/adapters/audio';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
 import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
@@ -114,7 +114,6 @@ const services = {
     sourceFileStore: sandboxSourceFileStore,
     splitProposalRepository: adapters.splitProposalRepository,
   }),
-  previewPlayer: new ExpoPreviewPlayer(),
   newCommandId,
 };
 

@@ -108,7 +108,9 @@ export function useGeneration(projectId: string) {
           setError(result.error.message);
           return result;
         }
-        services.previewPlayer.play(result.value.filePath);
+        // 试听统一走全局播放服务（独占音频设备，避免与整章播放叠音）
+        const played = await services.playback.playStandalone(result.value.filePath);
+        if (!played.ok) setError(played.error.message);
         return result;
       } finally {
         setBusy(false);
@@ -117,5 +119,5 @@ export function useGeneration(projectId: string) {
     [projectId, services],
   );
 
-  return { progress, busy, error, start, retry, cancel, preview, stopPreview: () => services.previewPlayer.stop() };
+  return { progress, busy, error, start, retry, cancel, preview, stopPreview: () => services.playback.stop() };
 }
