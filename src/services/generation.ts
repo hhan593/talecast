@@ -31,6 +31,7 @@ const PROVIDER_PARAMS_JSON = '{}';
 export interface GenerationDeps {
   projectRepository: ProjectRepository;
   libraryRepository: LibraryRepository;
+  libraryQuery: import('@/services/library-query').LibraryQueryService;
   sourceFileStore: SourceFileStore;
   bindingRepository: BindingRepository;
   generationStore: GenerationStore;
@@ -59,13 +60,8 @@ export function createGenerationService(deps: GenerationDeps) {
   const cancelledJobs = new Set<string>();
 
   async function loadChapterText(projectId: string, chapterId: string) {
-    const chapters = await deps.libraryRepository.listChapters(projectId);
-    const chapter = chapters.find((c) => c.id === chapterId) ?? null;
-    const source = await deps.libraryRepository.getSource(projectId);
-    if (!chapter || !source) return null;
-    const fullText = await deps.sourceFileStore.readDecodedText(source.textSha256);
-    const chapterText = fullText.slice(chapter.startOffset, chapter.endOffset);
-    return { chapter, chapterText };
+    const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
+    return slice;
   }
 
   async function runJobSegments(jobId: string): Promise<void> {
