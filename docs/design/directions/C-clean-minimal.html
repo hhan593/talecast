@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方向 C · 清风极简</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FFFFFF; --surface: #F4F5F7; --text: #111827; --muted: #6B7280;
+    --line: #EAECF0; --accent: #4F46E5; --accent-soft: #EEF0FE; --green: #059669;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  body { background: #E9EAEE; font-family: "Noto Sans SC", sans-serif; color: var(--text);
+         display: flex; gap: 48px; padding: 48px; justify-content: center; }
+  .phone { width: 390px; background: var(--bg); border-radius: 40px; padding: 20px 20px 28px;
+           box-shadow: 0 24px 60px rgba(30,35,60,.25); border: 1px solid #DFE2E8; }
+  .label { text-align: center; margin-bottom: 14px; font-size: 13px; color: var(--muted); letter-spacing: 2px; }
+  .statusbar { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); padding: 4px 8px 0; }
+  .top { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 2px; }
+  h1.brand { font-size: 24px; font-weight: 700; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft);
+            display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 14px; }
+  .sub { font-size: 12px; color: var(--muted); }
+  .search { margin: 16px 0; background: var(--surface); border-radius: 999px;
+            padding: 11px 16px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .book { display: flex; gap: 14px; padding: 14px; margin-bottom: 10px; border-radius: 20px;
+          background: var(--surface); }
+  .cover { width: 56px; height: 74px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center;
+           justify-content: center; font-size: 22px; color: #fff; }
+  .c1 { background: linear-gradient(160deg, #6366F1, #4338CA); }
+  .c2 { background: linear-gradient(160deg, #F59E0B, #D97706); }
+  .c3 { background: linear-gradient(160deg, #10B981, #047857); }
+  .btitle { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .bmeta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .chips { display: flex; gap: 6px; align-items: center; }
+  .chip { font-size: 10px; padding: 3px 9px; border-radius: 999px; background: #fff; color: var(--muted); }
+  .chip.hot { background: var(--accent); color: #fff; }
+  .playmini { margin-left: auto; width: 32px; height: 32px; border-radius: 50%;
+              background: var(--accent); color: #fff; display: flex; align-items: center;
+              justify-content: center; font-size: 11px; }
+  .add { width: 100%; background: var(--accent-soft); color: var(--accent); border-radius: 20px;
+         padding: 13px; font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .tabbar { display: flex; justify-content: space-around; padding-top: 18px; border-top: 1px solid var(--line);
+            margin-top: 18px; font-size: 11px; color: var(--muted); }
+  .tabbar .on { color: var(--accent); font-weight: 600; }
+  .tabbar b { display: block; text-align: center; font-size: 18px; margin-bottom: 2px; font-weight: 500; }
+
+  /* 工作台 */
+  .wtop { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .wtop .cv { width: 40px; height: 54px; border-radius: 10px;
+              background: linear-gradient(160deg, #6366F1, #4338CA); }
+  .wtop .tt { flex: 1; }
+  .wtop .tt b { font-size: 17px; display: block; }
+  .wtop .tt span { font-size: 11px; color: var(--muted); }
+  .back { font-size: 12px; color: var(--muted); background: var(--surface); border-radius: 999px; padding: 6px 12px; }
+  .card { background: var(--surface); border-radius: 20px; padding: 14px 16px; margin: 12px 0; }
+  .card .row { display: flex; justify-content: space-between; padding: 9px 0; align-items: center;
+               border-bottom: 1px solid #E3E5EA; }
+  .card .row:last-child { border-bottom: none; }
+  .card .t { font-size: 14px; font-weight: 500; }
+  .card .t small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .pill { font-size: 10px; padding: 3px 10px; border-radius: 999px; background: #fff; color: var(--muted); }
+  .pill.ok { color: var(--green); background: #E7F6EF; }
+  .pill.gen { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .mini { display: flex; align-items: center; gap: 12px; background: var(--text); color: #fff;
+          border-radius: 20px; padding: 13px 16px; margin-top: 6px; }
+  .mini .pb { width: 36px; height: 36px; border-radius: 50%; background: var(--accent);
+              display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .mini .info { flex: 1; font-size: 12px; }
+  .mini .info b { display: block; font-size: 13px; }
+  .mini .info span { color: #B9BED0; font-size: 10px; }
+  .mini .bar { height: 3px; background: rgba(255,255,255,.18); border-radius: 2px; margin-top: 6px; }
+  .mini .bar i { display: block; height: 3px; width: 38%; background: var(--accent); border-radius: 2px; }
+  .genfab { position: absolute; right: 24px; bottom: 96px; width: 54px; height: 54px; border-radius: 18px;
+            background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 22px; box-shadow: 0 12px 28px rgba(79,70,229,.4); }
+  .phone { position: relative; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="label">书 架</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>􀟠 􀛨</span></div>
+      <div class="top"><h1 class="brand">书架</h1><div class="avatar">要</div></div>
+      <div class="sub">4 本书籍 · 本周生成 11 段</div>
+      <div class="search"><span>搜索书名或作者</span><span>⌕</span></div>
+      <div class="book"><div class="cover c1">☰</div>
+        <div><div class="btitle">山河故人</div><div class="bmeta">12 章 · 3 天前导入</div>
+          <div class="chips"><span class="chip hot">生成中 6/12</span><span class="pill">沈青梧</span>
+            <span class="playmini">▶</span></div></div></div>
+      <div class="book"><div class="cover c2">✦</div>
+        <div><div class="btitle">雾隐津门</div><div class="bmeta">45 章 · 昨天导入</div>
+          <div class="chips"><span class="pill">分章待审</span><span class="pill">未绑定</span></div></div></div>
+      <div class="book"><div class="cover c3">✓</div>
+        <div><div class="btitle">长夜将尽</div><div class="bmeta">31 章 · 上周导入</div>
+          <div class="chips"><span class="pill ok">已完成</span><span class="pill">11 段音频</span></div></div></div>
+      <button class="add">＋ 添加书籍（UTF-8 TXT）</button>
+      <div class="tabbar"><span class="on"><b>☰</b>书架</span><span><b>◐</b>制作</span><span><b>⚙</b>设置</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">工 作 台 · 第一章</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>􀟠 􀛨</span></div>
+      <div class="wtop"><div class="cv"></div>
+        <div class="tt"><b>山河故人</b><span>revision 4 · 来源《山河故人.txt》</span></div>
+        <span class="back">返回书架</span></div>
+      <div class="card">
+        <div class="row"><span class="t">前言<small>已生成</small></span><span class="pill ok">✓</span></div>
+        <div class="row"><span class="t">第一章 · 重逢<small>播放中</small></span><span class="pill gen">● 2/6 段</span></div>
+        <div class="row"><span class="t">第二章 · 别离<small>待生成</small></span><span class="pill">待绑定</span></div>
+        <div class="row"><span class="t">第三章 · 归离<small>已生成</small></span><span class="pill ok">✓</span></div>
+      </div>
+      <div class="mini"><div class="pb">▶</div>
+        <div class="info"><b>第一章 · 重逢</b><span>晓晓 · 第 2/6 段 · 1.0×</span>
+          <div class="bar"><i></i></div></div>
+        <span style="font-size:15px">⏸</span><span style="font-size:13px">⋮</span></div>
+      <div class="genfab">✦</div>
+    </div>
+  </div>
+</body>
+</html>

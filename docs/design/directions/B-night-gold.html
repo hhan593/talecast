@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方向 B · 夜航墨金</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D0F14; --surface: #161A22; --raised: #1D222D; --text: #EAE7E0; --muted: #7E8598;
+    --line: #262C38; --gold: #D9A441; --gold-soft: rgba(217,164,65,.14); --violet: #8B7CF6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  body { background: #05060A; font-family: "Noto Sans SC", sans-serif; color: var(--text);
+         display: flex; gap: 48px; padding: 48px; justify-content: center; }
+  .phone { width: 390px; background: var(--bg); border-radius: 40px; padding: 20px 20px 28px;
+           box-shadow: 0 0 0 1px #262C38, 0 30px 80px rgba(0,0,0,.8); }
+  .label { text-align: center; margin-bottom: 14px; font-size: 13px; color: var(--muted); letter-spacing: 2px; }
+  .statusbar { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); padding: 4px 8px 0; }
+  h1.brand { font-size: 24px; font-weight: 700; margin: 18px 0 2px; letter-spacing: .5px; }
+  h1.brand em { font-style: normal; color: var(--gold); }
+  .sub { font-size: 12px; color: var(--muted); }
+  .search { margin: 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+            padding: 10px 14px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .book { display: flex; gap: 14px; background: var(--surface); border: 1px solid var(--line);
+          border-radius: 18px; padding: 14px; margin-bottom: 12px; position: relative; overflow: hidden; }
+  .book::after { content: ""; position: absolute; right: -30px; top: -30px; width: 90px; height: 90px;
+                 border-radius: 50%; background: var(--gold-soft); filter: blur(2px); }
+  .cover { width: 52px; height: 72px; border-radius: 10px; flex-shrink: 0;
+           display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .c1 { background: linear-gradient(150deg, #2A3244, #1A2130); color: var(--gold); }
+  .c2 { background: linear-gradient(150deg, #3A2E44, #241C30); color: var(--violet); }
+  .c3 { background: linear-gradient(150deg, #23343A, #16242A); color: #5FB8A0; }
+  .btitle { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .bmeta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .chips { display: flex; gap: 6px; }
+  .chip { font-size: 10px; padding: 3px 9px; border-radius: 999px; background: var(--raised);
+          border: 1px solid var(--line); color: var(--muted); }
+  .chip.hot { background: var(--gold-soft); border-color: transparent; color: var(--gold); }
+  .prog { height: 3px; background: var(--line); border-radius: 2px; margin-top: 10px; }
+  .prog i { display: block; height: 3px; width: 50%; background: var(--gold); border-radius: 2px; }
+  .add { width: 100%; border: 1.5px dashed #3A4152; background: transparent; color: var(--muted);
+         border-radius: 14px; padding: 12px; font-size: 14px; margin-top: 4px; }
+  .tabbar { display: flex; justify-content: space-around; padding-top: 18px; border-top: 1px solid var(--line);
+            margin-top: 18px; font-size: 11px; color: var(--muted); }
+  .tabbar .on { color: var(--gold); }
+  .tabbar b { display: block; text-align: center; font-size: 18px; margin-bottom: 2px; font-weight: 500; }
+
+  /* 播放器 */
+  .art { width: 100%; height: 240px; border-radius: 24px; margin-top: 16px;
+         background: radial-gradient(120% 100% at 30% 0%, #2C3446 0%, #171B26 55%, #10131B 100%);
+         display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .art::before { content: ""; position: absolute; inset: 0;
+                 background: radial-gradient(60% 45% at 70% 80%, rgba(139,124,246,.18), transparent 70%); }
+  .art b { font-family: serif; font-size: 34px; color: var(--gold); letter-spacing: 6px; }
+  .nowtitle { font-size: 19px; font-weight: 700; margin-top: 20px; }
+  .nowmeta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .wave { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin: 18px 0 6px; }
+  .wave i { flex: 1; background: var(--line); border-radius: 2px; }
+  .wave i.on { background: var(--gold); }
+  .times { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+  .ctrl { display: flex; align-items: center; justify-content: space-between; padding: 14px 30px 0; font-size: 20px; }
+  .ctrl .main { width: 62px; height: 62px; border-radius: 50%; background: var(--gold); color: #10131B;
+                display: flex; align-items: center; justify-content: center; font-size: 22px;
+                box-shadow: 0 10px 30px rgba(217,164,65,.35); }
+  .ctrl .side { color: var(--muted); }
+  .speed { margin-top: 14px; display: flex; gap: 8px; justify-content: center; }
+  .speed span { font-size: 11px; padding: 5px 14px; border-radius: 999px; background: var(--surface);
+                border: 1px solid var(--line); color: var(--muted); }
+  .speed span.on { color: var(--gold); border-color: var(--gold); background: var(--gold-soft); }
+</style>
+</head>
+<body>
+  <div>
+    <div class="label">书 架</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>􀟠 􀛨</span></div>
+      <h1 class="brand">Tale<em>Cast</em></h1>
+      <div class="sub">把一本小说，变成可以听的章节音频</div>
+      <div class="search"><span>搜索书名或作者</span><span>⌕</span></div>
+      <div class="book"><div class="cover c1">▮</div>
+        <div><div class="btitle">山河故人</div><div class="bmeta">12 章 · 正在收听</div>
+          <div class="chips"><span class="chip hot">▶ 第 2 段</span><span class="chip">沈青梧</span></div>
+          <div class="prog"><i></i></div></div></div>
+      <div class="book"><div class="cover c2">✦</div>
+        <div><div class="btitle">雾隐津门</div><div class="bmeta">45 章 · 昨天导入</div>
+          <div class="chips"><span class="chip">分章待审</span></div></div></div>
+      <div class="book"><div class="cover c3">☾</div>
+        <div><div class="btitle">长夜将尽</div><div class="bmeta">31 章 · 上周导入</div>
+          <div class="chips"><span class="chip hot">已完成 ✓</span></div></div></div>
+      <button class="add">＋ 添加书籍（UTF-8 TXT）</button>
+      <div class="tabbar"><span class="on"><b>☰</b>书架</span><span><b>◐</b>制作</span><span><b>⚙</b>设置</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">播 放 器</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>􀟠 􀛨</span></div>
+      <div class="art"><b>山河故人</b></div>
+      <div class="nowtitle">第一章 · 重逢</div>
+      <div class="nowmeta">山河故人 · 晓晓 · 段 2/6</div>
+      <div class="wave"><i style="height:30%" class="on"></i><i style="height:55%" class="on"></i><i style="height:80%" class="on"></i><i style="height:100%" class="on"></i><i style="height:70%" class="on"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:35%"></i><i style="height:50%"></i><i style="height:80%"></i><i style="height:40%"></i><i style="height:25%"></i><i style="height:55%"></i><i style="height:65%"></i><i style="height:30%"></i><i style="height:45%"></i></div>
+      <div class="times"><span>01:24</span><span>-03:12</span></div>
+      <div class="ctrl"><span class="side">⏮</span><span class="side">−15s</span>
+        <span class="main">❚❚</span><span class="side">+15s</span><span class="side">⏭</span></div>
+      <div class="speed"><span class="on">1.0×</span><span>1.2×</span><span>1.5×</span><span>2.0×</span></div>
+    </div>
+  </div>
+</body>
+</html>
