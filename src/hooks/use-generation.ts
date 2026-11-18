@@ -94,6 +94,29 @@ export function useGeneration(projectId: string) {
     [projectId, runGuarded, services],
   );
 
+  const exportChapter = useCallback(
+    async (chapterId: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await services.export.exportChapter({
+          commandId: services.newCommandId(),
+          projectId,
+          chapterId,
+        });
+        if (!result.ok) {
+          setError(result.error.message);
+          return result;
+        }
+        await services.export.share(result.value.uri);
+        return result;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [projectId, services],
+  );
+
   const preview = useCallback(
     (chapterId: string) =>
       // 试听统一走全局播放服务（独占音频设备，避免与整章播放叠音）
@@ -105,5 +128,5 @@ export function useGeneration(projectId: string) {
     [projectId, runGuarded, services],
   );
 
-  return { progress, busy, error, start, retry, cancel, preview, stopPreview: () => services.playback.stop() };
+  return { progress, busy, error, start, retry, cancel, exportChapter, preview, stopPreview: () => services.playback.stop() };
 }

@@ -4,6 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { ExpoAudioPlayerService } from '@/adapters/audio';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
 import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
+import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
@@ -16,6 +17,7 @@ import { createLibraryQueryService } from '@/services/library-query';
 import { createPlaybackService } from '@/services/playback';
 import { createProjectsService } from '@/services/projects';
 import { createReadingService } from '@/services/reading';
+import { createExportService } from '@/services/export';
 import { createSettingsService } from '@/services/settings';
 import { createSplitReviewService } from '@/services/split-review';
 import { createVoicesService } from '@/services/voices';
@@ -96,6 +98,12 @@ const services = {
     audioFileStore: sandboxAudioFileStore,
     requestLogRepository: adapters.requestLogRepository,
     receiptStore: adapters.receiptStore,
+  }),
+  export: createExportService({
+    generationStore: adapters.generationStore,
+    exporter: new Mp3ChapterExporter(),
+    receiptStore: adapters.receiptStore,
+    cacheDirUri: EXPORTS_DIR_URI,
   }),
   settings: createSettingsService({
     settingsRepository: adapters.settingsRepository,

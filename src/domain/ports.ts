@@ -173,6 +173,12 @@ export interface RequestLogRepository {
 }
 
 /** 按内容寻址的音频文件存储：audio/<text_hash>.mp3（试听与生成共用 → 试听转正零成本） */
+/** 章节音频导出：同参 MP3 段按序字节拼接即合法整章文件（Edge 统一编码保证） */
+export interface ChapterExporter {
+  concatToFile(segmentPaths: string[], outputPath: string): Promise<string>;
+  share(uri: string): Promise<void>;
+}
+
 export interface AudioFileStore {
   pathFor(textHash: string): string;
   exists(textHash: string): Promise<boolean>;
