@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
 
 import { TrackPlayerAudioService } from '@/adapters/audio-track-player';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
@@ -33,15 +34,27 @@ const adapters = createSqliteAdapters();
 
 const newCommandId = (): string => Crypto.randomUUID();
 
+class WebNoopAudioPlayer {
+  async load() { throw new Error('Web 预览不支持播放，请在 App 中使用'); }
+  async play() { throw new Error('Web 预览不支持播放'); }
+  async pause() { throw new Error('Web 预览不支持播放'); }
+  async seek() { throw new Error('Web 预览不支持播放'); }
+  async setRate() { throw new Error('Web 预览不支持播放'); }
+  onProgress(): () => void { return () => undefined; }
+  onPlaybackEnd(): () => void { return () => undefined; }
+  release(): void { /* noop */ }
+}
+
 const edgeTtsGateway = new EdgeTtsGateway();
 const llmGateway = createOpenAiCompatibleLlmGateway({
   keyStore: secureStoreKeyStore,
   settingsRepository: adapters.settingsRepository,
 });
-const audioPlayer = new TrackPlayerAudioService({
-  defaultTitle: 'TaleCast',
-  defaultArtist: '有声书',
-});
+// 仅原生环境构造 track-player（其 Node 存根会在 server 渲染阶段抛错）
+const audioPlayer =
+  Platform.OS === 'android' || Platform.OS === 'ios'
+    ? new TrackPlayerAudioService({ defaultTitle: 'TaleCast', defaultArtist: '有声书' })
+    : new WebNoopAudioPlayer();
 
 const libraryQuery = createLibraryQueryService({
   libraryRepository: adapters.libraryRepository,
@@ -130,9 +143,12 @@ const services = {
   newCommandId,
 };
 
-// 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）
-void services.generation.recoverInterrupted();
-void services.playback.restoreRate();
+// 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）。
+// 仅原生环境执行：Expo Router 的 server 渲染 pass 会执行本模块（Node 无原生模块）
+if (Platform.OS === 'android' || Platform.OS === 'ios') {
+  void services.generation.recoverInterrupted();
+  void services.playback.restoreRate();
+}
 
 export type Services = typeof services;
 
