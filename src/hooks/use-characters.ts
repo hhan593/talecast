@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { parseProsodyJson, type TtsProsody } from '@/domain/jobs';
 import { useServices } from '@/container';
 import { errorMessage, type Result } from '@/domain/result';
 import type { BindingRecord, CharacterRecord, VoiceRecord } from '@/domain/types';
@@ -128,15 +129,41 @@ export function useCharacters(projectId: string) {
     [projectId, refresh, run, services],
   );
 
+  const voiceName = useCallback(
+    (voiceId: string | null) => voices.find((v) => v.voiceId === voiceId)?.name ?? voiceId,
+    [voices],
+  );
+
   const narratorBinding = bindings.find((b) => b.targetType === 'narrator') ?? null;
   const bindingFor = useCallback(
     (characterId: string) => bindings.find((b) => b.targetType === 'character' && b.targetId === characterId) ?? null,
     [bindings],
   );
-  const voiceName = useCallback(
-    (voiceId: string | null) => voices.find((v) => v.voiceId === voiceId)?.name ?? voiceId,
-    [voices],
+
+  /** 合成参数调节（F-2）：同音色重绑 → 绑定 revision+1 → 旧音频缓存自动失效 */
+  const updateParams = useCallback(
+    (target: 'narrator' | { characterId: string }, patch: TtsProsody) =>
+      run(async () => {
+        const binding = target === 'narrator' ? narratorBinding : bindingFor(target.characterId);
+        if (!binding) {
+          setError('请先绑定音色，再调节参数');
+          return;
+        }
+        const merged: TtsProsody = { ...parseProsodyJson(binding.providerParamsJson), ...patch };
+        const result = await services.bindings.bindVoice({
+          commandId: services.newCommandId(),
+          projectId,
+          targetType: target === 'narrator' ? 'narrator' : 'character',
+          targetId: target === 'narrator' ? null : target.characterId,
+          voiceId: binding.voiceId,
+          providerParams: merged,
+        });
+        if (!result.ok) setError(result.error.message);
+        await refresh();
+      }),
+    [bindingFor, narratorBinding, projectId, refresh, run, services],
   );
+
 
   return {
     characters,
@@ -155,5 +182,6 @@ export function useCharacters(projectId: string) {
     remove,
     bindNarrator,
     bindCharacter,
+    updateParams,
   };
 }

@@ -1,4 +1,4 @@
-import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash } from '@/domain/jobs';
+import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from '@/domain/jobs';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { firstSegmentForTts, segmentForTts } from '@/domain/segmenter';
@@ -137,12 +137,13 @@ export function createGenerationService(deps: GenerationDeps) {
         if (guardError) return err('busy' as const, guardError);
 
         const voiceId = binding!.voiceId;
+        const providerParamsJson = binding!.providerParamsJson || '{}';
         const input = {
           chapterTextSha256: sha256Text(chapterText),
           bindingRevision: binding!.revision,
           voiceId,
           provider: PROVIDER,
-          providerParamsJson: PROVIDER_PARAMS_JSON,
+          providerParamsJson,
           audioFormat: EDGE_AUDIO_FORMAT,
         };
         const inputHash = computeJobInputHash(input);
@@ -153,7 +154,7 @@ export function createGenerationService(deps: GenerationDeps) {
           return ok({ jobId: existing.id, totalSegments: existing.totalSegments, reusedSegments: existing.totalSegments });
         }
 
-        const plan = buildSegmentPlan(chapterText, { voiceId, provider: PROVIDER, providerParamsJson: PROVIDER_PARAMS_JSON }, segmentForTts);
+        const plan = buildSegmentPlan(chapterText, { voiceId, provider: PROVIDER, providerParamsJson: binding!.providerParamsJson || '{}' }, segmentForTts);
         const now = Date.now();
         const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等
         const existences = await Promise.all(plan.map((s) => deps.audioFileStore.exists(s.textHash)));
@@ -230,7 +231,7 @@ export function createGenerationService(deps: GenerationDeps) {
       if (!firstText) return err('invalid', '本章内容为空');
       const first = {
         text: firstText,
-        textHash: computeSegmentTextHash({ segmentText: firstText, voiceId: binding.voiceId, provider: PROVIDER, providerParamsJson: PROVIDER_PARAMS_JSON }),
+        textHash: computeSegmentTextHash({ segmentText: firstText, voiceId: binding.voiceId, provider: PROVIDER, providerParamsJson: binding.providerParamsJson || '{}' }),
       };
       const existingPath = deps.audioFileStore.pathFor(first.textHash);
       if (await deps.audioFileStore.exists(first.textHash)) {

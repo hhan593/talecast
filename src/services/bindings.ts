@@ -1,3 +1,4 @@
+import { buildProsodyJson, type TtsProsody } from '@/domain/jobs';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { BindingRepository, CharacterRepository, ReceiptStore } from '@/domain/ports';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
@@ -21,6 +22,8 @@ export interface BindVoiceCommand extends Omit<Command, 'expectedRevision'> {
   targetType: BindingTargetType;
   targetId: string | null;
   voiceId: string;
+  /** 合成参数（语速/音调/音量）：入库 provider_params_json，参与 input_hash */
+  providerParams?: TtsProsody;
 }
 
 export function createBindingsService(deps: BindingDeps) {
@@ -42,6 +45,7 @@ export function createBindingsService(deps: BindingDeps) {
             targetType: command.targetType,
             targetId: command.targetId,
             voiceId: command.voiceId,
+            providerParamsJson: buildProsodyJson(command.providerParams ?? {}),
           });
           await deps.receiptStore.put({
             commandId: command.commandId,

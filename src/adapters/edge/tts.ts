@@ -13,6 +13,7 @@ import {
 import { concatBytes } from '@/domain/base64';
 import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import type { TtsGateway } from '@/domain/ports';
+import type { TtsProsody } from '@/domain/jobs';
 import type { VoiceInfo } from '@/domain/types';
 
 /**
@@ -65,7 +66,7 @@ export class EdgeTtsGateway implements TtsGateway {
   }
 
   /** 合成单段：一次连接 → speech.config + SSML → 聚合音频帧至 turn.end */
-  async synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array> {
+  async synthesize(input: { text: string; voiceId: string; prosody?: TtsProsody }): Promise<Uint8Array> {
     const requestId = newHexId();
     const url = buildWssUrl(Date.now(), newHexId());
     const chunks: Uint8Array[] = [];
@@ -101,7 +102,7 @@ export class EdgeTtsGateway implements TtsGateway {
 
       ws.onopen = () => {
         ws.send(buildSpeechConfigMessage());
-        ws.send(buildSsmlMessage(requestId, input.voiceId, input.text));
+        ws.send(buildSsmlMessage(requestId, input.voiceId, input.text, input.prosody));
       };
 
       ws.onmessage = (event: WebSocketMessageEvent) => {

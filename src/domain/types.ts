@@ -76,6 +76,8 @@ export interface BindingRecord {
   /** narrator 绑定为 null */
   targetId: string | null;
   voiceId: string;
+  /** 合成参数（prosody JSON）：参与 input_hash，变更即失效旧缓存 */
+  providerParamsJson: string;
   /** 绑定修订号：参与生成任务的 input_hash（绑定变更 → 旧缓存失效） */
   revision: number;
   updatedAt: number;

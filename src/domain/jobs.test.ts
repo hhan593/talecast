@@ -58,3 +58,10 @@ describe('assertJobStartable', () => {
     expect(assertJobStartable({ chapterExists: true, hasVoiceBinding: true, activeJobExists: true })).toMatch(/进行中/);
   });
 });
+
+describe('parseProsodyJson', () => {
+  it('容错解析：坏 JSON 回落空对象', () => {
+    expect(parseProsodyJson('not-json')).toEqual({});
+    expect(parseProsodyJson('{}')).toEqual({});
+  });
+});

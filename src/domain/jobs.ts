@@ -61,6 +61,35 @@ export function checkChapterGenerationSize(chapterCharLength: number): boolean {
   return chapterCharLength <= MAX_CHAPTER_GENERATION_CHARS;
 }
 
+export interface TtsProsody {
+  /** 相对语速，如 '-20%' / '+20%'；缺省为标准 */
+  rate?: string;
+  /** 相对音调，如 '-10%' / '+10%' */
+  pitch?: string;
+  /** 相对音量，如 '-20%' / '+20%' */
+  volume?: string;
+}
+
+/** 确定性序列化：键序固定、标准值剔除，保证同参数 → 同字符串 → 同 text_hash（缺省为 '{}'） */
+export function buildProsodyJson(prosody: TtsProsody): string {
+  const clean: Partial<Record<'rate' | 'pitch' | 'volume', string>> = {};
+  if (prosody.rate && prosody.rate !== '+0%') clean.rate = prosody.rate;
+  if (prosody.pitch && prosody.pitch !== '+0%') clean.pitch = prosody.pitch;
+  if (prosody.volume && prosody.volume !== '+0%') clean.volume = prosody.volume;
+  const keys = ['rate', 'pitch', 'volume'] as const;
+  if (keys.every((key) => !(key in clean))) return '{}';
+  return JSON.stringify(Object.fromEntries(keys.filter((key) => key in clean).map((key) => [key, clean[key]])));
+}
+
+export function parseProsodyJson(json: string): TtsProsody {
+  try {
+    const parsed = JSON.parse(json) as TtsProsody;
+    return { rate: parsed.rate, volume: parsed.volume, pitch: parsed.pitch };
+  } catch {
+    return {};
+  }
+}
+
 /** 任务级前置检查：章节已导入、已绑定音色、无同章节活动任务 */
 export function assertJobStartable(input: {
   chapterExists: boolean;

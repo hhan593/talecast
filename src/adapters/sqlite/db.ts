@@ -166,6 +166,13 @@ export const MIGRATIONS: Migration[] = [
     ],
   },
   {
+    version: 5,
+    description: 'bindings.provider_params_json（TTS 参数参与 input_hash）',
+    statements: [
+      `ALTER TABLE bindings ADD COLUMN provider_params_json TEXT NOT NULL DEFAULT '{}'`,
+    ],
+  },
+  {
     version: 4,
     description: 'P3：书籍助手会话与消息',
     statements: [

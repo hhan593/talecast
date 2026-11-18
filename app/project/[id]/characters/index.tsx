@@ -7,6 +7,15 @@ import { VoicePickerSheet } from '@/components/voice-picker-sheet';
 import { characterProfileText } from '@/domain/character';
 import { useCharacters } from '@/hooks/use-characters';
 
+const RATE_CYCLE = ['-20%', '+0%', '+20%'];
+const VOL_CYCLE = ['-20%', '+0%', '+20%'];
+const currentRate = (json: string) => (JSON.parse(json || '{}').rate as string | undefined) ?? '+0%';
+const currentVolume = (json: string) => (JSON.parse(json || '{}').volume as string | undefined) ?? '+0%';
+const nextRate = (json: string) => RATE_CYCLE[(RATE_CYCLE.indexOf(currentRate(json)) + 1) % RATE_CYCLE.length];
+const nextVolume = (json: string) => VOL_CYCLE[(VOL_CYCLE.indexOf(currentVolume(json)) + 1) % VOL_CYCLE.length];
+const rateLabel = (json: string) => ({ '-20%': '慢', '+0%': '标准', '+20%': '快' }[nextRate(json)] ?? '标准');
+const volumeLabel = (json: string) => ({ '-20%': '轻', '+0%': '标准', '+20%': '响' }[nextVolume(json)] ?? '标准');
+
 export default function CharactersScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const projectId = params.id;
@@ -48,6 +57,23 @@ export default function CharactersScreen() {
         <Text className="mt-2 text-xs text-muted dark:text-muted-night">
           {narratorVoiceName ? `当前音色：${narratorVoiceName}` : '未绑定。生成整章前必须给旁白绑定音色。'}
         </Text>
+        {characters.narratorBinding ? (
+          <View className="mt-2 flex-row items-center gap-2">
+            <Pressable
+              className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
+              onPress={() => void characters.updateParams('narrator', { rate: nextRate(characters.narratorBinding!.providerParamsJson) })}
+            >
+              <Text className="text-xs text-ink dark:text-ink-night">语速：{rateLabel(characters.narratorBinding!.providerParamsJson)}</Text>
+            </Pressable>
+            <Pressable
+              className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
+              onPress={() => void characters.updateParams('narrator', { volume: nextVolume(characters.narratorBinding!.providerParamsJson) })}
+            >
+              <Text className="text-xs text-ink dark:text-ink-night">音量：{volumeLabel(characters.narratorBinding!.providerParamsJson)}</Text>
+            </Pressable>
+            <Text className="text-[10px] text-faint dark:text-faint-night">变更后旧音频缓存失效</Text>
+          </View>
+        ) : null}
       </View>
 
       <View className="mt-3 flex-row gap-2">

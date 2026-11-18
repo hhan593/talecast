@@ -44,7 +44,7 @@ async function setupWithGeneratedChapter() {
     fileName: 'n.txt',
     bytes: textToBytes(`第一章 起\n${filler.repeat(30)}第二段在这之后。${filler.repeat(10)}第三段收尾。`),
   });
-  await bindings.upsert({ projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural' });
+  await bindings.upsert({ projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural', providerParamsJson: '{}' });
   const chapters = await library.listChapters('p1');
   const libraryQuery = (await import('./library-query')).createLibraryQueryService({
     libraryRepository: library,

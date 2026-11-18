@@ -7,6 +7,15 @@ import { EditDialog } from '@/components/edit-dialog';
 import { characterProfileText } from '@/domain/character';
 import { useCharacters } from '@/hooks/use-characters';
 
+const RATE_CYCLE = ['-20%', '+0%', '+20%'];
+const VOL_CYCLE = ['-20%', '+0%', '+20%'];
+const currentRate = (json: string) => (JSON.parse(json || '{}').rate as string | undefined) ?? '+0%';
+const currentVolume = (json: string) => (JSON.parse(json || '{}').volume as string | undefined) ?? '+0%';
+const nextRate = (json: string) => RATE_CYCLE[(RATE_CYCLE.indexOf(currentRate(json)) + 1) % RATE_CYCLE.length];
+const nextVolume = (json: string) => VOL_CYCLE[(VOL_CYCLE.indexOf(currentVolume(json)) + 1) % VOL_CYCLE.length];
+const rateLabel = (json: string) => ({ '-20%': '慢', '+0%': '标准', '+20%': '快' }[nextRate(json)] ?? '标准');
+const volumeLabel = (json: string) => ({ '-20%': '轻', '+0%': '标准', '+20%': '响' }[nextVolume(json)] ?? '标准');
+
 export default function CharacterDetailScreen() {
   const params = useLocalSearchParams<{ id: string; characterId: string }>();
   const projectId = params.id;
@@ -58,6 +67,22 @@ export default function CharacterDetailScreen() {
         <Text className="mt-2 text-xs text-muted dark:text-muted-night">
           {binding ? `当前音色：${characters.voiceName(binding.voiceId)}（修订 ${binding.revision}）` : '未绑定音色'}
         </Text>
+        {binding ? (
+          <View className="mt-2 flex-row items-center gap-2">
+            <Pressable
+              className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
+              onPress={() => void characters.updateParams({ characterId: character.id }, { rate: nextRate(binding.providerParamsJson) })}
+            >
+              <Text className="text-xs text-ink dark:text-ink-night">语速：{rateLabel(binding.providerParamsJson)}</Text>
+            </Pressable>
+            <Pressable
+              className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
+              onPress={() => void characters.updateParams({ characterId: character.id }, { volume: nextVolume(binding.providerParamsJson) })}
+            >
+              <Text className="text-xs text-ink dark:text-ink-night">音量：{volumeLabel(binding.providerParamsJson)}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {character.confirmed ? (
           <Pressable
             className="mt-3 items-center rounded-xl bg-accent py-2.5"
