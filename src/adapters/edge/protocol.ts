@@ -5,6 +5,7 @@
  */
 
 import { EDGE_AUDIO_FORMAT } from '@/domain/contracts';
+import type { TtsProsody } from '@/domain/jobs';
 import { sha256HexUpper } from '@/domain/hash';
 
 /** Edge 官方客户端令牌（公开常量，非密钥） */
@@ -63,10 +64,23 @@ export function buildSpeechConfigMessage(): string {
   return `X-Timestamp:${new Date().toISOString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n${JSON.stringify(config)}`;
 }
 
-export function buildSsmlMessage(requestId: string, voiceId: string, text: string): string {
+function prosodyAttrs(prosody?: TtsProsody): string {
+  if (!prosody) return " pitch='+0Hz' rate='+0%' volume='+0%'";
+  const rate = prosody.rate ?? '+0%';
+  const pitch = prosody.pitch ?? '+0%';
+  const volume = prosody.volume ?? '+0%';
+  return ` rate='${rate}' pitch='${pitch}' volume='${volume}'`;
+}
+
+export function buildSsmlMessage(
+  requestId: string,
+  voiceId: string,
+  text: string,
+  prosody?: TtsProsody,
+): string {
   const ssml =
     `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
-    `<voice name='${escapeXml(voiceId)}'><prosody pitch='+0Hz' rate='+0%' volume='+0%'>${escapeXml(text)}</prosody></voice></speak>`;
+    `<voice name='${escapeXml(voiceId)}'><prosody${prosodyAttrs(prosody)}>${escapeXml(text)}</prosody></voice></speak>`;
   return (
     `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\n` +
     `X-Timestamp:${new Date().toISOString()}\r\nPath:ssml\r\n\r\n${ssml}`

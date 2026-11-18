@@ -85,6 +85,7 @@ export class FakeBindingRepository implements BindingRepository {
     );
     if (existing) {
       existing.voiceId = record.voiceId;
+      existing.providerParamsJson = record.providerParamsJson;
       existing.revision += 1;
       existing.updatedAt = Date.now();
       return { ...existing };
@@ -95,6 +96,7 @@ export class FakeBindingRepository implements BindingRepository {
       targetType: record.targetType,
       targetId: record.targetId ?? null,
       voiceId: record.voiceId,
+      providerParamsJson: record.providerParamsJson,
       revision: 1,
       updatedAt: Date.now(),
     };

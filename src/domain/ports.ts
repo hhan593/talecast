@@ -1,4 +1,5 @@
 import type { CommandReceipt } from './commands';
+import type { TtsProsody } from './jobs';
 import type { ChapterDraft, ProposalStatus } from './split';
 import type {
   BindingRecord,
@@ -113,8 +114,8 @@ export interface KeyStore {
 
 export interface TtsGateway {
   listVoices(): Promise<VoiceInfo[]>;
-  /** 合成单段，返回统一格式的音频字节（写入按内容寻址的 AudioFileStore） */
-  synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array>;
+  /** 合成单段，返回统一格式的音频字节（写入按内容寻址的 AudioFileStore）；prosody 为 F-2 合成参数 */
+  synthesize(input: { text: string; voiceId: string; prosody?: TtsProsody }): Promise<Uint8Array>;
 }
 
 export interface LlmGateway {
