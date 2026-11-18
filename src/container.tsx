@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
 
-import { ExpoAudioPlayerService } from '@/adapters/audio';
+import { TrackPlayerAudioService } from '@/adapters/audio-track-player';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
 import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
@@ -38,7 +38,10 @@ const llmGateway = createOpenAiCompatibleLlmGateway({
   keyStore: secureStoreKeyStore,
   settingsRepository: adapters.settingsRepository,
 });
-const audioPlayer = new ExpoAudioPlayerService();
+const audioPlayer = new TrackPlayerAudioService({
+  defaultTitle: 'TaleCast',
+  defaultArtist: '有声书',
+});
 
 const libraryQuery = createLibraryQueryService({
   libraryRepository: adapters.libraryRepository,
@@ -114,6 +117,7 @@ const services = {
     audioPlayer,
     generationStore: adapters.generationStore,
     libraryQuery,
+    settingsRepository: adapters.settingsRepository,
     readingStateRepository: adapters.readingStateRepository,
   }),
   assistant: createAssistantService({
@@ -126,8 +130,9 @@ const services = {
   newCommandId,
 };
 
-// 应用启动恢复：中断的生成任务标记失败，保留已完成段供重试（docs/plan.md P2 验收）
+// 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）
 void services.generation.recoverInterrupted();
+void services.playback.restoreRate();
 
 export type Services = typeof services;
 

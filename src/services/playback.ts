@@ -19,6 +19,8 @@ export interface PlaybackState {
   segmentStartOffset: number | null;
   /** 全部段的起始偏移（点段跳转：段落偏移 → 段索引） */
   queueOffsets: number[];
+  /** 播放倍速（0.8–2.0，播放端即时生效） */
+  rate: number;
 }
 
 interface QueueItem {
@@ -34,7 +36,10 @@ export interface PlaybackDeps {
   generationStore: GenerationStore;
   libraryQuery: import('@/services/library-query').LibraryQueryService;
   readingStateRepository: ReadingStateRepository;
+  settingsRepository: import('@/domain/ports').SettingsRepository;
 }
+
+export const PLAYBACK_RATES = [0.8, 1.0, 1.2, 1.5, 2.0] as const;
 
 export function createPlaybackService(deps: PlaybackDeps) {
   let state: PlaybackState = {
@@ -45,11 +50,13 @@ export function createPlaybackService(deps: PlaybackDeps) {
     segmentCount: 0,
     segmentStartOffset: null,
     queueOffsets: [],
+    rate: 1,
   };
   const listeners = new Set<(state: PlaybackState) => void>();
   let queue: QueueItem[] = [];
   let queueProjectId: string | null = null;
   let lastPersistMs = 0;
+  let rate = 1;
 
   function setState(patch: Partial<PlaybackState>): void {
     state = { ...state, ...patch };
@@ -59,6 +66,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
   async function loadAndPlay(index: number): Promise<void> {
     const item = queue[index];
     await deps.audioPlayer.load(item.filePath);
+    if (rate !== 1) await deps.audioPlayer.setRate(rate);
     await deps.audioPlayer.play();
     setState({
       status: 'playing',
@@ -208,6 +216,33 @@ export function createPlaybackService(deps: PlaybackDeps) {
       } catch (error) {
         setState({ status: 'idle' });
         return err('network', `播放失败：${errorMessage(error)}`);
+      }
+    },
+
+    /** 倍速：播放端即时生效，settings 持久化（F-1） */
+    async setRate(next: number): Promise<Result<null>> {
+      if (next < 0.5 || next > 3) return err('invalid', '倍速超出支持范围');
+      rate = next;
+      setState({ rate: next });
+      try {
+        await deps.audioPlayer.setRate(rate);
+        await deps.settingsRepository.set('playback-speed', String(rate));
+        return ok(null);
+      } catch (error) {
+        return err('network', `倍速设置失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+
+    async restoreRate(): Promise<void> {
+      const saved = await deps.settingsRepository.get('playback-speed');
+      const parsed = saved === null ? 1 : Number(saved);
+      if (Number.isFinite(parsed) && parsed > 0) rate = parsed;
+      if (rate !== 1) {
+        try {
+          await deps.audioPlayer.setRate(rate);
+        } catch {
+          // 静默：下次播放再应用
+        }
       }
     },
 

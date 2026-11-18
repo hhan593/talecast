@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createGenerationService } from './generation';
 import { createImportService } from './import';
 import { createPlaybackService } from './playback';
+
 import {
   FakeAudioFileStore,
   FakeAudioPlayer,
@@ -72,10 +73,12 @@ async function setupWithGeneratedChapter() {
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   const audioPlayer = new FakeAudioPlayer();
+  const settingsRepository = new (await import('./fakes')).FakeSettingsRepository();
   const playback = createPlaybackService({
     audioPlayer,
     generationStore,
     libraryQuery,
+    settingsRepository,
     readingStateRepository: readingStates,
   });
   return { projects, library, files, generationStore, readingStates, chapters, started, audioPlayer, playback };

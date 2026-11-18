@@ -20,10 +20,14 @@ export interface ReaderViewProps {
   playbackStatus: 'idle' | 'playing' | 'paused' | 'done';
   segmentIndex: number;
   segmentCount: number;
+  /** 当前倍速（播放端即时生效，F-1） */
+  playbackRate: number;
   onBack(): void;
   onPlayChapter(): void;
   onPause(): void;
   onResume(): void;
+  /** 倍速循环：0.8 → 1.0 → 1.2 → 1.5 → 2.0 → 0.8 */
+  onCycleRate(): void;
   onSeekParagraph(paragraph: Paragraph): void;
   onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
 }
@@ -72,6 +76,12 @@ export function ReaderView(props: ReaderViewProps) {
         ) : (
           <Text className="text-xs text-faint">段级播放：当前段即高亮单元</Text>
         )}
+        <Pressable
+          className="ml-auto rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
+          onPress={props.onCycleRate}
+        >
+          <Text className="text-xs text-ink dark:text-ink-night">{props.playbackRate}×</Text>
+        </Pressable>
       </View>
       {props.paragraphs.length === 0 ? (
         <View className="flex-1 items-center justify-center">
