@@ -43,6 +43,15 @@ export function createSettingsService(deps: SettingsDeps) {
     async getUsage(): Promise<{ ttsOk: number; ttsFailed: number; llmOk: number; llmFailed: number }> {
       return deps.requestLogRepository.counts();
     },
+
+    /** 非敏感界面偏好（书架视图、字号等）：随 settings 表持久化 */
+    async getSetting(key: string): Promise<string | null> {
+      return deps.settingsRepository.get(key);
+    },
+
+    async setSetting(key: string, value: string): Promise<void> {
+      return deps.settingsRepository.set(key, value);
+    },
   };
 }
 
