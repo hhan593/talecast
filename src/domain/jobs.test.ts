@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { segmentForTts } from './segmenter';
-import { assertJobStartable, buildSegmentPlan, computeJobInputHash, computeSegmentTextHash } from './jobs';
+import { assertJobStartable, buildProsodyJson, buildSegmentPlan, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from './jobs';
 
 const baseInput = {
   chapterTextSha256: 'a'.repeat(64),
