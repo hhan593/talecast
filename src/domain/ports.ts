@@ -186,11 +186,14 @@ export interface AudioFileStore {
 }
 
 export interface AudioPlayer {
-  load(uri: string): Promise<void>;
+  /** meta 供锁屏/通知栏展示（标题=章节名，作者=书名） */
+  load(uri: string, meta?: { title?: string; artist?: string }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   /** 跳转到段内毫秒位置（拖动进度/点段跳转） */
   seek(positionMs: number): Promise<void>;
+  /** 播放速率（0.8–2.0），即时生效（F-1） */
+  setRate(rate: number): Promise<void>;
   onProgress(callback: (positionMs: number) => void): () => void;
   onPlaybackEnd(callback: () => void): () => void;
   release(): void;

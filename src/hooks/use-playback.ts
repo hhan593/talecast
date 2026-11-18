@@ -35,6 +35,14 @@ export function usePlayback(projectId: string) {
     [services],
   );
   const stop = useCallback(() => services.playback.stop(), [services]);
+  const setRate = useCallback(
+    async (next: number) => {
+      const result = await services.playback.setRate(next);
+      if (!result.ok) setError(result.error.message);
+      return result;
+    },
+    [services],
+  );
 
-  return { state, error, playChapter, pause, resume, seekToSegment, stop };
+  return { state, error, playChapter, pause, resume, seekToSegment, stop, setRate };
 }

@@ -160,12 +160,18 @@ export default function ProjectWorkbenchScreen() {
         }
         playingThisChapter={playback.state.chapterId === current.chapter.id}
         playbackStatus={playback.state.status}
+        playbackRate={playback.state.rate}
         segmentIndex={playback.state.segmentIndex}
         segmentCount={playback.state.segmentCount}
         onBack={() => setView('chapters')}
         onPlayChapter={() => void playback.playChapter(current.chapter.id)}
         onPause={() => void playback.pause()}
         onResume={() => void playback.resume()}
+        onCycleRate={() => {
+          const rates = [0.8, 1.0, 1.2, 1.5, 2.0];
+          const next = rates[(rates.indexOf(playback.state.rate) + 1) % rates.length];
+          void playback.setRate(next);
+        }}
         onSeekParagraph={(paragraph) => void seekToParagraph(paragraph)}
         onViewableItems={(info) => viewableCallbackRef.current?.(info)}
       />
