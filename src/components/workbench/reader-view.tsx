@@ -98,8 +98,8 @@ export function ReaderView(props: ReaderViewProps) {
                 <Text
                   className={
                     isHighlighted
-                      ? 'rounded-lg bg-accent-soft py-2 text-[15px] leading-6 text-accent-deep dark:bg-accent-nightsoft dark:text-ink-night'
-                      : 'py-2 text-[15px] leading-6 text-ink dark:text-ink-night'
+                      ? 'rounded-lg bg-accent-soft py-2 font-serif text-[15.5px] leading-7 text-accent-deep dark:bg-accent-nightsoft dark:text-ink-night'
+                      : 'py-2 font-serif text-[15.5px] leading-7 text-ink dark:text-ink-night'
                   }
                 >
                   {item.text}
