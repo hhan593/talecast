@@ -29,17 +29,17 @@ export interface AssistantViewProps {
 
 export function AssistantView(props: AssistantViewProps) {
   return (
-    <View className="flex-1 bg-zinc-50 pt-14 dark:bg-zinc-950">
+    <View className="flex-1 bg-paper pt-14 dark:bg-paper-night">
       <View className="flex-row items-center justify-between px-4">
-        <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={props.onBack}>
-          <Text className="text-sm text-zinc-700 dark:text-zinc-300">返回目录</Text>
+        <Pressable className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night" onPress={props.onBack}>
+          <Text className="text-sm text-ink dark:text-ink-night">返回目录</Text>
         </Pressable>
-        <Text className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">书籍助手</Text>
+        <Text className="text-sm font-semibold text-ink dark:text-ink-night">书籍助手</Text>
         <View className="w-16" />
       </View>
       {props.hasEarlier ? (
         <Pressable className="mt-2 self-center px-4" onPress={props.onLoadEarlier}>
-          <Text className="text-xs text-indigo-500">加载更早消息</Text>
+          <Text className="text-xs text-accent">加载更早消息</Text>
         </Pressable>
       ) : null}
       <FlatList
@@ -48,7 +48,7 @@ export function AssistantView(props: AssistantViewProps) {
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
           <View className="items-center py-16">
-            <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+            <Text className="text-center text-sm text-muted dark:text-muted-night">
               还没有会话记录。助手只提出建议（候选），不会直接修改书籍内容；
               分章候选需要你在审阅中人工采用。使用前需在 设置 → 服务连接 配置文本模型。
             </Text>
@@ -59,20 +59,20 @@ export function AssistantView(props: AssistantViewProps) {
             <View
               className={
                 item.role === 'user'
-                  ? 'max-w-[85%] rounded-2xl bg-indigo-500 px-4 py-2 my-1'
-                  : 'max-w-[85%] rounded-2xl bg-white px-4 py-2 my-1 dark:bg-zinc-900'
+                  ? 'max-w-[85%] rounded-2xl bg-accent px-4 py-2 my-1'
+                  : 'max-w-[85%] rounded-2xl bg-card px-4 py-2 my-1 dark:bg-card-night'
               }
             >
               <Text
                 className={
-                  item.role === 'user' ? 'text-sm text-white' : 'text-sm text-zinc-800 dark:text-zinc-200'
+                  item.role === 'user' ? 'text-sm text-white' : 'text-sm text-ink dark:text-ink-night'
                 }
               >
                 {item.text}
               </Text>
               {item.proposalId ? (
                 <Pressable
-                  className="mt-2 rounded-lg bg-amber-500 px-3 py-1.5 self-start"
+                  className="mt-2 rounded-lg bg-gold px-3 py-1.5 self-start"
                   onPress={() => props.onOpenProposal(item.proposalId!)}
                 >
                   <Text className="text-xs font-semibold text-white">去审阅候选（需人工采用）</Text>
@@ -83,25 +83,25 @@ export function AssistantView(props: AssistantViewProps) {
         )}
       />
       {props.streaming ? (
-        <Text className="px-4 pb-1 text-xs text-zinc-400" numberOfLines={4}>
+        <Text className="px-4 pb-1 text-xs text-faint" numberOfLines={4}>
           {props.streamText || '…'}
         </Text>
       ) : null}
       {props.error ? (
-        <Text className="mx-4 rounded-lg bg-red-50 p-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
+        <Text className="mx-4 rounded-lg bg-danger-soft p-2 text-xs text-danger dark:bg-danger-nightsoft dark:text-danger-night">
           {props.error}
         </Text>
       ) : null}
-      <View className="flex-row items-center gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <View className="flex-row items-center gap-2 border-t border-line px-4 py-3 dark:border-line-night">
         <TextInput
-          className="flex-1 rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
+          className="flex-1 rounded-xl border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
           placeholder="向助手提问或请求重新分章（只提议，不直改）"
           value={props.input}
           onChangeText={props.onInputChange}
           multiline
         />
         <Pressable
-          className="rounded-xl bg-indigo-500 px-4 py-2.5"
+          className="rounded-xl bg-accent px-4 py-2.5"
           disabled={props.streaming || props.input.trim().length === 0}
           onPress={() => props.onSend(props.input)}
         >

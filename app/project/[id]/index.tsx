@@ -131,16 +131,16 @@ export default function ProjectWorkbenchScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <View className="flex-1 items-center justify-center bg-paper dark:bg-paper-night">
         <ActivityIndicator />
       </View>
     );
   }
   if (notFound || !project) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-zinc-50 dark:bg-zinc-950">
-        <Text className="text-base text-zinc-700 dark:text-zinc-300">这本书不存在或已被删除</Text>
-        <Pressable className="rounded-xl bg-indigo-500 px-4 py-2" onPress={() => router.back()}>
+      <View className="flex-1 items-center justify-center gap-3 bg-paper dark:bg-paper-night">
+        <Text className="text-base text-ink dark:text-ink-night">这本书不存在或已被删除</Text>
+        <Pressable className="rounded-xl bg-accent px-4 py-2" onPress={() => router.back()}>
           <Text className="font-semibold text-white">返回书架</Text>
         </Pressable>
       </View>
@@ -201,40 +201,40 @@ export default function ProjectWorkbenchScreen() {
 
   // ------------------------------------------------------------------ 目录视图
   return (
-    <View className="flex-1 bg-zinc-50 px-4 pb-6 pt-14 dark:bg-zinc-950">
-      <Text className="text-2xl font-bold text-zinc-900 dark:text-zinc-50" numberOfLines={1}>
+    <View className="flex-1 bg-paper px-4 pb-6 pt-14 dark:bg-paper-night">
+      <Text className="font-serif text-2xl font-bold text-ink dark:text-ink-night" numberOfLines={1}>
         {project.title}
       </Text>
-      <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+      <Text className="mt-1 text-xs text-muted dark:text-muted-night">
         revision {project.revision}
         {library.source ? ` · 来源《${library.source.filename}》` : ''}
       </Text>
 
       {library.error ? (
-        <Text className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
+        <Text className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger dark:bg-danger-nightsoft dark:text-danger-night">
           {library.error}
         </Text>
       ) : null}
 
       <View className="mt-3 flex-row gap-2">
         <Pressable
-          className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+          className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
         >
-          <Text className="text-sm text-zinc-800 dark:text-zinc-200">角色中心</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">角色中心</Text>
         </Pressable>
         <Pressable
-          className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+          className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => setView('assistant')}
         >
-          <Text className="text-sm text-zinc-800 dark:text-zinc-200">书籍助手</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">书籍助手</Text>
         </Pressable>
       </View>
 
       {generation.progress ? (
-        <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
+        <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
           <View className="flex-row items-center justify-between">
-            <Text className="font-semibold text-zinc-900 dark:text-zinc-100">
+            <Text className="font-semibold text-ink dark:text-ink-night">
               生成任务 ·{' '}
               {generation.progress.status === 'done'
                 ? '已完成'
@@ -244,7 +244,7 @@ export default function ProjectWorkbenchScreen() {
             </Text>
             {generation.progress.status === 'failed' ? (
               <Pressable
-                className="rounded-lg bg-amber-500 px-3 py-1.5"
+                className="rounded-lg bg-gold px-3 py-1.5"
                 disabled={generation.busy}
                 onPress={() => void generation.retry(generation.progress!.jobId)}
               >
@@ -253,20 +253,20 @@ export default function ProjectWorkbenchScreen() {
             ) : null}
             {generation.progress.status === 'running' || generation.progress.status === 'pending' ? (
               <Pressable
-                className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800"
+                className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
                 onPress={() => void generation.cancel(generation.progress!.jobId)}
               >
-                <Text className="text-xs text-zinc-700 dark:text-zinc-300">取消</Text>
+                <Text className="text-xs text-ink dark:text-ink-night">取消</Text>
               </Pressable>
             ) : null}
           </View>
-          <View className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800">
+          <View className="mt-2 h-2 rounded-full bg-raised dark:bg-card-night">
             <View
-              className="h-2 rounded-full bg-indigo-500"
+              className="h-2 rounded-full bg-accent"
               style={{ width: `${Math.round((generation.progress.progress / Math.max(generation.progress.totalSegments, 1)) * 100)}%` }}
             />
           </View>
-          <Text className="mt-2 text-xs text-zinc-500 dark:text-zinc-400" numberOfLines={3}>
+          <Text className="mt-2 text-xs text-muted dark:text-muted-night" numberOfLines={3}>
             {generation.progress.error ?? `${generation.progress.progress}/${generation.progress.totalSegments} 段完成`}
           </Text>
         </View>
@@ -275,7 +275,7 @@ export default function ProjectWorkbenchScreen() {
       <View className="mt-3 flex-row flex-wrap gap-2">
         {!library.source ? (
           <Pressable
-            className="flex-1 items-center rounded-xl bg-indigo-500 py-2.5 active:bg-indigo-600"
+            className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
             disabled={library.busy}
             onPress={() => void library.importTxt()}
           >
@@ -284,7 +284,7 @@ export default function ProjectWorkbenchScreen() {
         ) : (
           <>
             <Pressable
-              className="rounded-xl bg-zinc-200 px-3 py-2.5 dark:bg-zinc-800"
+              className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
               disabled={library.busy}
               onPress={() => {
                 void library.resplit().then((result) => {
@@ -297,15 +297,15 @@ export default function ProjectWorkbenchScreen() {
                 });
               }}
             >
-              <Text className="text-sm text-zinc-800 dark:text-zinc-200">重新分章</Text>
+              <Text className="text-sm text-ink dark:text-ink-night">重新分章</Text>
             </Pressable>
             <Pressable
-              className="rounded-xl bg-zinc-200 px-3 py-2.5 dark:bg-zinc-800"
+              className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
               onPress={() =>
                 Alert.alert('能力边界', '采用/撤销历史候选请重新发起"重新分章"并在审阅中操作。')
               }
             >
-              <Text className="text-sm text-zinc-800 dark:text-zinc-200">候选历史</Text>
+              <Text className="text-sm text-ink dark:text-ink-night">候选历史</Text>
             </Pressable>
           </>
         )}
@@ -317,42 +317,42 @@ export default function ProjectWorkbenchScreen() {
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={library.busy} onRefresh={() => void library.refresh()} />}
         renderItem={({ item, index }) => (
-          <View className="rounded-xl bg-white px-4 py-3 dark:bg-zinc-900">
+          <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
             <Pressable onPress={() => void openChapter(item.id)}>
-              <Text className="font-semibold text-zinc-900 dark:text-zinc-100">
+              <Text className="font-semibold text-ink dark:text-ink-night">
                 {index + 1}. {item.title}
               </Text>
-              <Text className="mt-1 text-xs text-zinc-400">
+              <Text className="mt-1 text-xs text-faint">
                 偏移 {item.startOffset}–{item.endOffset}
               </Text>
             </Pressable>
             {library.source ? (
               <View className="mt-2 flex-row flex-wrap gap-2">
-                <Pressable className="rounded-md bg-zinc-100 px-2 py-1 dark:bg-zinc-800" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: '修改标题', initial: item.title })}>
-                  <Text className="text-xs text-zinc-600 dark:text-zinc-300">改名</Text>
+                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: '修改标题', initial: item.title })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">改名</Text>
                 </Pressable>
-                <Pressable className="rounded-md bg-zinc-100 px-2 py-1 dark:bg-zinc-800" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: '从此处拆分（字符偏移）', initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
-                  <Text className="text-xs text-zinc-600 dark:text-zinc-300">拆分</Text>
+                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: '从此处拆分（字符偏移）', initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">拆分</Text>
                 </Pressable>
-                <Pressable className="rounded-md bg-zinc-100 px-2 py-1 dark:bg-zinc-800" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
-                  <Text className="text-xs text-zinc-600 dark:text-zinc-300">边界</Text>
+                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">边界</Text>
                 </Pressable>
                 <Pressable
-                  className="rounded-md bg-indigo-50 px-2 py-1 dark:bg-indigo-950"
+                  className="rounded-md bg-accent-soft px-2 py-1 dark:bg-accent-nightsoft"
                   disabled={generation.busy}
                   onPress={() => void generation.preview(item.id)}
                 >
-                  <Text className="text-xs text-indigo-600 dark:text-indigo-400">试听首段</Text>
+                  <Text className="text-xs text-accent dark:text-accent-night">试听首段</Text>
                 </Pressable>
                 <Pressable
-                  className="rounded-md bg-indigo-500 px-2 py-1"
+                  className="rounded-md bg-accent px-2 py-1"
                   disabled={generation.busy}
                   onPress={() => void generation.start(item.id)}
                 >
                   <Text className="text-xs font-semibold text-white">生成本章</Text>
                 </Pressable>
                 <Pressable
-                  className="rounded-md bg-red-50 px-2 py-1 dark:bg-red-950"
+                  className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                   onPress={() =>
                     Alert.alert('删除本章', `《${item.title}》正文将并入相邻章节，来源不变。确认删除？`, [
                       { text: '取消', style: 'cancel' },
@@ -360,7 +360,7 @@ export default function ProjectWorkbenchScreen() {
                     ])
                   }
                 >
-                  <Text className="text-xs text-red-600 dark:text-red-400">删除</Text>
+                  <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -369,7 +369,7 @@ export default function ProjectWorkbenchScreen() {
         ItemSeparatorComponent={() => <View className="h-2" />}
         ListEmptyComponent={
           <View className="items-center py-16">
-            <Text className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+            <Text className="text-center text-sm text-muted dark:text-muted-night">
               还没有章节。导入一本 UTF-8 TXT 小说开始制作。
             </Text>
           </View>

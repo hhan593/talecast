@@ -19,21 +19,21 @@ export default function ReviewModal() {
         : '已撤销：可重新发起"重新分章"生成新候选';
 
   return (
-    <View className="flex-1 bg-zinc-50 dark:bg-zinc-950">
-      <View className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <Text className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+    <View className="flex-1 bg-paper dark:bg-paper-night">
+      <View className="border-b border-line px-4 py-3 dark:border-line-night">
+        <Text className="text-base font-semibold text-ink dark:text-ink-night">
           分章候选 · {proposal.drafts.length} 章
         </Text>
-        <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{statusText}</Text>
+        <Text className="mt-1 text-xs text-muted dark:text-muted-night">{statusText}</Text>
         {proposal.error ? (
-          <Text className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
+          <Text className="mt-2 rounded-lg bg-danger-soft p-2 text-xs text-danger dark:bg-danger-nightsoft dark:text-danger-night">
             {proposal.error}
           </Text>
         ) : null}
         <View className="mt-3 flex-row gap-2">
           {proposal.status === 'pending' ? (
             <Pressable
-              className="flex-1 items-center rounded-xl bg-indigo-500 py-2.5 active:bg-indigo-600"
+              className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
               disabled={proposal.busy}
               onPress={() => {
                 void proposal.adopt().then((result) => {
@@ -50,7 +50,7 @@ export default function ReviewModal() {
           ) : null}
           {proposal.status === 'adopted' ? (
             <Pressable
-              className="flex-1 items-center rounded-xl bg-amber-500 py-2.5 active:bg-amber-600"
+              className="flex-1 items-center rounded-xl bg-gold py-2.5 active:bg-amber-600"
               disabled={proposal.busy}
               onPress={() => {
                 Alert.alert('撤销采用', '目录将回退到采用前的版本，来源不变。确认撤销？', [
@@ -78,11 +78,11 @@ export default function ReviewModal() {
         data={proposal.drafts}
         keyExtractor={(_, index) => String(index)}
         renderItem={({ item, index }) => (
-          <View className="rounded-xl bg-white px-4 py-3 dark:bg-zinc-900">
-            <Text className="font-semibold text-zinc-900 dark:text-zinc-100">
+          <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
+            <Text className="font-semibold text-ink dark:text-ink-night">
               {index + 1}. {item.title}
             </Text>
-            <Text className="mt-1 text-xs text-zinc-400">
+            <Text className="mt-1 text-xs text-faint">
               偏移 {item.startOffset}–{item.endOffset}
             </Text>
           </View>
@@ -90,7 +90,7 @@ export default function ReviewModal() {
         ItemSeparatorComponent={() => <View className="h-2" />}
         ListEmptyComponent={
           <View className="items-center py-12">
-            <Text className="text-sm text-zinc-500">候选不存在或已被清理</Text>
+            <Text className="text-sm text-muted">候选不存在或已被清理</Text>
           </View>
         }
       />
