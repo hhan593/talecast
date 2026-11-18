@@ -20,16 +20,16 @@ export default function CharacterDetailScreen() {
 
   if (characters.characters === null) {
     return (
-      <View className="flex-1 items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <View className="flex-1 items-center justify-center bg-paper dark:bg-paper-night">
         <ActivityIndicator />
       </View>
     );
   }
   if (!character) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-zinc-50 dark:bg-zinc-950">
-        <Text className="text-sm text-zinc-600 dark:text-zinc-300">角色不存在或已被删除</Text>
-        <Pressable className="rounded-lg bg-indigo-500 px-4 py-2" onPress={() => router.back()}>
+      <View className="flex-1 items-center justify-center gap-3 bg-paper dark:bg-paper-night">
+        <Text className="text-sm text-muted dark:text-ink-night">角色不存在或已被删除</Text>
+        <Pressable className="rounded-lg bg-accent px-4 py-2" onPress={() => router.back()}>
           <Text className="font-semibold text-white">返回</Text>
         </Pressable>
       </View>
@@ -39,55 +39,55 @@ export default function CharacterDetailScreen() {
   const profileText = characterProfileText(character.profileJson);
 
   return (
-    <View className="flex-1 bg-zinc-50 px-4 py-4 dark:bg-zinc-950">
-      <View className="rounded-xl bg-white p-4 dark:bg-zinc-900">
+    <View className="flex-1 bg-paper px-4 py-4 dark:bg-paper-night">
+      <View className="rounded-xl bg-card p-4 dark:bg-card-night">
         <View className="flex-row items-center justify-between">
-          <Text className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+          <Text className="text-lg font-bold text-ink dark:text-ink-night">
             {character.name}
             {character.confirmed ? ' ✓' : ''}
           </Text>
-          <Text className="text-xs text-zinc-400">
+          <Text className="text-xs text-faint">
             {character.confirmed ? '已确认 · 人工保护中' : '未确认候选'}
           </Text>
         </View>
-        <Text className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{profileText}</Text>
+        <Text className="mt-2 text-sm text-muted dark:text-muted-night">{profileText}</Text>
       </View>
 
-      <View className="mt-3 rounded-xl bg-white p-4 dark:bg-zinc-900">
-        <Text className="font-semibold text-zinc-900 dark:text-zinc-100">音色绑定</Text>
-        <Text className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+      <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+        <Text className="font-semibold text-ink dark:text-ink-night">音色绑定</Text>
+        <Text className="mt-2 text-xs text-muted dark:text-muted-night">
           {binding ? `当前音色：${characters.voiceName(binding.voiceId)}（修订 ${binding.revision}）` : '未绑定音色'}
         </Text>
         {character.confirmed ? (
           <Pressable
-            className="mt-3 items-center rounded-xl bg-indigo-500 py-2.5"
+            className="mt-3 items-center rounded-xl bg-accent py-2.5"
             onPress={() => setPickerVisible(true)}
           >
             <Text className="font-semibold text-white">{binding ? '更换音色' : '绑定音色'}</Text>
           </Pressable>
         ) : (
           <Pressable
-            className="mt-3 items-center rounded-xl bg-indigo-500 py-2.5"
+            className="mt-3 items-center rounded-xl bg-accent py-2.5"
             onPress={() => void characters.confirm(character.id)}
           >
             <Text className="font-semibold text-white">人工确认此角色</Text>
           </Pressable>
         )}
-        <Text className="mt-2 text-xs text-zinc-400">
+        <Text className="mt-2 text-xs text-faint">
           绑定修订号参与生成任务的 input_hash：更换音色后旧段缓存不会被误用。
         </Text>
       </View>
 
       <View className="mt-3 flex-row gap-2">
         <Pressable
-          className="flex-1 items-center rounded-xl bg-zinc-200 py-2.5 dark:bg-zinc-800"
+          className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => setRenameVisible(true)}
         >
-          <Text className="text-sm text-zinc-800 dark:text-zinc-200">改名</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">改名</Text>
         </Pressable>
         {!character.manualProtected ? (
           <Pressable
-            className="flex-1 items-center rounded-xl bg-red-50 py-2.5 dark:bg-red-950"
+            className="flex-1 items-center rounded-xl bg-danger-soft py-2.5 dark:bg-danger-nightsoft"
             onPress={() =>
               Alert.alert('删除候选', `删除未确认候选"${character.name}"？`, [
                 { text: '取消', style: 'cancel' },
@@ -101,7 +101,7 @@ export default function CharacterDetailScreen() {
               ])
             }
           >
-            <Text className="text-sm text-red-600 dark:text-red-400">删除候选</Text>
+            <Text className="text-sm text-danger dark:text-danger-night">删除候选</Text>
           </Pressable>
         ) : null}
       </View>

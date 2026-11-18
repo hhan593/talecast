@@ -32,13 +32,13 @@ export function ReaderView(props: ReaderViewProps) {
   const playingHere = props.playingThisChapter && props.playbackStatus === 'playing';
   const pausedHere = props.playingThisChapter && props.playbackStatus === 'paused';
   return (
-    <View className="flex-1 bg-zinc-50 pt-14 dark:bg-zinc-950">
+    <View className="flex-1 bg-paper pt-14 dark:bg-paper-night">
       <View className="flex-row items-center justify-between px-4">
-        <Pressable className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800" onPress={props.onBack}>
-          <Text className="text-sm text-zinc-700 dark:text-zinc-300">返回目录</Text>
+        <Pressable className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night" onPress={props.onBack}>
+          <Text className="text-sm text-ink dark:text-ink-night">返回目录</Text>
         </Pressable>
         <Text
-          className="flex-1 mx-3 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+          className="flex-1 mx-3 text-center text-sm font-semibold text-ink dark:text-ink-night"
           numberOfLines={1}
         >
           {props.chapterTitle}
@@ -48,34 +48,34 @@ export function ReaderView(props: ReaderViewProps) {
       <View className="mt-2 flex-row items-center gap-2 px-4">
         {playingHere ? (
           <Pressable
-            className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800"
+            className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
             onPress={props.onPause}
           >
-            <Text className="text-xs text-zinc-700 dark:text-zinc-300">暂停</Text>
+            <Text className="text-xs text-ink dark:text-ink-night">暂停</Text>
           </Pressable>
         ) : pausedHere ? (
           <Pressable
-            className="rounded-lg bg-zinc-200 px-3 py-1.5 dark:bg-zinc-800"
+            className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
             onPress={props.onResume}
           >
-            <Text className="text-xs text-zinc-700 dark:text-zinc-300">继续</Text>
+            <Text className="text-xs text-ink dark:text-ink-night">继续</Text>
           </Pressable>
         ) : (
-          <Pressable className="rounded-lg bg-indigo-500 px-3 py-1.5" onPress={props.onPlayChapter}>
+          <Pressable className="rounded-lg bg-accent px-3 py-1.5" onPress={props.onPlayChapter}>
             <Text className="text-xs font-semibold text-white">播放整章</Text>
           </Pressable>
         )}
         {props.playingThisChapter && props.segmentCount > 0 ? (
-          <Text className="text-xs text-zinc-500 dark:text-zinc-400">
+          <Text className="text-xs text-muted dark:text-muted-night">
             正在朗读第 {props.segmentIndex + 1}/{props.segmentCount} 段（点任意段落跳转）
           </Text>
         ) : (
-          <Text className="text-xs text-zinc-400">段级播放：当前段即高亮单元</Text>
+          <Text className="text-xs text-faint">段级播放：当前段即高亮单元</Text>
         )}
       </View>
       {props.paragraphs.length === 0 ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-sm text-zinc-500">本章内容为空</Text>
+          <Text className="text-sm text-muted">本章内容为空</Text>
         </View>
       ) : (
         <FlatList
@@ -98,8 +98,8 @@ export function ReaderView(props: ReaderViewProps) {
                 <Text
                   className={
                     isHighlighted
-                      ? 'rounded-lg bg-indigo-50 py-2 text-[15px] leading-6 text-indigo-950 dark:bg-indigo-950 dark:text-indigo-100'
-                      : 'py-2 text-[15px] leading-6 text-zinc-800 dark:text-zinc-200'
+                      ? 'rounded-lg bg-accent-soft py-2 text-[15px] leading-6 text-accent-deep dark:bg-accent-nightsoft dark:text-ink-night'
+                      : 'py-2 text-[15px] leading-6 text-ink dark:text-ink-night'
                   }
                 >
                   {item.text}

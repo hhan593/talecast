@@ -24,13 +24,13 @@ export function EditDialog(props: {
     <Modal visible={props.visible} transparent animationType="fade" onRequestClose={props.onClose}>
       <Pressable className="flex-1 items-center justify-center bg-black/50 px-6" onPress={props.onClose}>
         <Pressable
-          className="w-full rounded-2xl bg-white p-5 dark:bg-zinc-900"
+          className="w-full rounded-2xl bg-card p-5 dark:bg-card-night"
           onPress={() => {
           }}
         >
-          <Text className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{props.title}</Text>
+          <Text className="text-base font-semibold text-ink dark:text-ink-night">{props.title}</Text>
           <TextInput
-            className="mt-3 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
+            className="mt-3 rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
             value={value}
             onChangeText={setValue}
             keyboardType={props.keyboardType ?? 'default'}
@@ -39,10 +39,10 @@ export function EditDialog(props: {
           />
           <View className="mt-4 flex-row justify-end gap-3">
             <Pressable className="rounded-lg px-4 py-2" onPress={props.onClose}>
-              <Text className="text-sm text-zinc-500 dark:text-zinc-400">取消</Text>
+              <Text className="text-sm text-muted dark:text-muted-night">取消</Text>
             </Pressable>
             <Pressable
-              className="rounded-lg bg-indigo-500 px-4 py-2"
+              className="rounded-lg bg-accent px-4 py-2"
               onPress={() => {
                 props.onConfirm(value);
                 props.onClose();
