@@ -251,6 +251,15 @@ export default function ProjectWorkbenchScreen() {
                 <Text className="text-xs font-semibold text-white">重试缺失段</Text>
               </Pressable>
             ) : null}
+            {generation.progress.status === 'done' ? (
+              <Pressable
+                className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
+                disabled={generation.busy}
+                onPress={() => void generation.exportChapter(generation.progress!.jobId)}
+              >
+                <Text className="text-xs text-ink dark:text-ink-night">导出分享 MP3</Text>
+              </Pressable>
+            ) : null}
             {generation.progress.status === 'running' || generation.progress.status === 'pending' ? (
               <Pressable
                 className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
