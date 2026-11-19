@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
@@ -16,6 +17,7 @@ import {
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
 import { MARGINS, ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
+import { useAnnotations } from '@/hooks/use-annotations';
 import { useAssistant } from '@/hooks/use-assistant';
 import { useBookSearch } from '@/hooks/use-book-search';
 import { useBookmarks } from '@/hooks/use-bookmarks';
@@ -40,6 +42,8 @@ export default function ProjectWorkbenchScreen() {
   const playback = usePlayback(projectId);
   const assistant = useAssistant(projectId);
   const bookmarks = useBookmarks(projectId);
+  const annotations = useAnnotations(projectId);
+  const [longPressRange, setLongPressRange] = useState<{ start: number; end: number } | null>(null);
   const bookSearch = useBookSearch(projectId);
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
@@ -52,7 +56,7 @@ export default function ProjectWorkbenchScreen() {
   const [readerTheme, setReaderTheme] = useState<'paper' | 'green' | 'white' | 'night'>('paper');
   const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover' | 'curl'>('slide');
   const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null);
-  const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'search'>('chapters');
+  const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'notes' | 'search'>('chapters');
   const [searchInput, setSearchInput] = useState('');
   const [dialogueVoices, setDialogueVoices] = useState(true);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'off' | 'slow' | 'standard' | 'fast'>('off');
@@ -75,6 +79,8 @@ export default function ProjectWorkbenchScreen() {
     | { kind: 'rename'; chapterId: string; title: string; initial: string }
     | { kind: 'split'; chapterId: string; title: string; initial: string }
     | { kind: 'boundary'; chapterId: string; title: string; initial: string }
+    | { kind: 'note-annotation'; title: string; range: { start: number; end: number }; initial: string }
+    | { kind: 'edit-note'; title: string; annotationId: string; initial: string }
     | null
   >(null);
   const lastSaveRef = useRef(0);
@@ -237,6 +243,31 @@ export default function ProjectWorkbenchScreen() {
   const getChapterTitle = useCallback(
     (index: number) => chapters[index]?.title ?? '',
     [chapters],
+  );
+
+  // 划线与笔记（v0.12.0）：当前书全部区间下发给阅读器渲染
+  const annotationRanges = useMemo(
+    () => annotations.annotations.map((a) => ({ start: a.startOffset, end: a.endOffset })),
+    [annotations.annotations],
+  );
+  const handleAnnotate = useCallback(
+    (kind: 'underline' | 'note' | 'copy') => {
+      if (!current || !longPressRange) return;
+      if (kind === 'copy') {
+        void Clipboard.setStringAsync(current.chapterText.slice(longPressRange.start, longPressRange.end));
+        setLongPressRange(null);
+        return;
+      }
+      if (kind === 'underline') {
+        void annotations
+          .add(current.chapter.id, longPressRange.start, longPressRange.end, '')
+          .then(() => setLongPressRange(null));
+        return;
+      }
+      // 笔记：对话框输入后写入
+      setDialog({ kind: 'note-annotation', title: '写笔记', range: longPressRange, initial: '' });
+    },
+    [annotations, current, longPressRange],
   );
 
   // 睡眠定时循环（v0.11.0）：关 → 15 分 → 30 分 → 60 分 → 播完本章 → 播完本段 → 关
@@ -481,6 +512,10 @@ export default function ProjectWorkbenchScreen() {
         onScrollTap={() => {
           if (autoScrollSpeed !== 'off') setAutoScrollPaused((p) => !p);
         }}
+        annotations={annotationRanges}
+        longPressRange={longPressRange}
+        onLongPressText={setLongPressRange}
+        onAnnotate={handleAnnotate}
         fontFamily={readerFontFamily}
         onCycleFontFamily={() => {
           const cycle: Array<'serif' | 'sans' | 'system'> = ['serif', 'sans', 'system'];
@@ -670,6 +705,7 @@ export default function ProjectWorkbenchScreen() {
         {([
           ['chapters', `章节${chapters.length > 0 ? ` ${chapters.length}` : ''}`],
           ['bookmarks', `书签${bookmarks.bookmarks.length > 0 ? ` ${bookmarks.bookmarks.length}` : ''}`],
+          ['notes', `笔记${annotations.annotations.length > 0 ? ` ${annotations.annotations.length}` : ''}`],
           ['search', '搜索'],
         ] as const).map(([key, label]) => (
           <Pressable accessibilityRole="button"
@@ -794,6 +830,88 @@ export default function ProjectWorkbenchScreen() {
         />
       ) : null}
 
+      {catalogView === 'notes' ? (
+        <View className="mt-3 flex-1">
+          {annotations.annotations.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              className="mb-2 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
+              onPress={() => {
+                void services.annotations
+                  .exportMarkdown(projectId)
+                  .then((result) => {
+                    if (!result.ok) return;
+                    void services.shareTextFile(
+                      `${(project?.title ?? '笔记').slice(0, 20)}-划线笔记.md`,
+                      result.value.markdown,
+                      'text/markdown',
+                    );
+                  });
+              }}
+            >
+              <Text className="text-sm text-ink dark:text-ink-night">导出 Markdown</Text>
+            </Pressable>
+          ) : null}
+          <FlatList
+            data={annotations.annotations}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const chapter = chapters.find((c) => c.id === item.chapterId);
+              return (
+                <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
+                  <Text className="text-sm text-ink dark:text-ink-night" numberOfLines={3}>
+                    {chapter ? chapter.title : '章节'}
+                  </Text>
+                  {item.note.length > 0 ? (
+                    <Text className="mt-1 text-xs text-muted dark:text-muted-night" numberOfLines={4}>
+                      笔记：{item.note}
+                    </Text>
+                  ) : (
+                    <Text className="mt-1 text-xs text-faint" numberOfLines={2}>
+                      划线 · {item.endOffset - item.startOffset} 字
+                    </Text>
+                  )}
+                  <View className="mt-2 flex-row gap-2">
+                    <Pressable
+                      accessibilityRole="button"
+                      className="rounded-md bg-raised px-2 py-1 dark:bg-card-night"
+                      onPress={() => {
+                        setHighlightRange(null);
+                        void openChapter(item.chapterId, item.startOffset);
+                      }}
+                    >
+                      <Text className="text-xs text-muted dark:text-ink-night">跳转</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      className="rounded-md bg-raised px-2 py-1 dark:bg-card-night"
+                      onPress={() => setDialog({ kind: 'edit-note', title: '改笔记', annotationId: item.id, initial: item.note })}
+                    >
+                      <Text className="text-xs text-muted dark:text-ink-night">{item.note.length > 0 ? '改笔记' : '写笔记'}</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
+                      onPress={() => void annotations.remove(item.id)}
+                    >
+                      <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }}
+            ItemSeparatorComponent={() => <View className="h-2" />}
+            ListEmptyComponent={
+              <View className="items-center py-16">
+                <Text className="text-center text-sm text-muted dark:text-muted-night">
+                  还没有划线与笔记。阅读时长按段落即可划线或写笔记。
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      ) : null}
+
       {catalogView === 'search' ? (
         <View className="mt-3 flex-1">
           <View className="flex-row gap-2">
@@ -854,11 +972,17 @@ export default function ProjectWorkbenchScreen() {
         visible={dialog !== null}
         title={dialog?.title ?? ''}
         initialValue={dialog?.initial ?? ''}
-        keyboardType={dialog?.kind === 'rename' ? 'default' : 'numeric'}
+        keyboardType={dialog?.kind === 'rename' || dialog?.kind === 'note-annotation' || dialog?.kind === 'edit-note' ? 'default' : 'numeric'}
         onConfirm={(value) => {
           if (!dialog) return;
           if (dialog.kind === 'rename') {
             void library.rename(dialog.chapterId, value);
+          } else if (dialog.kind === 'note-annotation') {
+            void annotations
+              .add(current!.chapter.id, dialog.range.start, dialog.range.end, value)
+              .then(() => setLongPressRange(null));
+          } else if (dialog.kind === 'edit-note') {
+            void annotations.setNote(dialog.annotationId, value);
           } else if (dialog.kind === 'split') {
             const offset = Number.parseInt(value, 10);
             if (!Number.isFinite(offset)) library.setError('切分点必须是数字偏移量');

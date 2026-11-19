@@ -7,3 +7,4 @@ export { FakeLlmGateway, FakeAssistantRepository } from './assistant';
 export { FakeRequestLogRepository, FakeSettingsRepository } from './settings';
 export { FakeAudioPlayer } from './playback';
 export { textToBytes } from './test-utils';
+export * from './annotations';

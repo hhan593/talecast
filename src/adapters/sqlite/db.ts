@@ -221,6 +221,23 @@ export const MIGRATIONS: Migration[] = [
       'ALTER TABLE generation_segments ADD COLUMN provider_params_json TEXT',
     ],
   },
+  {
+    version: 8,
+    description: '划线与笔记（v0.12.0）：annotations 表',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS annotations (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        chapter_id TEXT NOT NULL,
+        start_offset INTEGER NOT NULL,
+        end_offset INTEGER NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'underline',
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

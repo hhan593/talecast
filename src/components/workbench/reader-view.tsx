@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createAudioPlayer } from 'expo-audio';
 import { useWindowDimensions } from 'react-native';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
 import { pageForOffset, paginateText, type ReaderPage } from '@/domain/reader';
+import { sliceStyledText } from '@/domain/annotations';
 import { READER_THEMES, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
 
@@ -127,6 +128,16 @@ export interface ReaderViewProps {
   pageSoundEnabled: boolean;
   /** 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏 */
   immersive: boolean;
+  /** 划线区间（v0.12.0，书级偏移） */
+  annotations: Array<{ start: number; end: number }>;
+  /**
+   * 长按文本块（v0.12.0）：RN Text 无字符级选区回调，采用段落级长按划线。
+   * range = 长按内容 的书级偏移；null = 清除操作条。
+   */
+  longPressRange: { start: number; end: number } | null;
+  onLongPressText(range: { start: number; end: number } | null): void;
+  /** 长按操作（v0.12.0）：划线/笔记/复制 */
+  onAnnotate(kind: 'underline' | 'note' | 'copy'): void;
   /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
   onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
   /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
@@ -374,20 +385,33 @@ export function ReaderView(props: ReaderViewProps) {
     }
   };
 
-  // 搜索命中高亮：命中区间与文本块交集拆三段渲染（字符级）
+  // 高亮渲染（v0.12.0）：搜索命中 + 划线区间合并切片（字符级，重叠合并）
   const highlightSpans = (text: string, absoluteStart: number): ReactNode => {
-    const range = props.highlightRange;
-    if (!range || range.end <= absoluteStart || range.start >= absoluteStart + text.length) {
-      return text;
+    const ranges: Array<{ start: number; end: number }> = [];
+    const searchRange = props.highlightRange;
+    if (searchRange && searchRange.end > absoluteStart && searchRange.start < absoluteStart + text.length) {
+      ranges.push({
+        start: Math.max(0, searchRange.start - absoluteStart),
+        end: Math.min(text.length, searchRange.end - absoluteStart),
+      });
     }
-    const s = Math.max(0, range.start - absoluteStart);
-    const e = Math.min(text.length, range.end - absoluteStart);
-    return (
-      <>
-        {text.slice(0, s)}
-        <Text style={{ backgroundColor: theme.highlightBgHex }}>{text.slice(s, e)}</Text>
-        {text.slice(e)}
-      </>
+    for (const annotation of props.annotations) {
+      if (annotation.end > absoluteStart && annotation.start < absoluteStart + text.length) {
+        ranges.push({
+          start: Math.max(0, annotation.start - absoluteStart),
+          end: Math.min(text.length, annotation.end - absoluteStart),
+        });
+      }
+    }
+    if (ranges.length === 0) return text;
+    return sliceStyledText(text, ranges).map((slice, index) =>
+      slice.highlighted ? (
+        <Text key={index} style={{ backgroundColor: theme.highlightBgHex }}>
+          {slice.text}
+        </Text>
+      ) : (
+        <Fragment key={index}>{slice.text}</Fragment>
+      ),
     );
   };
 
@@ -423,20 +447,29 @@ export function ReaderView(props: ReaderViewProps) {
 
   const renderChunk = (chunk: PageChunk, page: ReaderPage): ReactNode => {
     const indentPrefix = chunk.isStart && props.indentEnabled ? '\u3000\u3000' : '';
+    const chunkAbsoluteStart = page.startOffset + chunk.localStart;
     return (
-      <Text
+      <Pressable
         key={chunk.key}
-        className={`${bodyFontClass} ${theme.text}`}
-        style={{
-          fontSize,
-          lineHeight: fontSize * lineSpacing,
-          textAlign: props.justifyEnabled ? 'justify' : 'left',
-          marginBottom: chunk.isLast ? 0 : paragraphSpacingPx,
+        onLongPress={() => {
+          hapticLight();
+          props.onLongPressText({ start: chunkAbsoluteStart, end: chunkAbsoluteStart + chunk.text.length });
         }}
+        delayLongPress={350}
       >
-        {indentPrefix}
-        {highlightSpans(chunk.text, page.startOffset + chunk.localStart)}
-      </Text>
+        <Text
+          className={`${bodyFontClass} ${theme.text}`}
+          style={{
+            fontSize,
+            lineHeight: fontSize * lineSpacing,
+            textAlign: props.justifyEnabled ? 'justify' : 'left',
+            marginBottom: chunk.isLast ? 0 : paragraphSpacingPx,
+          }}
+        >
+          {indentPrefix}
+          {highlightSpans(chunk.text, chunkAbsoluteStart)}
+        </Text>
+      </Pressable>
     );
   };
 
@@ -629,26 +662,70 @@ export function ReaderView(props: ReaderViewProps) {
                   item.startOffset <= props.highlightOffset &&
                   props.highlightOffset < item.endOffset;
                 return (
-                  <Text
-                    className={`${bodyFontClass} ${theme.text} ${
-                      isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
-                    }`}
-                    style={{
-                      fontSize,
-                      lineHeight: fontSize * lineSpacing,
-                      paddingVertical: paragraphSpacingPx / 2,
-                      textAlign: props.justifyEnabled ? 'justify' : 'left',
+                  <Pressable
+                    onLongPress={() => {
+                      hapticLight();
+                      props.onLongPressText({
+                        start: item.startOffset,
+                        end: item.startOffset + item.text.length,
+                      });
                     }}
+                    delayLongPress={350}
                   >
-                    {props.indentEnabled ? '\u3000\u3000' : ''}
-                    {highlightSpans(item.text, item.startOffset)}
-                  </Text>
+                    <Text
+                      className={`${bodyFontClass} ${theme.text} ${
+                        isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
+                      }`}
+                      style={{
+                        fontSize,
+                        lineHeight: fontSize * lineSpacing,
+                        paddingVertical: paragraphSpacingPx / 2,
+                        textAlign: props.justifyEnabled ? 'justify' : 'left',
+                      }}
+                    >
+                      {props.indentEnabled ? '\u3000\u3000' : ''}
+                      {highlightSpans(item.text, item.startOffset)}
+                    </Text>
+                  </Pressable>
                 );
               }}
             />
           </TouchableWithoutFeedback>
         ) : null}
       </View>
+
+      {/* 长按操作条（v0.12.0）：长按文本块后悬浮显示 */}
+      {props.longPressRange ? (
+        <View
+          pointerEvents="auto"
+          className={`absolute inset-x-0 bottom-28 mx-4 flex-row items-center gap-2 rounded-xl border p-2 ${theme.surface} ${theme.border}`}
+        >
+          <Text className={`flex-1 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
+            已选中 {props.longPressRange.end - props.longPressRange.start} 字
+          </Text>
+          {([
+            ['underline', '划线'],
+            ['note', '笔记'],
+            ['copy', '复制'],
+          ] as const).map(([kind, label]) => (
+            <Pressable
+              key={kind}
+              accessibilityRole="button"
+              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
+              onPress={() => props.onAnnotate(kind)}
+            >
+              <Text className={`text-xs ${theme.text}`}>{label}</Text>
+            </Pressable>
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
+            onPress={() => props.onLongPressText(null)}
+          >
+            <Text className={`text-xs ${theme.muted}`}>取消</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* 顶部悬浮菜单：导航 + 播放 + 排版（动画显隐） */}
       <Animated.View

@@ -1,4 +1,5 @@
 import { migrateDatabase, openDatabase } from './db';
+import { SqliteAnnotationRepository } from './repos/annotations';
 import { SqliteAssistantRepository } from './repos/assistant';
 import { SqliteBookmarkRepository } from './repos/bookmarks';
 import { SqliteBindingRepository } from './repos/bindings';
@@ -31,5 +32,6 @@ export function createSqliteAdapters() {
     requestLogRepository: new SqliteRequestLogRepository(db),
     assistantRepository: new SqliteAssistantRepository(db),
     bookmarkRepository: new SqliteBookmarkRepository(db),
+    annotationRepository: new SqliteAnnotationRepository(db),
   };
 }

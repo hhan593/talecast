@@ -194,6 +194,14 @@ export interface BookmarkRepository {
   remove(id: string): Promise<void>;
 }
 
+/** 划线与笔记（v0.12.0）：书级偏移区间，章节重排后按偏移尽力回位 */
+export interface AnnotationRepository {
+  list(projectId: string): Promise<Array<import('./annotations').AnnotationRecord>>;
+  insert(record: import('./annotations').AnnotationRecord): Promise<void>;
+  update(id: string, patch: { note?: string; kind?: 'underline' }): Promise<void>;
+  remove(id: string): Promise<void>;
+}
+
 export interface AudioFileStore {
   pathFor(textHash: string): string;
   exists(textHash: string): Promise<boolean>;

@@ -57,14 +57,14 @@ function sourcesDirectoryUri(): string {
 }
 
 /** 沙盒按内容寻址存储实现：写后不可变；同哈希重复导入直接复用 */
-/** 备份 JSON 写缓存目录并调起系统分享（v0.10.0，容器注入 backup.share） */
-export const shareJsonBackup = async (name: string, json: string): Promise<void> => {
+/** 文本文件写缓存目录并调起系统分享（v0.10.0 备份 / v0.12.0 笔记导出共用） */
+export const shareTextFile = async (name: string, content: string, mimeType = 'application/json'): Promise<void> => {
   const fileUri = `${FileSystem.cacheDirectory}${name}`;
-  await FileSystem.writeAsStringAsync(fileUri, json, {
+  await FileSystem.writeAsStringAsync(fileUri, content, {
     encoding: FileSystem.EncodingType.UTF8,
   });
   const Sharing = await import('expo-sharing');
-  await Sharing.shareAsync(fileUri, { mimeType: 'application/json' });
+  await Sharing.shareAsync(fileUri, { mimeType });
 };
 
 /** 备份文件选取：复用文档选择器，读 UTF-8 字节（v0.10.0，容器注入 backup.pickBackupFile） */

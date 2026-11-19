@@ -9,13 +9,14 @@ import {
   documentPickerFilePicker,
   sandboxAudioFileStore,
   sandboxSourceFileStore,
-  shareJsonBackup,
+  shareTextFile,
 } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
+import { createAnnotationsService } from '@/services/annotations';
 import { createAssistantService } from '@/services/assistant';
 import { createBookmarksService } from '@/services/bookmarks';
 import { createJszipEpubDeps } from '@/adapters/epub';
@@ -170,15 +171,24 @@ const services = {
     sourceFileStore: sandboxSourceFileStore,
   }),
   stats: createStatsService({ settingsRepository: adapters.settingsRepository }),
+  annotations: createAnnotationsService({
+    annotationRepository: adapters.annotationRepository,
+    libraryRepository: adapters.libraryRepository,
+    projectRepository: adapters.projectRepository,
+    sourceFileStore: sandboxSourceFileStore,
+    receiptStore: adapters.receiptStore,
+  }),
   backup: createBackupService({
     projectRepository: adapters.projectRepository,
     bookmarkRepository: adapters.bookmarkRepository,
     settingsRepository: adapters.settingsRepository,
-    share: (data) => shareJsonBackup(`talecast-backup-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 2)),
+    share: (data) => shareTextFile(`talecast-backup-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 2)),
     pickBackupFile: () => documentPickerBackupFile(),
   }),
   screenOrientation: new ScreenOrientationAdapter(),
   newCommandId,
+  /** 通用文本文件分享（笔记导出等）：adapter 能力经组合根透出（唯一出口） */
+  shareTextFile,
 };
 
 // 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）。
