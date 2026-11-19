@@ -1,4 +1,5 @@
 import { splitParagraphs, type Paragraph } from '@/domain/source';
+import { applyReplacements, deserializeRules } from '@/domain/replacement';
 import type { LibraryRepository, ReadingStateRepository, SourceFileStore } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 import type { Chapter } from '@/domain/types';
@@ -11,6 +12,8 @@ import type { Chapter } from '@/domain/types';
 export interface ReadingDeps {
   readingStateRepository: ReadingStateRepository;
   libraryQuery: import('@/services/library-query').LibraryQueryService;
+  /** 净化规则读取（settings 表）；可选——未注入则不做净化 */
+  settingsRepository?: import('@/domain/ports').SettingsRepository;
 }
 
 export interface ReadingPosition {
@@ -86,7 +89,15 @@ export function createReadingService(deps: ReadingDeps) {
     async getChapterText(projectId: string, chapterId: string): Promise<Result<ChapterTextResult>> {
       const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
       if (!slice) return err('not_found', '章节不存在');
-      const { chapter, chapterText } = slice;
+      const { chapter, chapterText: rawText } = slice;
+      // 净化（RE-3）：展示层变换，来源不变
+      let chapterText = rawText;
+      if (deps.settingsRepository) {
+        const rulesJson = await deps.settingsRepository.get('replacement-rules');
+        if (rulesJson) {
+          chapterText = applyReplacements(rawText, deserializeRules(rulesJson));
+        }
+      }
       return ok({
         chapter,
         chapterText,
