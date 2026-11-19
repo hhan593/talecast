@@ -12,8 +12,10 @@
 export interface PageMetrics {
   /** 每行可容纳的字符数（探针按正文字号测量得出） */
   charsPerLine: number;
-  /** 每页容纳的视觉行数 */
+  /** 每栏容纳的视觉行数 */
   linesPerPage: number;
+  /** 栏数：1=竖屏单栏（默认），2=横屏对页（一个滑动单位 = columns 个栏） */
+  columns?: 1 | 2;
 }
 
 export interface ReaderPage {
@@ -36,6 +38,9 @@ export function assertMetrics(metrics: PageMetrics): void {
   }
   if (!Number.isInteger(metrics.linesPerPage) || metrics.linesPerPage <= 0) {
     throw new RangeError('linesPerPage 必须为正整数');
+  }
+  if (metrics.columns !== undefined && metrics.columns !== 1 && metrics.columns !== 2) {
+    throw new RangeError('columns 仅支持 1（单栏）或 2（横屏双栏）');
   }
 }
 
@@ -72,16 +77,18 @@ function toSegments(text: string, baseOffset: number, charsPerLine: number): Rea
   return segments;
 }
 
-/** 分页：视觉段按 linesPerPage 打包（确定性：同输入同分页） */
+/** 分页：视觉段按 linesPerPage×columns 打包（确定性：同输入同分页） */
 export function paginateText(text: string, baseOffset: number, metrics: PageMetrics): ReaderPage[] {
   assertMetrics(metrics);
   const segments = toSegments(text, baseOffset, metrics.charsPerLine);
   if (segments.length === 0) return [];
 
+  const columns = metrics.columns ?? 1;
+  const perScreen = metrics.linesPerPage * columns;
   const pages: ReaderPage[] = [];
   let ordinal = 0;
-  for (let i = 0; i < segments.length; i += metrics.linesPerPage) {
-    const group = segments.slice(i, i + metrics.linesPerPage);
+  for (let i = 0; i < segments.length; i += perScreen) {
+    const group = segments.slice(i, i + perScreen);
     pages.push({
       ordinal,
       startOffset: group[0].startOffset,
