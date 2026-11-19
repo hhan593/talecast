@@ -102,38 +102,21 @@ export function palmdocDecompress(data: Uint8Array): Uint8Array {
       continue;
     }
     if (c <= 0xbf) {
+      // 两字节 pair：distance=(pair>>3)&0x7FF（11 位），length=(b&7)+3
+      // （规范对照 libmobi compression.c / calibre palmdoc / MobileRead wiki，issue #27）
       if (i >= data.length) break;
-      // 12 位距离：c 低 6 位 + 下一字节高 6 位（标志位 0x80-0xBF 不进距离）
-      const distance = ((c & 0x3f) << 6) | (data[i] >> 2);
-      const length = (data[i] & 0x03) + 3;
+      const pair = (c << 8) | data[i];
+      const distance = (pair >> 3) & 0x7ff;
+      const length = (data[i] & 0x07) + 3;
       i += 1;
+      if (distance === 0 || distance > out.length) return new Uint8Array(0); // 损坏流：拒绝而非越界
       for (let j = 0; j < length; j++) {
         out.push(out[out.length - distance]);
       }
       continue;
     }
-    if (c === 0xc0 || c === 0xc1) {
-      // 整词重复 / 词间空白：两字节 big-endian distance，length=3+(b&0x3)
-      if (i + 1 >= data.length) break;
-      const distance = (data[i] << 8) | data[i + 1];
-      const length = 3 + (data[i + 1] & 0x03);
-      i += 2;
-      if (c === 0xc1) {
-        out.push(0x20);
-        for (let j = 0; j < length; j++) out.push(out[out.length - distance]);
-      } else {
-        for (let j = 0; j < length; j++) out.push(out[out.length - distance]);
-      }
-      continue;
-    }
-    // 0xC2-0xFF
-    if (i >= data.length) break;
-    const distance = ((c & 0x3f) << 2) | (data[i] >> 2);
-    const length = 3 + (data[i] & 0x03);
-    i += 1;
-    for (let j = 0; j < length; j++) {
-      out.push(out[out.length - distance]);
-    }
+    // 0xC0-0xFF：输出 空格 + (c^0x80) 两字符（非回引）
+    out.push(0x20, c ^ 0x80);
   }
   return new Uint8Array(out);
 }

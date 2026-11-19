@@ -85,19 +85,27 @@ describe('v0.14.0 MOBI 解析', () => {
     expect(Array.from(decompressed)).toEqual(Array.from(original));
   });
 
-  it('回引分支手工向量：0x80-0xBF 12 位距离（含重叠复制）', () => {
-    // 字面量 'abc'（0x61,0x62,0x63）+ backref(distance=3,length=6)：0x80,0x0F → 'abcabcabc'
+  it('回引分支规范向量：0x80-0xBF pair>>3 11 位距离（libmobi 公式）', () => {
+    // 'abc' + 0x80,0x0F：pair=0x800F → distance=(0x800F>>3)&0x7FF=1, length=(0x0F&7)+3=10
+    // → 'abccccccccccc'（重叠复制周期 1）
     const stream = new Uint8Array([0x61, 0x62, 0x63, 0x80, 0x0f]);
     const out = palmdocDecompress(stream);
-    expect(new TextDecoder().decode(out)).toBe('abcabcabc');
+    expect(new TextDecoder().decode(out)).toBe('abccccccccccc');
   });
 
-  it('回引分支手工向量：distance=3 重叠复制（周期性）', () => {
-    // 字面量 'xyz' + backref(distance=3,length=5)：0x80|(3>>6)=0x80, ((3&0x3f)<<2)|(5-3)=12+2=14=0x0E
-    // 重叠复制按周期 3 展开 → 'xyz' + 'xyzxy' = 'xyzxyzxy'
-    const stream = new Uint8Array([0x78, 0x79, 0x7a, 0x80, 0x0e]);
+  it('回引分支规范向量：多字节距离', () => {
+    // 'abcdefgh' + 0x84,0x1B：pair=0x841B → distance=(0x841B>>3)&0x7FF=(0x1083)&0x7FF=131? 重算：
+    // 0x841B>>3 = 0x1083 = 4227 → &0x7FF = 4227-4096 = 131 → >8 越界拒绝（损坏流保护）
+    const stream = new Uint8Array([0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x84, 0x1b]);
+    // distance=(0x841B>>3)&0x7FF=131 > 已输出 8 字节 → 损坏流保护：返回空
     const out = palmdocDecompress(stream);
-    expect(new TextDecoder().decode(out)).toBe('xyzxyzxy');
+    expect(out.length).toBe(0);
+  });
+
+  it('0xC0-0xFF：空格 + (byte^0x80) 两字符（calibre b\' A\'→0xc1 可证）', () => {
+    const stream = new Uint8Array([0xc1, 0xc2, 0xdf]);
+    const out = palmdocDecompress(stream);
+    expect(new TextDecoder().decode(out)).toBe(' A B _');
   });
 
   it('回引分支手工向量：0x51 字面量转义', () => {
