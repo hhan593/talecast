@@ -3,7 +3,6 @@ import type { DialogueCandidate } from '@/domain/dialogue';
 import type { CharacterRepository, LlmGateway, LibraryRepository, SettingsRepository, SourceFileStore, BindingRepository } from '@/domain/ports';
 import { sha256Text } from '@/domain/hash';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
-import { createBindingsService } from './bindings';
 
 /**
  * LLM 段落级说话人归属（v0.13.0，可选增强）：
