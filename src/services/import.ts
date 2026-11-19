@@ -85,6 +85,11 @@ async function runMobiImport(
       },
       drafts,
     );
+    await deps.receiptStore.put({
+      commandId: command.commandId,
+      result: ok({ source, chapters: drafts }),
+      createdAt: Date.now(),
+    });
     return ok({ source, chapters: drafts });
   } catch (error) {
     return err('invalid', `MOBI 解析失败：${error instanceof Error ? error.message : String(error)}`);
