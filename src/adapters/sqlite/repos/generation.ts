@@ -30,6 +30,8 @@ interface SegmentRow {
   file_path: string | null;
   error: string | null;
   updated_at: number;
+  voice_id: string | null;
+  provider_params_json: string | null;
 }
 
 function toJob(row: JobRow): GenerationJobRecord {
@@ -61,6 +63,8 @@ function toSegment(row: SegmentRow): GenerationSegmentRecord {
     filePath: row.file_path,
     error: row.error,
     updatedAt: row.updated_at,
+    voiceId: row.voice_id,
+    providerParamsJson: row.provider_params_json,
   };
 }
 
@@ -88,8 +92,8 @@ export class SqliteGenerationStore implements GenerationStore {
       );
       for (const segment of segments) {
         this.db.runSync(
-          `INSERT INTO generation_segments (id, job_id, ordinal, text, text_hash, status, file_path, error, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO generation_segments (id, job_id, ordinal, text, text_hash, status, file_path, error, updated_at, voice_id, provider_params_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           segment.id,
           segment.jobId,
           segment.ordinal,
@@ -99,6 +103,8 @@ export class SqliteGenerationStore implements GenerationStore {
           segment.filePath,
           segment.error,
           segment.updatedAt,
+          segment.voiceId,
+          segment.providerParamsJson,
         );
       }
     });

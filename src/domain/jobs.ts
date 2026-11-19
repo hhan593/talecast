@@ -13,6 +13,7 @@
 
 import { sha256Text } from './hash';
 import { SEGMENTER_VERSION, type Segment } from './segmenter';
+import type { VoiceSpan } from './dialogue';
 
 export interface GenerationJobInput {
   chapterTextSha256: string;
@@ -21,20 +22,22 @@ export interface GenerationJobInput {
   provider: string;
   providerParamsJson: string;
   audioFormat: string;
+  /** 多声计划指纹（v0.9.0）：仅在对话分声开启时传入；单声路径缺省 → 哈希与旧版完全一致 */
+  voicePlanJson?: string;
 }
 
 export function computeJobInputHash(input: GenerationJobInput): string {
-  return sha256Text(
-    [
-      input.chapterTextSha256,
-      String(input.bindingRevision),
-      input.voiceId,
-      input.provider,
-      input.providerParamsJson,
-      input.audioFormat,
-      SEGMENTER_VERSION,
-    ].join('|'),
-  );
+  const parts = [
+    input.chapterTextSha256,
+    String(input.bindingRevision),
+    input.voiceId,
+    input.provider,
+    input.providerParamsJson,
+    input.audioFormat,
+    SEGMENTER_VERSION,
+  ];
+  if (input.voicePlanJson !== undefined) parts.push(input.voicePlanJson);
+  return sha256Text(parts.join('|'));
 }
 
 export interface GenerationSegmentInput {
@@ -115,4 +118,31 @@ export function buildSegmentPlan(
     text: segment.text,
     textHash: computeSegmentTextHash({ ...segmentInput, segmentText: segment.text }),
   }));
+}
+
+export interface VoicePlanSegment {
+  /** 全局连续序号（跨 voice span 重排） */
+  ordinal: number;
+  text: string;
+  /** 'narrator' | characterId */
+  voiceKey: string;
+}
+
+/** 多声计划：voice span 内部再走 TTS 分段器（句切 + 上限），ordinal 全局连续；纯空白段跳过（无语音价值，省请求） */
+export function buildVoiceSegmentPlan(
+  spans: VoiceSpan[],
+  segmentForTtsImpl: (text: string, maxLength?: number) => Segment[],
+  maxLength?: number,
+): VoicePlanSegment[] {
+  const plan: VoicePlanSegment[] = [];
+  let ordinal = 0;
+  for (const span of spans) {
+    if (span.text.trim().length === 0) continue;
+    for (const segment of segmentForTtsImpl(span.text, maxLength)) {
+      if (segment.text.trim().length === 0) continue;
+      plan.push({ ordinal, text: segment.text, voiceKey: span.voiceKey });
+      ordinal += 1;
+    }
+  }
+  return plan;
 }

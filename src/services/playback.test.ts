@@ -69,6 +69,13 @@ async function setupWithGeneratedChapter() {
     requestLogRepository: new FakeRequestLogRepository(),
     receiptStore: receipts,
     settingsRepository: new FakeSettingsRepository(),
+    characterRepository: {
+      list: async () => [] as import('@/domain/types').CharacterRecord[],
+      get: async () => null,
+      insert: async () => undefined,
+      update: async () => undefined,
+      delete: async () => undefined,
+    },
   });
   const started = await generation.startGeneration({ commandId: 'c-gen', projectId: 'p1', chapterId: chapters[0].id });
   if (!started.ok) throw new Error(started.error.message);

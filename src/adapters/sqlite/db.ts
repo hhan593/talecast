@@ -213,6 +213,14 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 7,
+    description: '段级音色（v0.9.0 对话分声）：generation_segments 增加 voice_id / provider_params_json',
+    statements: [
+      'ALTER TABLE generation_segments ADD COLUMN voice_id TEXT',
+      'ALTER TABLE generation_segments ADD COLUMN provider_params_json TEXT',
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

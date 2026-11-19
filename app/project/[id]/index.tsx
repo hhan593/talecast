@@ -51,6 +51,7 @@ export default function ProjectWorkbenchScreen() {
   const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null);
   const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'search'>('chapters');
   const [searchInput, setSearchInput] = useState('');
+  const [dialogueVoices, setDialogueVoices] = useState(true);
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -98,6 +99,7 @@ export default function ProjectWorkbenchScreen() {
     });
     void services.settings.getSetting('reader-indent').then((v) => setReaderIndent(v !== 'off'));
     void services.settings.getSetting('reader-align').then((v) => setReaderJustify(v !== 'off'));
+    void services.settings.getSetting(`dialogue-voices:${projectId}`).then((v) => setDialogueVoices(v !== 'off'));
     void services.settings.getSetting('reader-theme').then((v) => {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
@@ -489,6 +491,20 @@ export default function ProjectWorkbenchScreen() {
               }
             >
               <Text className="text-sm text-ink dark:text-ink-night">候选历史</Text>
+            </Pressable>
+            <Pressable
+              className={`rounded-xl px-3 py-2.5 ${dialogueVoices ? 'bg-accent-soft dark:bg-accent-nightsoft' : 'bg-raised dark:bg-card-night'}`}
+              onPress={() => {
+                const next = !dialogueVoices;
+                setDialogueVoices(next);
+                void services.settings.setSetting(`dialogue-voices:${projectId}`, next ? 'on' : 'off');
+              }}
+            >
+              <Text
+                className={`text-sm ${dialogueVoices ? 'text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
+              >
+                对话分声{dialogueVoices ? '开' : '关'}
+              </Text>
             </Pressable>
           </>
         )}

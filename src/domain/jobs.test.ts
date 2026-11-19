@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { segmentForTts } from './segmenter';
-import { assertJobStartable, buildProsodyJson, buildSegmentPlan, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from './jobs';
+import { assertJobStartable, buildProsodyJson, buildSegmentPlan, buildVoiceSegmentPlan, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from './jobs';
 
 const baseInput = {
   chapterTextSha256: 'a'.repeat(64),
@@ -63,5 +63,41 @@ describe('parseProsodyJson', () => {
   it('容错解析：坏 JSON 回落空对象', () => {
     expect(parseProsodyJson('not-json')).toEqual({});
     expect(parseProsodyJson('{}')).toEqual({});
+  });
+});
+
+describe('v0.9.0 buildVoiceSegmentPlan（多声分段）', () => {
+  it('按 voice span 分段：voiceKey 跟随 span，ordinal 全局连续', () => {
+    const spans = [
+      { startOffset: 0, endOffset: 5, voiceKey: 'narrator', text: '旁白一句。' },
+      { startOffset: 5, endOffset: 14, voiceKey: 'char-a', text: '“台词在这。”' },
+      { startOffset: 14, endOffset: 24, voiceKey: 'narrator', text: '旁白收尾两句话。' },
+    ];
+    const plan = buildVoiceSegmentPlan(spans, segmentForTts);
+    expect(plan.map((p) => p.ordinal)).toEqual(plan.map((_, i) => i));
+    const dialogueSegments = plan.filter((p) => p.voiceKey === 'char-a');
+    expect(dialogueSegments.length).toBeGreaterThanOrEqual(1);
+    expect(dialogueSegments.every((p) => p.text.includes('台词'))).toBe(true);
+    // 拼接覆盖：全部段文本连接 = span 文本连接（空段已跳过）
+    expect(plan.map((p) => p.text).join('')).toBe('旁白一句。“台词在这。”旁白收尾两句话。');
+  });
+
+  it('纯空白 span（换行）跳过：不产生空请求段', () => {
+    const spans = [
+      { startOffset: 0, endOffset: 6, voiceKey: 'narrator', text: '旁白。\n' },
+      { startOffset: 6, endOffset: 7, voiceKey: 'narrator', text: '\n' },
+      { startOffset: 7, endOffset: 12, voiceKey: 'char-a', text: '“接着。”' },
+    ];
+    const plan = buildVoiceSegmentPlan(spans, segmentForTts);
+    expect(plan.every((p) => p.text.trim().length > 0)).toBe(true);
+  });
+
+  it('maxLength 传入分段器：段长受上限约束', () => {
+    const long = '很'.repeat(300);
+    const spans = [{ startOffset: 0, endOffset: 300, voiceKey: 'char-a', text: long }];
+    const plan = buildVoiceSegmentPlan(spans, segmentForTts, 120);
+    expect(plan.length).toBe(3);
+    expect(plan.every((p) => p.text.length <= 120)).toBe(true);
+    expect(plan.every((p) => p.voiceKey === 'char-a')).toBe(true);
   });
 });

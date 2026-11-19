@@ -74,6 +74,7 @@ const generationService = createGenerationService({
   libraryQuery,
   sourceFileStore: sandboxSourceFileStore,
   bindingRepository: adapters.bindingRepository,
+  characterRepository: adapters.characterRepository,
   generationStore: adapters.generationStore,
   ttsGateway: edgeTtsGateway,
   audioFileStore: sandboxAudioFileStore,

@@ -120,4 +120,8 @@ export interface GenerationSegmentRecord {
   filePath: string | null;
   error: string | null;
   updatedAt: number;
+  /** 段级音色（v0.9.0 对话分声）；null = 旧单声任务，合成回落 job.voiceId */
+  voiceId: string | null;
+  /** 段级合成参数；null = 旧单声任务 */
+  providerParamsJson: string | null;
 }

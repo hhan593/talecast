@@ -1,11 +1,13 @@
-import { assertJobStartable, buildSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from '@/domain/jobs';
+import { assertJobStartable, buildSegmentPlan, buildVoiceSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash } from '@/domain/jobs';
+import { NARRATOR_VOICE_KEY, buildVoicePlanFingerprint, planVoiceSpans, type DialogueCandidate } from '@/domain/dialogue';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
-import { firstSegmentForTts, segmentForTts } from '@/domain/segmenter';
+import { segmentForTts } from '@/domain/segmenter';
 import { sha256Text } from '@/domain/hash';
 import type {
   AudioFileStore,
   BindingRepository,
+  CharacterRepository,
   GenerationStore,
   LibraryRepository,
   ProjectRepository,
@@ -15,7 +17,7 @@ import type {
   SourceFileStore,
   TtsGateway,
 } from '@/domain/ports';
-import type { GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
+import type { BindingRecord, CharacterRecord, GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
@@ -35,13 +37,50 @@ export interface GenerationDeps {
   libraryQuery: import('@/services/library-query').LibraryQueryService;
   sourceFileStore: SourceFileStore;
   bindingRepository: BindingRepository;
+  characterRepository: CharacterRepository;
   generationStore: GenerationStore;
   ttsGateway: TtsGateway;
   audioFileStore: AudioFileStore;
   requestLogRepository: RequestLogRepository;
   receiptStore: ReceiptStore;
-  /** 可选：预生成开关读取（缺省视为开启） */
+  /** 可选：对话分声开关读取（缺省视为开启） */
   settingsRepository?: SettingsRepository;
+}
+
+/**
+ * 对话分声候选：已确认角色 × 已绑定音色（无绑定的角色命中后仍只能是旁白，直接剔除）。
+ */
+function buildDialogueCandidates(
+  characters: CharacterRecord[],
+  bindings: BindingRecord[],
+): DialogueCandidate[] {
+  const boundIds = new Set(
+    bindings
+      .filter((b) => b.targetType === 'character' && b.targetId !== null)
+      .map((b) => b.targetId as string),
+  );
+  const candidates: DialogueCandidate[] = [];
+  for (const character of characters) {
+    if (!character.confirmed || !boundIds.has(character.id)) continue;
+    let aliases: string[] = [];
+    try {
+      const parsed = JSON.parse(character.aliasesJson) as unknown;
+      if (Array.isArray(parsed)) aliases = parsed.filter((a): a is string => typeof a === 'string');
+    } catch {
+      aliases = [];
+    }
+    const names = [character.name, ...aliases].filter((n) => n.trim().length > 0);
+    if (names.length > 0) candidates.push({ key: character.id, names });
+  }
+  return candidates;
+}
+
+interface PlannedSegment {
+  ordinal: number;
+  text: string;
+  textHash: string;
+  voiceId: string;
+  providerParamsJson: string;
 }
 
 export interface StartGenerationCommand extends Command {
@@ -67,6 +106,79 @@ export function createGenerationService(deps: GenerationDeps) {
     return slice;
   }
 
+  /** 试听首段有意义文本的最小长度（太短的段多是章名行，试听体验差；转正语义不受影响） */
+  const PREVIEW_MIN_CHARS = 40;
+
+  /**
+   * 章节计划（v0.9.0）：对话分声开启时按引号归属拆 voice span 再分段；
+   * startGeneration 与 previewSegment 共用，保证试听与生成的段哈希一致（转正零冲突）。
+   */
+  async function planChapterSegments(
+    projectId: string,
+    chapterText: string,
+    binding: BindingRecord,
+  ): Promise<{ plan: PlannedSegment[]; voicePlanJson?: string }> {
+    const voiceId = binding.voiceId;
+    const providerParamsJson = binding.providerParamsJson || '{}';
+    const dialogueEnabled =
+      (await deps.settingsRepository?.get(`dialogue-voices:${projectId}`)) !== 'off';
+    if (!dialogueEnabled) {
+      return {
+        plan: buildSegmentPlan(
+          chapterText,
+          { voiceId, provider: PROVIDER, providerParamsJson },
+          segmentForTts,
+        ).map((segment) => ({ ...segment, voiceId, providerParamsJson })),
+      };
+    }
+    const characters = await deps.characterRepository.list(projectId);
+    const bindings = await deps.bindingRepository.list(projectId);
+    const candidates = buildDialogueCandidates(characters, bindings);
+    const spans = planVoiceSpans(chapterText, candidates);
+    const voiceByKey = new Map([
+      [NARRATOR_VOICE_KEY, { voiceId, providerParamsJson, revision: binding.revision }],
+    ]);
+    for (const record of bindings) {
+      if (record.targetType !== 'character' || record.targetId === null) continue;
+      const character = characters.find((c) => c.id === record.targetId);
+      if (!character) continue;
+      voiceByKey.set(record.targetId, {
+        voiceId: record.voiceId,
+        providerParamsJson: record.providerParamsJson || '{}',
+        revision: record.revision,
+      });
+    }
+    const voicePlan = buildVoiceSegmentPlan(spans, segmentForTts);
+    const plan = voicePlan.map((segment) => {
+      const voice = voiceByKey.get(segment.voiceKey) ?? voiceByKey.get(NARRATOR_VOICE_KEY)!;
+      return {
+        ordinal: segment.ordinal,
+        text: segment.text,
+        textHash: computeSegmentTextHash({
+          segmentText: segment.text,
+          voiceId: voice.voiceId,
+          provider: PROVIDER,
+          providerParamsJson: voice.providerParamsJson,
+        }),
+        voiceId: voice.voiceId,
+        providerParamsJson: voice.providerParamsJson,
+      };
+    });
+    // 指纹只含实际用到的音色：任一相关绑定 revision 变化 → input_hash 变化
+    const usedKeys = new Set(voicePlan.map((segment) => segment.voiceKey));
+    const voicePlanJson = buildVoicePlanFingerprint(
+      [...voiceByKey.entries()]
+        .filter(([key]) => usedKeys.has(key))
+        .map(([key, voice]) => ({
+          key,
+          voiceId: voice.voiceId,
+          providerParamsJson: voice.providerParamsJson,
+          revision: voice.revision,
+        })),
+    );
+    return { plan, voicePlanJson };
+  }
+
   async function runJobSegments(jobId: string): Promise<void> {
     const job = await deps.generationStore.getJob(jobId);
     if (!job) return;
@@ -84,9 +196,11 @@ export function createGenerationService(deps: GenerationDeps) {
       }
       await deps.generationStore.updateSegment(segment.id, { status: 'generating', error: null });
       try {
+        // 段级音色（v0.9.0 对话分声）：null = 旧单声任务回落 job.voiceId
+        const voiceId = segment.voiceId ?? job.voiceId;
         const audio = await deps.ttsGateway.synthesize({
           text: segment.text,
-          voiceId: job.voiceId,
+          voiceId,
         });
         const cancelledNow = cancelledJobs.has(jobId);
         // 取消时已产出的音频仍落盘为缓存，不浪费本次请求
@@ -141,6 +255,8 @@ export function createGenerationService(deps: GenerationDeps) {
 
         const voiceId = binding!.voiceId;
         const providerParamsJson = binding!.providerParamsJson || '{}';
+        const { plan, voicePlanJson } = await planChapterSegments(command.projectId, chapterText, binding!);
+
         const input = {
           chapterTextSha256: sha256Text(chapterText),
           bindingRevision: binding!.revision,
@@ -149,7 +265,7 @@ export function createGenerationService(deps: GenerationDeps) {
           providerParamsJson,
           audioFormat: EDGE_AUDIO_FORMAT,
         };
-        const inputHash = computeJobInputHash(input);
+        const inputHash = computeJobInputHash({ ...input, voicePlanJson });
 
         // input_hash 幂等：同输入的已完成任务直接复用，不重新请求
         const existing = await deps.generationStore.findByInputHash(command.projectId, inputHash);
@@ -157,7 +273,6 @@ export function createGenerationService(deps: GenerationDeps) {
           return ok({ jobId: existing.id, totalSegments: existing.totalSegments, reusedSegments: existing.totalSegments });
         }
 
-        const plan = buildSegmentPlan(chapterText, { voiceId, provider: PROVIDER, providerParamsJson: binding!.providerParamsJson || '{}' }, segmentForTts);
         const now = Date.now();
         const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等
         const existences = await Promise.all(plan.map((s) => deps.audioFileStore.exists(s.textHash)));
@@ -175,6 +290,8 @@ export function createGenerationService(deps: GenerationDeps) {
             filePath: audioExists ? deps.audioFileStore.pathFor(segment.textHash) : null,
             error: null,
             updatedAt: now,
+            voiceId: segment.voiceId,
+            providerParamsJson: segment.providerParamsJson,
           };
         });
         const job: GenerationJobRecord = {
@@ -255,18 +372,16 @@ export function createGenerationService(deps: GenerationDeps) {
       if (!binding) return err('invalid', '请先在角色中心给旁白绑定音色，再试听');
       const chapterText = loaded.chapterText;
       if (chapterText.length === 0) return err('invalid', '本章内容为空');
-      const firstText = firstSegmentForTts(chapterText)?.text;
-      if (!firstText) return err('invalid', '本章内容为空');
-      const first = {
-        text: firstText,
-        textHash: computeSegmentTextHash({ segmentText: firstText, voiceId: binding.voiceId, provider: PROVIDER, providerParamsJson: binding.providerParamsJson || '{}' }),
-      };
+      // 试听与生成共用同一计划（v0.9.0）：段哈希一致 → 试听文件生成时零请求转正
+      const { plan } = await planChapterSegments(command.projectId, chapterText, binding);
+      if (plan.length === 0) return err('invalid', '本章内容为空');
+      const first = plan.find((segment) => segment.text.length >= PREVIEW_MIN_CHARS) ?? plan[0];
       const existingPath = deps.audioFileStore.pathFor(first.textHash);
       if (await deps.audioFileStore.exists(first.textHash)) {
         return ok({ filePath: existingPath, textHash: first.textHash, cached: true });
       }
       try {
-        const audio = await deps.ttsGateway.synthesize({ text: first.text, voiceId: binding.voiceId });
+        const audio = await deps.ttsGateway.synthesize({ text: first.text, voiceId: first.voiceId });
         const filePath = await deps.audioFileStore.write(first.textHash, audio);
         await deps.requestLogRepository.log('tts', true, first.textHash.slice(0, 16));
         return ok({ filePath, textHash: first.textHash, cached: false });

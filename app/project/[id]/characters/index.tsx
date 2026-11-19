@@ -57,6 +57,9 @@ export default function CharactersScreen() {
         <Text className="mt-2 text-xs text-muted dark:text-muted-night">
           {narratorVoiceName ? `当前音色：${narratorVoiceName}` : '未绑定。生成整章前必须给旁白绑定音色。'}
         </Text>
+        <Text className="mt-1 text-xs text-faint">
+          给角色绑定音色并确认后，在工作台开启"对话分声"，该角色的台词将用其音色朗读。
+        </Text>
         {characters.narratorBinding ? (
           <View className="mt-2 flex-row items-center gap-2">
             <Pressable
