@@ -34,6 +34,8 @@ export default function ProjectWorkbenchScreen() {
 
   const playback = usePlayback(projectId);
   const assistant = useAssistant(projectId);
+  const bookmarks = useBookmarks(projectId);
+  const bookSearch = useBookSearch(projectId);
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
   const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
@@ -44,6 +46,7 @@ export default function ProjectWorkbenchScreen() {
     paragraphs: Paragraph[];
   } | null>(null);
   const [pendingOffset, setPendingOffset] = useState(0);
+  const [lastPageOffset, setLastPageOffset] = useState(-1);
   const [restored, setRestored] = useState(false);
   const [dialog, setDialog] = useState<
     | { kind: 'rename'; chapterId: string; title: string; initial: string }
@@ -217,7 +220,15 @@ export default function ProjectWorkbenchScreen() {
           setReaderMode(next);
           void services.reading.saveReaderPrefs(projectId, next, readerFontSize);
         }}
-        onPageChange={(charOffset) => saveReadingPosition(current.chapter.id, charOffset)}
+        onPageChange={(charOffset) => {
+          setLastPageOffset(charOffset);
+          saveReadingPosition(current.chapter.id, charOffset);
+        }}
+        onAddBookmark={() => {
+          const offset = lastPageOffset >= 0 ? lastPageOffset : pendingOffset;
+          const excerpt = current.chapterText.slice(offset, offset + 20);
+          void bookmarks.add(current.chapter.id, offset, excerpt);
+        }}
       />
     );
   }

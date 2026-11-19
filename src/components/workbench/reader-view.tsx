@@ -46,6 +46,8 @@ export interface ReaderViewProps {
   onCycleRate(): void;
   onCycleFontSize(): void;
   onToggleMode(): void;
+  /** 在当前阅读位置加书签（R3） */
+  onAddBookmark(): void;
 }
 
 export function ReaderView(props: ReaderViewProps) {
@@ -148,6 +150,12 @@ export function ReaderView(props: ReaderViewProps) {
         onPress={props.onToggleMode}
       >
         <Text className="text-xs text-ink dark:text-ink-night">{props.mode === 'paged' ? '滚动' : '翻页'}</Text>
+      </Pressable>
+      <Pressable
+        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
+        onPress={props.onAddBookmark}
+      >
+        <Text className="text-xs text-ink dark:text-ink-night">书签</Text>
       </Pressable>
     </>
   );

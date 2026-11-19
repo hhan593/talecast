@@ -11,7 +11,9 @@ import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
 import { createAssistantService } from '@/services/assistant';
+import { createBookmarksService } from '@/services/bookmarks';
 import { createChapterEditService } from '@/services/chapter-edits';
+import { createSearchService } from '@/services/search';
 import { createCharactersService } from '@/services/characters';
 import { createGenerationService } from '@/services/generation';
 import { createImportService } from '@/services/import';
@@ -140,6 +142,13 @@ const services = {
     libraryRepository: adapters.libraryRepository,
     sourceFileStore: sandboxSourceFileStore,
     splitProposalRepository: adapters.splitProposalRepository,
+  }),
+  bookmarks: createBookmarksService({
+    bookmarkRepository: adapters.bookmarkRepository,
+  }),
+  search: createSearchService({
+    libraryRepository: adapters.libraryRepository,
+    sourceFileStore: sandboxSourceFileStore,
   }),
   screenOrientation: new ScreenOrientationAdapter(),
   newCommandId,
