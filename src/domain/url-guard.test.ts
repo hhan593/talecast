@@ -53,6 +53,11 @@ describe('assertPublicHttpUrl', () => {
       'http://nas.local/a.txt',
       'http://metadata.google.internal/computeMetadata/v1/',
       'http://db.internal/a.txt',
+      // 数字/十六进制/缩写绕过（issue #36）
+      'http://2130706433/a.txt',
+      'http://0x7f000001/a.txt',
+      'http://127.1/a.txt',
+      'http://10.1/a.txt',
     ];
     for (const url of blocked) {
       const result = assertPublicHttpUrl(url);
