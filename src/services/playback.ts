@@ -120,6 +120,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
   }
 
   async function loadAndPlay(index: number): Promise<void> {
+    // 新播放使进行中的渐弱链失效（issue #28：渐弱 3 秒窗口内开播新章会被旧链降音量并暂停）
+    fadeGeneration += 1;
     const item = queue[index];
     // 词级时间线随段加载（v0.13.0）：伴生 JSON 读取失败视为无卡拉OK
     if (deps.audioFileStore?.readText) {
@@ -302,6 +304,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
       // 渐弱收尾失败不阻塞状态更新
     }
     setState({ status: 'paused' });
+    // 到期即完成：清除睡眠状态，避免状态栏永远显示过期的激活定时器（issue #37）
+    if (generation === fadeGeneration) cancelSleepTimerInternal();
   }
 
   return {
