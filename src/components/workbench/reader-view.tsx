@@ -3,6 +3,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
@@ -11,6 +12,7 @@ import {
 import PagerView from 'react-native-pager-view';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createAudioPlayer } from 'expo-audio';
 import { useWindowDimensions } from 'react-native';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
@@ -111,6 +113,20 @@ export interface ReaderViewProps {
   onSeekSegment(index: number): void;
   /** 滚动模式点击正文：滚屏运行时暂停/恢复（v0.10.0） */
   onScrollTap(): void;
+  /** 字体族（v0.11.0）：衬线/黑体/系统 */
+  fontFamily: 'serif' | 'sans' | 'system';
+  onCycleFontFamily(): void;
+  /** 本章剩余时长预估（v0.11.0，父级按阅读/听读口径计算） */
+  chapterEta: string | null;
+  /** 睡眠定时（v0.11.0）：菜单按钮循环 */
+  sleepLabel: string;
+  onCycleSleep(): void;
+  /** 音量键翻页事件（v0.11.0，父级监听后下发；仅 Android） */
+  volumeEvent: { seq: number; direction: 'up' | 'down' } | null;
+  /** 翻页音效（v0.11.0） */
+  pageSoundEnabled: boolean;
+  /** 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏 */
+  immersive: boolean;
   /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
   onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
   /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
@@ -240,9 +256,61 @@ export function ReaderView(props: ReaderViewProps) {
 
   const pageWidth = contentSize?.w ?? 0;
 
+  // 字体族（v0.11.0）：CJK 方块字假设下同字号不改变分页 metrics
+  const bodyFontClass =
+    props.fontFamily === 'sans' ? 'font-sans' : props.fontFamily === 'system' ? '' : 'font-serif';
+
+  // 翻页音效（v0.11.0）：懒加载短音效，翻页时重播
+  const pageSoundRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const playPageSound = (): void => {
+    if (!props.pageSoundEnabled || Platform.OS === 'web') return;
+    try {
+      if (!pageSoundRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        pageSoundRef.current = createAudioPlayer(require('../../../assets/sounds/page-turn.wav'));
+      }
+      const player = pageSoundRef.current;
+      player.seekTo(0);
+      player.play();
+    } catch {
+      // 音效失败静默（非核心功能）
+    }
+  };
+  useEffect(() => {
+    const player = pageSoundRef.current;
+    return () => {
+      if (player) player.remove();
+    };
+  }, []);
+
+  // 音量键翻页（v0.11.0）：父级监听系统音量后下发事件，这里只管翻页
+  const volumeSeqRef = useRef(0);
+  useEffect(() => {
+    const event = props.volumeEvent;
+    if (!event || event.seq === volumeSeqRef.current) return;
+    volumeSeqRef.current = event.seq;
+    if (props.mode !== 'paged') return;
+    hapticLight();
+    if (event.direction === 'up') {
+      if (currentPageRef.current + 1 < pages.length) goToPage(currentPageRef.current + 1);
+      else if (props.hasNextChapter) props.onNextChapter();
+    } else {
+      if (currentPageRef.current > 0) goToPage(currentPageRef.current - 1);
+      else if (props.hasPrevChapter) props.onPrevChapter();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.volumeEvent?.seq, props.mode, pages.length, props.pageTurnStyle]);
+
+  // 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏；卸载恢复
+  useEffect(() => {
+    StatusBar.setHidden(props.immersive && !controlsVisible, 'fade');
+    return () => StatusBar.setHidden(false, 'fade');
+  }, [props.immersive, controlsVisible]);
+
   /** 按页索引跳转（slide → PagerView；cover/curl → 滚动定位） */
   const goToPage = (index: number): void => {
     const clamped = Math.min(Math.max(index, 0), Math.max(pages.length - 1, 0));
+    if (clamped !== currentPageRef.current) playPageSound();
     if (props.pageTurnStyle === 'slide') {
       pagerRef.current?.setPage(clamped);
     } else {
@@ -358,7 +426,7 @@ export function ReaderView(props: ReaderViewProps) {
     return (
       <Text
         key={chunk.key}
-        className={`font-serif ${theme.text}`}
+        className={`${bodyFontClass} ${theme.text}`}
         style={{
           fontSize,
           lineHeight: fontSize * lineSpacing,
@@ -562,7 +630,7 @@ export function ReaderView(props: ReaderViewProps) {
                   props.highlightOffset < item.endOffset;
                 return (
                   <Text
-                    className={`font-serif ${theme.text} ${
+                    className={`${bodyFontClass} ${theme.text} ${
                       isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
                     }`}
                     style={{
@@ -590,7 +658,7 @@ export function ReaderView(props: ReaderViewProps) {
       >
         <View className="px-4 pb-3 pt-14">
           <View className="flex-row items-center justify-between">
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-3 py-1.5`}
               onPress={() => {
                 hapticLight();
@@ -600,7 +668,7 @@ export function ReaderView(props: ReaderViewProps) {
               <Text className={`text-sm ${theme.text}`}>返回目录</Text>
             </Pressable>
             <Text
-              className={`font-serif mx-3 flex-1 text-center text-sm font-semibold ${theme.text}`}
+              className={`${bodyFontClass} mx-3 flex-1 text-center text-sm font-semibold ${theme.text}`}
               numberOfLines={1}
             >
               {props.chapterTitle}
@@ -609,7 +677,7 @@ export function ReaderView(props: ReaderViewProps) {
           </View>
           <View className="mt-2 flex-row flex-wrap items-center gap-2">
             {playingHere ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className={`rounded-lg ${theme.bg} px-3 py-1.5`}
                 onPress={() => {
                   pokeControls();
@@ -619,7 +687,7 @@ export function ReaderView(props: ReaderViewProps) {
                 <Text className={`text-xs ${theme.text}`}>暂停</Text>
               </Pressable>
             ) : pausedHere ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className={`rounded-lg ${theme.bg} px-3 py-1.5`}
                 onPress={() => {
                   pokeControls();
@@ -629,7 +697,7 @@ export function ReaderView(props: ReaderViewProps) {
                 <Text className={`text-xs ${theme.text}`}>继续</Text>
               </Pressable>
             ) : (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className={`rounded-lg ${theme.action} px-3 py-1.5`}
                 onPress={() => {
                   pokeControls();
@@ -646,7 +714,7 @@ export function ReaderView(props: ReaderViewProps) {
             ) : (
               <Text className={`text-xs ${theme.muted}`}>段级播放：当前段即高亮单元</Text>
             )}
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -655,9 +723,20 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>{props.playbackRate}×</Text>
             </Pressable>
+            <Pressable accessibilityRole="button"
+              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
+              onPress={() => {
+                hapticLight();
+                props.onCycleSleep();
+              }}
+            >
+              <Text className={`text-xs ${props.sleepLabel !== '定时关' ? theme.accent : theme.text}`}>
+                {props.sleepLabel}
+              </Text>
+            </Pressable>
           </View>
           <View className="mt-2 flex-row flex-wrap items-center gap-2">
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -675,7 +754,7 @@ export function ReaderView(props: ReaderViewProps) {
                       : '特大'}
               </Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -684,7 +763,7 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>行距</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -700,7 +779,18 @@ export function ReaderView(props: ReaderViewProps) {
                     : '松'}
               </Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
+              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
+              onPress={() => {
+                pokeControls();
+                props.onCycleFontFamily();
+              }}
+            >
+              <Text className={`text-xs ${theme.text}`}>
+                {props.fontFamily === 'serif' ? '宋' : props.fontFamily === 'sans' ? '黑' : '系'}
+              </Text>
+            </Pressable>
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -709,7 +799,7 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>边距</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -718,7 +808,7 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>缩进{props.indentEnabled ? '开' : '关'}</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -727,7 +817,7 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>两端{props.justifyEnabled ? '开' : '关'}</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -736,7 +826,7 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text className={`text-xs ${theme.text}`}>主题</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -748,7 +838,7 @@ export function ReaderView(props: ReaderViewProps) {
                 {props.pageTurnStyle === 'slide' ? '滑' : props.pageTurnStyle === 'cover' ? '覆' : '卷'}
               </Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -760,7 +850,7 @@ export function ReaderView(props: ReaderViewProps) {
               </Text>
             </Pressable>
             {props.mode === 'scroll' ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
                 onPress={() => {
                   hapticLight();
@@ -770,7 +860,7 @@ export function ReaderView(props: ReaderViewProps) {
                 <Text className={`text-xs ${theme.text}`}>滚屏{props.autoScrollSpeedLabel}</Text>
               </Pressable>
             ) : null}
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
                 pokeControls();
@@ -790,7 +880,7 @@ export function ReaderView(props: ReaderViewProps) {
         style={menuBottomStyle}
       >
         <View className="flex-row items-center gap-3 px-4 pb-4 pt-2">
-          <Pressable
+          <Pressable accessibilityRole="button"
             className={`rounded-lg ${theme.bg} px-2 py-1.5`}
             disabled={!props.hasPrevChapter}
             style={!props.hasPrevChapter ? styles.navDisabled : null}
@@ -819,7 +909,7 @@ export function ReaderView(props: ReaderViewProps) {
               }
             }}
           />
-          <Pressable
+          <Pressable accessibilityRole="button"
             className={`rounded-lg ${theme.bg} px-2 py-1.5`}
             disabled={!props.hasNextChapter}
             style={!props.hasNextChapter ? styles.navDisabled : null}
@@ -854,7 +944,7 @@ export function ReaderView(props: ReaderViewProps) {
           </View>
         ) : null}
         <Text className={`pb-2 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
-          {progressLabel}
+          {props.chapterEta ? `${progressLabel} · ${props.chapterEta}` : progressLabel}
         </Text>
       </Animated.View>
     </View>

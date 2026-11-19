@@ -186,7 +186,7 @@ describe('v0.8.0 睡眠渐弱与章节预生成', () => {
     await s.playback.playChapter('p1', s.chapters[0].id);
     vi.useFakeTimers();
     try {
-      await s.playback.setSleepTimer(1);
+      await s.playback.setSleepTimer('minutes', 1);
       // 轮询 5s 一次，t=60s 到期；渐弱 5 步 × 600ms ≈ 3s 后暂停
       await vi.advanceTimersByTimeAsync(65_000);
       expect(s.playback.getState().status).toBe('paused');
@@ -202,7 +202,7 @@ describe('v0.8.0 睡眠渐弱与章节预生成', () => {
     await s.playback.playChapter('p1', s.chapters[0].id);
     vi.useFakeTimers();
     try {
-      await s.playback.setSleepTimer(1);
+      await s.playback.setSleepTimer('minutes', 1);
       // 推进到 deadline 后第一步渐弱，停在 600ms 等待中
       await vi.advanceTimersByTimeAsync(60_500);
       s.playback.cancelSleepTimer();
@@ -222,5 +222,48 @@ describe('v0.8.0 睡眠渐弱与章节预生成', () => {
     const jobs = await s.generation.listJobsByChapter('p1', s.chapters[1].id);
     expect(jobs.length).toBe(1);
     expect(['pending', 'running', 'done']).toContain(jobs[0].status);
+  });
+});
+
+describe('v0.11.0 睡眠模式', () => {
+  it('播完本段停：段尾暂停并清除睡眠', async () => {
+    const s = await setupWithGeneratedChapter();
+    await s.playback.playChapter('p1', s.chapters[0].id);
+    const set = await s.playback.setSleepTimer('segment');
+    expect(set.ok).toBe(true);
+    s.audioPlayer.fireEnd();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(s.playback.getState().status).toBe('paused');
+    expect(s.playback.getState().sleepMode).toBeNull();
+  });
+
+  it('播完本章停：段内照常推进，章末不自动连播', async () => {
+    const s = await setupWithGeneratedChapter();
+    const played = await s.playback.playChapter('p1', s.chapters[0].id);
+    if (!played.ok) return;
+    const total = played.value.segmentCount;
+    await s.playback.setSleepTimer('chapter');
+    // 段内推进不受影响
+    s.audioPlayer.fireEnd();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(s.playback.getState().segmentIndex).toBe(1);
+    // 推进到章末
+    for (let i = 1; i < total; i++) {
+      s.audioPlayer.fireEnd();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    // 章末：不自动连播（即使下一章已预生成），睡眠清除
+    expect(s.playback.getState().sleepMode).toBeNull();
+    expect(s.playback.getState().status).not.toBe('playing');
+  });
+
+  it('取消睡眠：状态清空', async () => {
+    const s = await setupWithGeneratedChapter();
+    await s.playback.setSleepTimer('minutes', 15);
+    expect(s.playback.getState().sleepMode).toBe('minutes');
+    s.playback.cancelSleepTimer();
+    expect(s.playback.getState().sleepMode).toBeNull();
+    expect(s.playback.getState().sleepDeadline).toBeNull();
   });
 });

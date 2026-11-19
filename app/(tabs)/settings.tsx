@@ -18,6 +18,9 @@ export default function SettingsScreen() {
   const [stats, setStats] = useState<ReadingStats | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [volumeKeyTurn, setVolumeKeyTurn] = useState(false);
+  const [immersive, setImmersive] = useState(true);
+  const [pageSound, setPageSound] = useState(false);
   const [endpoint, setEndpoint] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -32,6 +35,9 @@ export default function SettingsScreen() {
     setHasApiKey(config.hasApiKey);
     setUsage(await services.settings.getUsage());
     setStats(await services.stats.getStats());
+    setVolumeKeyTurn((await services.settings.getSetting('volume-key-turn')) === 'on');
+    setImmersive((await services.settings.getSetting('reader-immersive')) !== 'off');
+    setPageSound((await services.settings.getSetting('reader-page-sound')) === 'on');
     setLoading(false);
   }, [services]);
 
@@ -103,7 +109,7 @@ export default function SettingsScreen() {
                 autoCapitalize="none"
               />
             </View>
-            <Pressable className="items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep" onPress={save}>
+            <Pressable accessibilityRole="button" className="items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep" onPress={save}>
               <Text className="font-semibold text-white">保存服务连接</Text>
             </Pressable>
             {notice ? <Text className="text-xs text-muted dark:text-muted-night">{notice}</Text> : null}
@@ -125,11 +131,40 @@ export default function SettingsScreen() {
             · 语音合成（Edge）：成功 {usage.ttsOk} 次 / 失败 {usage.ttsFailed} 次{'\n'}
             · 文本模型：成功 {usage.llmOk} 次 / 失败 {usage.llmFailed} 次
           </Text>
-          <Pressable className="mt-2 self-start" onPress={() => void reload()}>
+          <Pressable accessibilityRole="button" className="mt-2 self-start" onPress={() => void reload()}>
             <Text className="text-xs text-accent">刷新</Text>
           </Pressable>
         </View>
       ) : null}
+
+      <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+        <Text className="font-semibold text-ink dark:text-ink-night">阅读</Text>
+        <View className="mt-3 gap-2">
+          {([
+            ['volume-key-turn', '音量键翻页（Android，阅读器内）', volumeKeyTurn, setVolumeKeyTurn],
+            ['reader-immersive', '沉浸全屏（菜单隐藏时收起状态栏）', immersive, setImmersive],
+            ['reader-page-sound', '翻页音效', pageSound, setPageSound],
+          ] as const).map(([key, label, value, setter]) => (
+            <Pressable
+              key={key}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: value }}
+              className="flex-row items-center justify-between rounded-lg bg-raised px-3 py-2.5 dark:bg-card-night"
+              onPress={() => {
+                const next = !value;
+                setter(next);
+                void services.settings.setSetting(key, next ? 'on' : 'off');
+              }}
+            >
+              <Text className="flex-1 text-sm text-ink dark:text-ink-night">{label}</Text>
+              <Text className={`text-xs font-semibold ${value ? 'text-accent' : 'text-faint'}`}>
+                {value ? '开' : '关'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text className="mt-2 text-xs text-faint">音量键翻页仅 Android 且阅读器翻页模式内生效。</Text>
+      </View>
 
       {stats ? (
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
@@ -138,7 +173,7 @@ export default function SettingsScreen() {
             · 今日阅读 {Math.round(stats.todayMs / 60000)} 分钟 · {stats.todayChars} 字{'\n'}
             · 累计阅读 {Math.round(stats.totalMs / 60000)} 分钟
           </Text>
-          <Pressable className="mt-2 self-start" onPress={() => void reload()}>
+          <Pressable accessibilityRole="button" className="mt-2 self-start" onPress={() => void reload()}>
             <Text className="text-xs text-accent">刷新</Text>
           </Pressable>
         </View>
@@ -150,7 +185,7 @@ export default function SettingsScreen() {
           导出书架+偏好+书签为 JSON 分享保存；导入恢复设置项（书籍正文需重新导入原文件）。
         </Text>
         <View className="mt-3 flex-row gap-2">
-          <Pressable
+          <Pressable accessibilityRole="button"
             className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
             disabled={backupBusy}
             onPress={() => {
@@ -165,7 +200,7 @@ export default function SettingsScreen() {
           >
             <Text className="font-semibold text-white">导出备份</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
             disabled={backupBusy}
             onPress={() => {

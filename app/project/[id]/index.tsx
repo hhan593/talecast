@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+import { VolumeManager } from 'react-native-volume-manager';
 import {
   ActivityIndicator,
   Alert,
@@ -55,6 +57,11 @@ export default function ProjectWorkbenchScreen() {
   const [dialogueVoices, setDialogueVoices] = useState(true);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'off' | 'slow' | 'standard' | 'fast'>('off');
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
+  const [readerFontFamily, setReaderFontFamily] = useState<'serif' | 'sans' | 'system'>('serif');
+  const [immersive, setImmersive] = useState(true);
+  const [volumeKeyTurn, setVolumeKeyTurn] = useState(false);
+  const [pageSound, setPageSound] = useState(false);
+  const [volumeEvent, setVolumeEvent] = useState<{ seq: number; direction: 'up' | 'down' } | null>(null);
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -99,6 +106,37 @@ export default function ProjectWorkbenchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, readerMode, autoScrollSpeed, autoScrollPaused, readerFontSize, readerLineSpacing, readerMargin]);
 
+  // 音量键翻页（v0.11.0）：Android；监听音量变化→还原音量→下发翻页事件
+  const volumeRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !volumeKeyTurn || view !== 'reader') {
+      volumeRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    void VolumeManager.getVolume().then((v) => {
+      if (!cancelled) volumeRef.current = v.volume;
+    });
+    const listener = VolumeManager.addVolumeListener((result) => {
+      const last = volumeRef.current;
+      const volume = result.volume;
+      if (last === null || Math.abs(volume - last) < 0.02) {
+        volumeRef.current = volume;
+        return;
+      }
+      volumeRef.current = volume;
+      void VolumeManager.setVolume(last, { showUI: false }); // 还原系统音量
+      setVolumeEvent((prev) => ({
+        seq: (prev?.seq ?? 0) + 1,
+        direction: volume > last ? 'up' : 'down',
+      }));
+    });
+    return () => {
+      cancelled = true;
+      listener.remove();
+    };
+  }, [volumeKeyTurn, view]);
+
   // 阅读会话统计（v0.10.0）：进入阅读计时，离开/切视图结算时长与字数
   const readerSessionRef = useRef<{ at: number; startOffset: number } | null>(null);
   const lastKnownOffsetRef = useRef(0);
@@ -138,6 +176,12 @@ export default function ProjectWorkbenchScreen() {
     void services.settings.getSetting('reader-indent').then((v) => setReaderIndent(v !== 'off'));
     void services.settings.getSetting('reader-align').then((v) => setReaderJustify(v !== 'off'));
     void services.settings.getSetting(`dialogue-voices:${projectId}`).then((v) => setDialogueVoices(v !== 'off'));
+    void services.settings.getSetting('reader-font-family').then((v) => {
+      if (v === 'serif' || v === 'sans' || v === 'system') setReaderFontFamily(v);
+    });
+    void services.settings.getSetting('reader-immersive').then((v) => setImmersive(v !== 'off'));
+    void services.settings.getSetting('volume-key-turn').then((v) => setVolumeKeyTurn(v === 'on'));
+    void services.settings.getSetting('reader-page-sound').then((v) => setPageSound(v === 'on'));
     void services.settings.getSetting('reader-theme').then((v) => {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
@@ -195,6 +239,49 @@ export default function ProjectWorkbenchScreen() {
     [chapters],
   );
 
+  // 睡眠定时循环（v0.11.0）：关 → 15 分 → 30 分 → 60 分 → 播完本章 → 播完本段 → 关
+  const sleepModes = ['off', 'm15', 'm30', 'm60', 'chapter', 'segment'] as const;
+  const [sleepModeKey, setSleepModeKey] = useState<(typeof sleepModes)[number]>('off');
+  const sleepLabel =
+    sleepModeKey === 'off'
+      ? '定时关'
+      : sleepModeKey === 'm15'
+        ? '15 分'
+        : sleepModeKey === 'm30'
+          ? '30 分'
+          : sleepModeKey === 'm60'
+            ? '60 分'
+            : sleepModeKey === 'chapter'
+              ? '本章完停'
+              : '本段完停';
+  const cycleSleep = useCallback(async () => {
+    const next = sleepModes[(sleepModes.indexOf(sleepModeKey) + 1) % sleepModes.length];
+    setSleepModeKey(next);
+    if (next === 'off') {
+      playback.cancelSleepTimer();
+      return;
+    }
+    if (next === 'chapter' || next === 'segment') {
+      await playback.setSleepTimer(next);
+      return;
+    }
+    const minutes = next === 'm15' ? 15 : next === 'm30' ? 30 : 60;
+    await playback.setSleepTimer('minutes', minutes);
+  }, [sleepModeKey, playback]);
+
+  // 本章剩余时长预估（v0.11.0）：听读按当前倍速语速（≈4.2 字/秒@1×），阅读按 500 字/分
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const chapterEta = useMemo(() => {
+    if (!current) return null;
+    const remaining = Math.max(0, current.chapter.endOffset - currentOffset);
+    if (remaining === 0) return null;
+    const listening = playback.state.chapterId === current.chapter.id && playback.state.status === 'playing';
+    const minutes = listening
+      ? remaining / (4.2 * playback.state.rate * 60)
+      : remaining / 500;
+    return `约 ${Math.max(1, Math.ceil(minutes))} 分钟`;
+  }, [current, currentOffset, playback.state.chapterId, playback.state.status, playback.state.rate]);
+
   // 点段跳转 / 正文跟随（docs/plan.md P3：拖动进度/切章后高亮跟随）
   const seekToParagraph = useCallback(
     async (paragraph: Paragraph) => {
@@ -247,6 +334,7 @@ export default function ProjectWorkbenchScreen() {
     const first = info.viewableItems[0];
     if (first?.item && current && view === 'reader' && readerMode === 'scroll') {
       lastKnownOffsetRef.current = (first.item as Paragraph).startOffset;
+      setCurrentOffset((first.item as Paragraph).startOffset);
       saveReadingPosition(current.chapter.id, (first.item as Paragraph).startOffset);
     }
   };
@@ -262,7 +350,7 @@ export default function ProjectWorkbenchScreen() {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-paper dark:bg-paper-night">
         <Text className="text-base text-ink dark:text-ink-night">这本书不存在或已被删除</Text>
-        <Pressable className="rounded-xl bg-accent px-4 py-2" onPress={() => router.back()}>
+        <Pressable accessibilityRole="button" className="rounded-xl bg-accent px-4 py-2" onPress={() => router.back()}>
           <Text className="font-semibold text-white">返回书架</Text>
         </Pressable>
       </View>
@@ -377,6 +465,7 @@ export default function ProjectWorkbenchScreen() {
         onPageChange={(charOffset) => {
           setLastPageOffset(charOffset);
           lastKnownOffsetRef.current = charOffset;
+          setCurrentOffset(charOffset);
           saveReadingPosition(current.chapter.id, charOffset);
         }}
         autoScrollOffsetRef={autoScrollSpeed !== 'off' ? autoScroll.offsetRef : null}
@@ -392,6 +481,19 @@ export default function ProjectWorkbenchScreen() {
         onScrollTap={() => {
           if (autoScrollSpeed !== 'off') setAutoScrollPaused((p) => !p);
         }}
+        fontFamily={readerFontFamily}
+        onCycleFontFamily={() => {
+          const cycle: Array<'serif' | 'sans' | 'system'> = ['serif', 'sans', 'system'];
+          const next = cycle[(cycle.indexOf(readerFontFamily) + 1) % cycle.length];
+          setReaderFontFamily(next);
+          void services.settings.setSetting('reader-font-family', next);
+        }}
+        chapterEta={chapterEta}
+        sleepLabel={sleepLabel}
+        onCycleSleep={() => void cycleSleep()}
+        volumeEvent={volumeEvent}
+        pageSoundEnabled={pageSound}
+        immersive={immersive}
         onAddBookmark={() => {
           const offset = lastPageOffset >= 0 ? lastPageOffset : pendingOffset;
           const excerpt = current.chapterText.slice(offset, offset + 20);
@@ -446,13 +548,13 @@ export default function ProjectWorkbenchScreen() {
       ) : null}
 
       <View className="mt-3 flex-row gap-2">
-        <Pressable
+        <Pressable accessibilityRole="button"
           className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
         >
           <Text className="text-sm text-ink dark:text-ink-night">角色中心</Text>
         </Pressable>
-        <Pressable
+        <Pressable accessibilityRole="button"
           className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => setView('assistant')}
         >
@@ -472,7 +574,7 @@ export default function ProjectWorkbenchScreen() {
                   : `生成中 ${generation.progress.progress}/${generation.progress.totalSegments}`}
             </Text>
             {generation.progress.status === 'failed' ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className="rounded-lg bg-gold px-3 py-1.5"
                 disabled={generation.busy}
                 onPress={() => void generation.retry(generation.progress!.jobId)}
@@ -481,7 +583,7 @@ export default function ProjectWorkbenchScreen() {
               </Pressable>
             ) : null}
             {generation.progress.status === 'done' ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
                 disabled={generation.busy}
                 onPress={() => void generation.exportChapter(generation.progress!.jobId)}
@@ -490,7 +592,7 @@ export default function ProjectWorkbenchScreen() {
               </Pressable>
             ) : null}
             {generation.progress.status === 'running' || generation.progress.status === 'pending' ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
                 onPress={() => void generation.cancel(generation.progress!.jobId)}
               >
@@ -512,7 +614,7 @@ export default function ProjectWorkbenchScreen() {
 
       <View className="mt-3 flex-row flex-wrap gap-2">
         {!library.source ? (
-          <Pressable
+          <Pressable accessibilityRole="button"
             className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
             disabled={library.busy}
             onPress={() => void library.importTxt()}
@@ -521,7 +623,7 @@ export default function ProjectWorkbenchScreen() {
           </Pressable>
         ) : (
           <>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
               disabled={library.busy}
               onPress={() => {
@@ -537,7 +639,7 @@ export default function ProjectWorkbenchScreen() {
             >
               <Text className="text-sm text-ink dark:text-ink-night">重新分章</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
               onPress={() =>
                 Alert.alert('能力边界', '采用/撤销历史候选请重新发起"重新分章"并在审阅中操作。')
@@ -545,7 +647,7 @@ export default function ProjectWorkbenchScreen() {
             >
               <Text className="text-sm text-ink dark:text-ink-night">候选历史</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               className={`rounded-xl px-3 py-2.5 ${dialogueVoices ? 'bg-accent-soft dark:bg-accent-nightsoft' : 'bg-raised dark:bg-card-night'}`}
               onPress={() => {
                 const next = !dialogueVoices;
@@ -570,7 +672,7 @@ export default function ProjectWorkbenchScreen() {
           ['bookmarks', `书签${bookmarks.bookmarks.length > 0 ? ` ${bookmarks.bookmarks.length}` : ''}`],
           ['search', '搜索'],
         ] as const).map(([key, label]) => (
-          <Pressable
+          <Pressable accessibilityRole="button"
             key={key}
             className={`flex-1 items-center rounded-xl py-2 ${
               catalogView === key ? 'bg-accent' : 'bg-raised dark:bg-card-night'
@@ -604,30 +706,30 @@ export default function ProjectWorkbenchScreen() {
             </Pressable>
             {library.source ? (
               <View className="mt-2 flex-row flex-wrap gap-2">
-                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: '修改标题', initial: item.title })}>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: '修改标题', initial: item.title })}>
                   <Text className="text-xs text-muted dark:text-ink-night">改名</Text>
                 </Pressable>
-                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: '从此处拆分（字符偏移）', initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: '从此处拆分（字符偏移）', initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
                   <Text className="text-xs text-muted dark:text-ink-night">拆分</Text>
                 </Pressable>
-                <Pressable className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
                   <Text className="text-xs text-muted dark:text-ink-night">边界</Text>
                 </Pressable>
-                <Pressable
+                <Pressable accessibilityRole="button"
                   className="rounded-md bg-accent-soft px-2 py-1 dark:bg-accent-nightsoft"
                   disabled={generation.busy}
                   onPress={() => void generation.preview(item.id)}
                 >
                   <Text className="text-xs text-accent dark:text-accent-night">试听首段</Text>
                 </Pressable>
-                <Pressable
+                <Pressable accessibilityRole="button"
                   className="rounded-md bg-accent px-2 py-1"
                   disabled={generation.busy}
                   onPress={() => void generation.start(item.id)}
                 >
                   <Text className="text-xs font-semibold text-white">生成本章</Text>
                 </Pressable>
-                <Pressable
+                <Pressable accessibilityRole="button"
                   className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                   onPress={() =>
                     Alert.alert('删除本章', `《${item.title}》正文将并入相邻章节，来源不变。确认删除？`, [
@@ -660,7 +762,7 @@ export default function ProjectWorkbenchScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
-              <Pressable
+              <Pressable accessibilityRole="button"
                 onPress={() => {
                   setHighlightRange(null);
                   void openChapter(item.chapterId, item.charOffset);
@@ -673,7 +775,7 @@ export default function ProjectWorkbenchScreen() {
                   {new Date(item.createdAt).toLocaleString()}
                 </Text>
               </Pressable>
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className="mt-2 self-start rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                 onPress={() => void bookmarks.remove(item.id)}
               >
@@ -704,7 +806,7 @@ export default function ProjectWorkbenchScreen() {
               onSubmitEditing={() => void bookSearch.search(searchInput)}
               returnKeyType="search"
             />
-            <Pressable
+            <Pressable accessibilityRole="button"
               className="rounded-xl bg-accent px-4 py-2 active:bg-accent-deep"
               disabled={bookSearch.busy || searchInput.trim().length === 0}
               onPress={() => void bookSearch.search(searchInput)}
@@ -727,7 +829,7 @@ export default function ProjectWorkbenchScreen() {
             data={bookSearch.results ?? []}
             keyExtractor={(item, index) => `${item.chapterId}-${item.charOffset}-${index}`}
             renderItem={({ item }) => (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 className="rounded-xl bg-card px-4 py-3 dark:bg-card-night"
                 onPress={() => {
                   const length = searchInput.trim().length;

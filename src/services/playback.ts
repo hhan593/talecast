@@ -9,6 +9,8 @@ import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { GenerationService } from '@/services/generation';
 
 
+export type SleepTimerMode = 'minutes' | 'chapter' | 'segment';
+
 export interface PlaybackState {
   projectId: string | null;
   chapterId: string | null;
@@ -22,6 +24,10 @@ export interface PlaybackState {
   queueOffsets: number[];
   /** 播放倍速（0.8–2.0，播放端即时生效） */
   rate: number;
+  /** 睡眠定时（v0.11.0）：当前生效模式；null=未开启 */
+  sleepMode: SleepTimerMode | null;
+  /** minutes 模式的到期时间戳；其余模式为 null */
+  sleepDeadline: number | null;
 }
 
 interface QueueItem {
@@ -58,6 +64,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
     segmentStartOffset: null,
     queueOffsets: [],
     rate: 1,
+    sleepMode: null,
+    sleepDeadline: null,
   };
   const listeners = new Set<(state: PlaybackState) => void>();
   let queue: QueueItem[] = [];
@@ -67,12 +75,15 @@ export function createPlaybackService(deps: PlaybackDeps) {
   let sleepTimerHandle: number | null = null;
   /** 渐弱代次：取消/新定时器/新播放使旧渐弱链失效 */
   let fadeGeneration = 0;
+  let sleepMode: SleepTimerMode | null = null;
 
   function cancelSleepTimerInternal(): void {
     if (sleepTimerHandle !== null) {
       clearTimeout(sleepTimerHandle);
       sleepTimerHandle = null;
     }
+    sleepMode = null;
+    setState({ sleepMode: null, sleepDeadline: null });
     // 取消进行中的渐弱并立即恢复音量（下次播放也兜底重置）
     fadeGeneration += 1;
     void deps.audioPlayer.setVolume(1).catch(() => undefined);
@@ -130,9 +141,21 @@ export function createPlaybackService(deps: PlaybackDeps) {
   deps.audioPlayer.onPlaybackEnd(() => {
     const next = state.segmentIndex + 1;
     if (next < queue.length) {
+      if (sleepMode === 'segment') {
+        // 睡眠"播完本段"：暂停并清除
+        void deps.audioPlayer.pause().catch(() => undefined);
+        setState({ status: 'paused' });
+        cancelSleepTimerInternal();
+        return;
+      }
       void loadAndPlay(next);
     } else {
       setState({ status: 'done' });
+      if (sleepMode === 'chapter') {
+        // 睡眠"播完本章"：章末不自动连播，清除后暂停
+        cancelSleepTimerInternal();
+        return;
+      }
       void autoNextChapter(state.projectId, state.chapterId);
     }
   });
@@ -303,21 +326,33 @@ export function createPlaybackService(deps: PlaybackDeps) {
       }
     },
 
-    /** 睡眠定时器（RE-2）：到期渐弱后暂停；cancel 清除 */
-    async setSleepTimer(minutes: number): Promise<Result<{ deadline: number }>> {
-      if (minutes <= 0 || minutes > 240) return err('invalid', '定时时长需为 1-240 分钟');
+    /**
+     * 睡眠定时（v0.11.0）：minutes 到期渐弱暂停；chapter 播完本章停（不自动连播）；
+     * segment 播完本段停。cancel 清除。
+     */
+    async setSleepTimer(mode: SleepTimerMode, minutes?: number): Promise<Result<{ deadline: number | null }>> {
       cancelSleepTimerInternal();
-      const deadline = Date.now() + minutes * 60_000;
-      const tick = (): void => {
-        if (Date.now() >= deadline) {
-          sleepTimerHandle = null;
-          void fadeOutAndPause();
-          return;
+      sleepMode = mode;
+      setState({ sleepMode: mode, sleepDeadline: null });
+      if (mode === 'minutes') {
+        if (!minutes || minutes <= 0 || minutes > 240) {
+          cancelSleepTimerInternal();
+          return err('invalid', '定时时长需为 1-240 分钟');
         }
-        sleepTimerHandle = setTimeout(tick, 5000) as unknown as number;
-      };
-      tick();
-      return ok({ deadline });
+        const deadline = Date.now() + minutes * 60_000;
+        const tick = (): void => {
+          if (Date.now() >= deadline) {
+            sleepTimerHandle = null;
+            void fadeOutAndPause();
+            return;
+          }
+          sleepTimerHandle = setTimeout(tick, 5000) as unknown as number;
+        };
+        tick();
+        setState({ sleepDeadline: deadline });
+        return ok({ deadline });
+      }
+      return ok({ deadline: null });
     },
 
     cancelSleepTimer(): void {

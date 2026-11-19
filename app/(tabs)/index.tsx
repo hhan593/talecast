@@ -59,7 +59,7 @@ export default function BookshelfScreen() {
     <View className="flex-1 bg-paper px-4 pb-4 pt-16 dark:bg-paper-night">
       <View className="flex-row items-center justify-between">
         <Text className="font-serif text-3xl font-bold tracking-wide text-ink dark:text-ink-night">TaleCast</Text>
-        <Pressable
+        <Pressable accessibilityRole="button"
           className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
           onPress={toggleView}
         >
@@ -76,7 +76,7 @@ export default function BookshelfScreen() {
         </Text>
       ) : null}
 
-      <Pressable
+      <Pressable accessibilityRole="button"
         className="mt-4 items-center rounded-xl bg-accent py-3 active:bg-accent-deep"
         onPress={() => setCreateVisible(true)}
       >
@@ -93,7 +93,7 @@ export default function BookshelfScreen() {
         contentContainerStyle={view === 'grid' ? { gap: 10 } : undefined}
         renderItem={({ item }) =>
           view === 'list' ? (
-            <Pressable
+            <Pressable accessibilityRole="button"
               className="rounded-r-xl rounded-l-sm border-l-[3px] border-accent bg-card p-4 active:bg-raised dark:bg-card-night dark:active:bg-raised-night"
               onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
               onLongPress={() =>
@@ -109,7 +109,7 @@ export default function BookshelfScreen() {
               </Text>
             </Pressable>
           ) : (
-            <Pressable
+            <Pressable accessibilityRole="button"
               className="flex-1 rounded-2xl border border-line bg-card p-2.5 active:bg-raised dark:bg-card-night dark:active:bg-raised-night"
               onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
               onLongPress={() =>
@@ -147,7 +147,7 @@ export default function BookshelfScreen() {
         }
         ListFooterComponent={
           projects && projects.length > 0 ? (
-            <Pressable className="mt-3 items-center py-2" onPress={() => void refresh()}>
+            <Pressable accessibilityRole="button" className="mt-3 items-center py-2" onPress={() => void refresh()}>
               <Text className="text-xs text-faint">刷新</Text>
             </Pressable>
           ) : undefined

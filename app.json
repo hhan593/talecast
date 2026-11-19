@@ -49,12 +49,13 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-sharing",
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     }
   },
-  "version": "0.10.0"
+  "version": "0.11.0"
 }

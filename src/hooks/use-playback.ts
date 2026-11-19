@@ -43,6 +43,15 @@ export function usePlayback(projectId: string) {
     },
     [services],
   );
+  const setSleepTimer = useCallback(
+    async (mode: import('@/services/playback').SleepTimerMode, minutes?: number) => {
+      const result = await services.playback.setSleepTimer(mode, minutes);
+      if (!result.ok) setError(result.error.message);
+      return result;
+    },
+    [services],
+  );
+  const cancelSleepTimer = useCallback(() => services.playback.cancelSleepTimer(), [services]);
 
-  return { state, error, playChapter, pause, resume, seekToSegment, stop, setRate };
+  return { state, error, playChapter, pause, resume, seekToSegment, stop, setRate, setSleepTimer, cancelSleepTimer };
 }
