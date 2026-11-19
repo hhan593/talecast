@@ -24,8 +24,8 @@ export interface ReaderViewProps {
   chapterBaseOffset: number;
   mode: ReaderMode;
   fontSize: FontSizeKey;
-  /** 翻页样式：slide 平移（pager-view）/ cover 覆盖（Animated ScrollView，v0.4.0） */
-  pageTurnStyle: 'slide' | 'cover';
+  /** 翻页样式：slide 平移 / cover 覆盖 / curl 卷页（3D 翻页近似；Skia 真卷页后置） */
+  pageTurnStyle: 'slide' | 'cover' | 'curl';
   onCyclePageTurnStyle(): void;
   /** 边听边读跟随（paged 模式：播放偏移变化自动翻页） */
   followPlayback: boolean;
@@ -241,6 +241,62 @@ export function ReaderView(props: ReaderViewProps) {
                   </View>
                 ))}
               </PagerView>
+            </View>
+          </TouchableWithoutFeedback>
+        ) : null}
+        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'curl' ? (
+          <TouchableWithoutFeedback onPress={handleTap}>
+            <View className="flex-1">
+              <Animated.FlatList
+                ref={coverScrollRef}
+                style={{ flex: 1 }}
+                data={pages}
+                keyExtractor={(item) => String(item.ordinal)}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { x: coverScrollX } } }],
+                  { useNativeDriver: true },
+                )}
+                renderItem={({ item: page }) => (
+                  <Animated.View
+                    className="bg-paper dark:bg-paper-night"
+                    style={[
+                      { width: contentSize.w, height: contentSize.h },
+                      coverTransforms[page.ordinal],
+                      {
+                        // 卷页近似：3D 翻页（rotationY + 透视），真 Skia 着色器卷页为 v0.4.x 增强
+                        transform: [
+                          { perspective: 800 },
+                          {
+                            rotateY: coverScrollX.interpolate({
+                              inputRange: [
+                                (page.ordinal - 1) * contentSize.w,
+                                page.ordinal * contentSize.w,
+                                (page.ordinal + 1) * contentSize.w,
+                              ],
+                              outputRange: ['90deg', '0deg', '-90deg'],
+                              extrapolate: 'clamp',
+                            }),
+                          },
+                        ],
+                        backfaceVisibility: 'hidden',
+                      },
+                    ]}
+                  >
+                    <Text
+                      className="font-serif text-ink dark:text-ink-night"
+                      style={{ fontSize, lineHeight: fontSize * 1.7 }}
+                    >
+                      {props.chapterText.slice(page.startOffset, page.endOffset)}
+                    </Text>
+                    <Text className="mt-4 text-center text-[10px] text-faint dark:text-faint-night">
+                      {page.ordinal + 1} / {pages.length}
+                    </Text>
+                  </Animated.View>
+                )}
+              />
             </View>
           </TouchableWithoutFeedback>
         ) : null}
