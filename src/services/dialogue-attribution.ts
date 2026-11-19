@@ -85,16 +85,21 @@ ${text}`;
       let overrides: SpeakerOverride[];
       try {
         const parsed = JSON.parse(raw.trim()) as Array<{ p: number; s: string }>;
+        // 段落起点表：按 LLM 提示口径构建——跳过空行的段落序号 → 段首偏移
+        //（splitParagraphs 的段落 = 非空行；空行不计入 item.p）
         const lines = chapterText.split('\n');
+        const paragraphStarts: number[] = [];
+        let cursor = 0;
+        for (const line of lines) {
+          if (line.trim().length > 0) paragraphStarts.push(cursor);
+          cursor += line.length + 1;
+        }
         overrides = [];
         for (const item of parsed) {
           if (typeof item.p !== 'number' || typeof item.s !== 'string') continue;
           const characterId = nameToId.get(item.s);
-          if (!characterId || item.p < 0 || item.p >= lines.length) continue;
-          // 段落起点（与 splitParagraphs 同口径：跳过空行）
-          let paragraphStart = 0;
-          for (let i = 0; i < item.p; i++) paragraphStart += lines[i].length + 1;
-          overrides.push({ paragraphStart, characterId });
+          if (!characterId || item.p < 0 || item.p >= paragraphStarts.length) continue;
+          overrides.push({ paragraphStart: paragraphStarts[item.p], characterId });
         }
       } catch {
         return err('invalid', 'LLM 归属输出无法解析');
