@@ -15,6 +15,8 @@ import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
 import { ReaderView } from '@/components/workbench/reader-view';
 import { useAssistant } from '@/hooks/use-assistant';
+import { useBookSearch } from '@/hooks/use-book-search';
+import { useBookmarks } from '@/hooks/use-bookmarks';
 import { useGeneration } from '@/hooks/use-generation';
 import { useLibrary } from '@/hooks/use-library';
 import { usePlayback } from '@/hooks/use-playback';
