@@ -57,6 +57,14 @@ export function createPlaybackService(deps: PlaybackDeps) {
   let queueProjectId: string | null = null;
   let lastPersistMs = 0;
   let rate = 1;
+  let sleepTimerHandle: number | null = null;
+
+  function cancelSleepTimerInternal(): void {
+    if (sleepTimerHandle !== null) {
+      clearTimeout(sleepTimerHandle);
+      sleepTimerHandle = null;
+    }
+  }
 
   function setState(patch: Partial<PlaybackState>): void {
     state = { ...state, ...patch };
@@ -288,6 +296,28 @@ export function createPlaybackService(deps: PlaybackDeps) {
         setState({ status: 'idle' });
         return err('network', `播放失败：${errorMessage(error)}`);
       }
+    },
+
+    /** 睡眠定时器（RE-2）：到期暂停；cancel 清除 */
+    async setSleepTimer(minutes: number): Promise<Result<{ deadline: number }>> {
+      if (minutes <= 0 || minutes > 240) return err('invalid', '定时时长需为 1-240 分钟');
+      cancelSleepTimerInternal();
+      const deadline = Date.now() + minutes * 60_000;
+      const tick = (): void => {
+        if (Date.now() >= deadline) {
+          sleepTimerHandle = null;
+          void deps.audioPlayer.pause();
+          setState({ status: 'paused' });
+          return;
+        }
+        sleepTimerHandle = setTimeout(tick, 5000) as unknown as number;
+      };
+      tick();
+      return ok({ deadline });
+    },
+
+    cancelSleepTimer(): void {
+      cancelSleepTimerInternal();
     },
 
     /** 倍速：播放端即时生效，settings 持久化（F-1） */
