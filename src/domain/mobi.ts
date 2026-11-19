@@ -10,6 +10,9 @@ export interface MobiChapter {
   text: string;
 }
 
+/** 损坏/恶意头防护（issue #34）：声明正文长度上限（16MB，与 TXT 导入上限一致） */
+export const MAX_MOBI_TEXT_LENGTH = 16 * 1024 * 1024;
+
 export interface MobiParseResult {
   bookTitle: string;
   chapters: MobiChapter[];
@@ -53,6 +56,9 @@ export function parseMobiHeader(record0: Uint8Array): MobiHeader {
   const textRecordCount = view.getUint16(8);
   const encryption = view.getUint16(12);
   if (encryption !== 0) throw new Error('该 MOBI 文件已加密，暂不支持');
+  if (textLength > MAX_MOBI_TEXT_LENGTH) {
+    throw new Error('MOBI 声明的正文长度异常（疑似损坏文件），已中止解析');
+  }
   // MOBI magic 校验（可选：PalmDOC-only 文件没有 MOBI 头）
   let encoding = 65001;
   if (record0.length >= 20 && record0[16] === 0x4d && record0[17] === 0x4f && record0[18] === 0x42 && record0[19] === 0x49) {

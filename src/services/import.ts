@@ -170,6 +170,10 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
   // MOBI/AZW3/PRC（v0.14.0）：自研 PalmDOC 解析，整本单章（由"重新分章"提候选）
   const lowerName = command.fileName.toLowerCase();
   if (lowerName.endsWith('.mobi') || lowerName.endsWith('.azw3') || lowerName.endsWith('.prc')) {
+    // 大小校验（issue #34）：MOBI/EPUB 分支此前绕过 TXT 的 16MB 上限
+    if (command.bytes.length > 16 * 1024 * 1024) {
+      return err('invalid', `文件超出 16MB 上限（${(command.bytes.length / 1024 / 1024).toFixed(1)}MB）`);
+    }
     return runMobiImport(deps, command);
   }
   if (!checkImportSize(bytes.length)) {

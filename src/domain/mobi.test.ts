@@ -139,3 +139,13 @@ describe('v0.14.0 MOBI 解析', () => {
     expect(() => parseMobi(bytes, (input) => input)).toThrow('加密');
   });
 });
+
+describe('issue #34 损坏头防护', () => {
+  it('textLength 超上限：明确报错而非 OOM', () => {
+    const bytes = buildMobiFixture('<p>x</p>', '测试书', 1);
+    const view = new DataView(bytes.buffer);
+    const record0Offset = view.getUint32(78);
+    view.setUint32(record0Offset + 4, 0xfffffff0); // 声明近 4GiB（Uint32 内）
+    expect(() => extractMobiHtml(bytes)).toThrow('正文长度异常');
+  });
+});
