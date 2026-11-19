@@ -41,7 +41,7 @@ export default function ProjectWorkbenchScreen() {
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
   const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
-  const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover'>('slide');
+  const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover' | 'curl'>('slide');
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -226,7 +226,8 @@ export default function ProjectWorkbenchScreen() {
           void services.reading.saveReaderPrefs(projectId, next, readerFontSize);
         }}
         onCyclePageTurnStyle={() => {
-          const next = pageTurnStyle === 'slide' ? 'cover' : 'slide';
+          const cycle: Array<'slide' | 'cover' | 'curl'> = ['slide', 'cover', 'curl'];
+          const next = cycle[(cycle.indexOf(pageTurnStyle) + 1) % cycle.length];
           setPageTurnStyle(next);
           void services.settings.setPageTurnStyle(next);
         }}

@@ -44,13 +44,13 @@ export function createSettingsService(deps: SettingsDeps) {
       return deps.requestLogRepository.counts();
     },
 
-    /** 翻页样式偏好（slide 平移 / cover 覆盖） */
-    async getPageTurnStyle(): Promise<'slide' | 'cover'> {
+    /** 翻页样式偏好（slide 平移 / cover 覆盖 / curl 卷页近似） */
+    async getPageTurnStyle(): Promise<'slide' | 'cover' | 'curl'> {
       const value = await deps.settingsRepository.get('page-turn-style');
-      return value === 'cover' ? 'cover' : 'slide';
+      return value === 'cover' || value === 'curl' ? value : 'slide';
     },
 
-    async setPageTurnStyle(style: 'slide' | 'cover'): Promise<void> {
+    async setPageTurnStyle(style: 'slide' | 'cover' | 'curl'): Promise<void> {
       return deps.settingsRepository.set('page-turn-style', style);
     },
 
