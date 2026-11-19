@@ -13,12 +13,13 @@ import {
 
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
-import { ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
+import { MARGINS, ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
 import { useAssistant } from '@/hooks/use-assistant';
 import { useBookSearch } from '@/hooks/use-book-search';
 import { useBookmarks } from '@/hooks/use-bookmarks';
 import { useGeneration } from '@/hooks/use-generation';
 import { useLibrary } from '@/hooks/use-library';
+import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { usePlayback } from '@/hooks/use-playback';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
@@ -52,6 +53,8 @@ export default function ProjectWorkbenchScreen() {
   const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'search'>('chapters');
   const [searchInput, setSearchInput] = useState('');
   const [dialogueVoices, setDialogueVoices] = useState(true);
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState<'off' | 'slow' | 'standard' | 'fast'>('off');
+  const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -78,6 +81,41 @@ export default function ProjectWorkbenchScreen() {
       void orientation.lockPortrait();
     };
   }, [view, orientation]);
+
+  // 自动滚屏（v0.10.0）：滚动模式 + 速度档驱动；离开阅读/切模式/关闭即停
+  const autoScroll = useAutoScroll({
+    enabled: autoScrollSpeed !== 'off',
+    fontSize: readerFontSize,
+    lineSpacing: readerLineSpacing,
+    marginPx: MARGINS[readerMargin],
+    contentHeight: 600,
+  });
+  useEffect(() => {
+    if (view === 'reader' && readerMode === 'scroll' && autoScrollSpeed !== 'off' && !autoScrollPaused) {
+      autoScroll.start();
+    } else {
+      autoScroll.stop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, readerMode, autoScrollSpeed, autoScrollPaused, readerFontSize, readerLineSpacing, readerMargin]);
+
+  // 阅读会话统计（v0.10.0）：进入阅读计时，离开/切视图结算时长与字数
+  const readerSessionRef = useRef<{ at: number; startOffset: number } | null>(null);
+  const lastKnownOffsetRef = useRef(0);
+  useEffect(() => {
+    if (view === 'reader') {
+      readerSessionRef.current = { at: Date.now(), startOffset: lastKnownOffsetRef.current };
+      return () => {
+        const session = readerSessionRef.current;
+        if (!session) return;
+        const durationMs = Date.now() - session.at;
+        const charsRead = Math.max(0, lastKnownOffsetRef.current - session.startOffset);
+        readerSessionRef.current = null;
+        void services.stats.recordSession(durationMs, charsRead);
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // 打开工程恢复上次阅读位置（4.1.1）：直接回到上次阅读的章节与偏移
   const openChapterRef = useRef<(chapterId: string, charOffset?: number) => Promise<void>>(async () => {});
@@ -208,6 +246,7 @@ export default function ProjectWorkbenchScreen() {
   viewableCallbackRef.current = (info) => {
     const first = info.viewableItems[0];
     if (first?.item && current && view === 'reader' && readerMode === 'scroll') {
+      lastKnownOffsetRef.current = (first.item as Paragraph).startOffset;
       saveReadingPosition(current.chapter.id, (first.item as Paragraph).startOffset);
     }
   };
@@ -337,7 +376,21 @@ export default function ProjectWorkbenchScreen() {
         }}
         onPageChange={(charOffset) => {
           setLastPageOffset(charOffset);
+          lastKnownOffsetRef.current = charOffset;
           saveReadingPosition(current.chapter.id, charOffset);
+        }}
+        autoScrollOffsetRef={autoScrollSpeed !== 'off' ? autoScroll.offsetRef : null}
+        autoScrollSpeedLabel={
+          autoScrollSpeed === 'off' ? '关' : autoScrollSpeed === 'slow' ? '慢' : autoScrollSpeed === 'standard' ? '中' : '快'
+        }
+        onCycleAutoScroll={() => {
+          setAutoScrollPaused(false);
+          const cycle: Array<'off' | 'slow' | 'standard' | 'fast'> = ['off', 'slow', 'standard', 'fast'];
+          setAutoScrollSpeed(cycle[(cycle.indexOf(autoScrollSpeed) + 1) % cycle.length]);
+        }}
+        onSeekSegment={(index) => void playback.seekToSegment(index)}
+        onScrollTap={() => {
+          if (autoScrollSpeed !== 'off') setAutoScrollPaused((p) => !p);
         }}
         onAddBookmark={() => {
           const offset = lastPageOffset >= 0 ? lastPageOffset : pendingOffset;

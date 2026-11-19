@@ -103,6 +103,14 @@ export interface ReaderViewProps {
   onToggleIndent(): void;
   onToggleJustify(): void;
   onAddBookmark(): void;
+  /** 自动滚屏（v0.10.0）：offsetRef 由父级 hook 推进，本组件驱动 FlatList；null=关闭 */
+  autoScrollOffsetRef: { current: number } | null;
+  autoScrollSpeedLabel: string;
+  onCycleAutoScroll(): void;
+  /** 播放段级滑条（v0.10.0）：拖动跨段跳转 */
+  onSeekSegment(index: number): void;
+  /** 滚动模式点击正文：滚屏运行时暂停/恢复（v0.10.0） */
+  onScrollTap(): void;
   /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
   onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
   /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
@@ -126,10 +134,27 @@ export function ReaderView(props: ReaderViewProps) {
   // 覆盖动画：滚动偏移驱动每页位移（当前页静止，下一页从右滑入覆盖）
   const coverScrollX = useRef(new Animated.Value(0)).current;
   const coverScrollRef = useRef<FlatList | null>(null);
+  const scrollListRef = useRef<FlatList | null>(null);
+  const scrollOffsetRef = useRef(0);
   const viewableCbRef = useRef<
     ((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null
   >(null);
   viewableCbRef.current = (info) => props.onViewableItems(info);
+
+  // 自动滚屏驱动（v0.10.0）：hook 每帧推进 offsetRef，本组件按增量滚动 FlatList
+  useEffect(() => {
+    if (props.mode !== 'scroll' || props.autoScrollOffsetRef === null) return;
+    const timer = setInterval(() => {
+      const target = props.autoScrollOffsetRef!.current;
+      const current = scrollOffsetRef.current;
+      if (target > current) {
+        const next = Math.max(current + (target - current), current + 1);
+        scrollListRef.current?.scrollToOffset({ offset: next, animated: false });
+        scrollOffsetRef.current = next;
+      }
+    }, 32);
+    return () => clearInterval(timer);
+  }, [props.mode, props.autoScrollOffsetRef]);
 
   // 沉浸模式：工具栏 3 秒无操作自动隐藏，任意点击重置（RE-1）
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -513,10 +538,20 @@ export function ReaderView(props: ReaderViewProps) {
           </TouchableWithoutFeedback>
         ) : null}
         {props.mode === 'scroll' ? (
-          <TouchableWithoutFeedback onPress={() => pokeControls()}>
+          <TouchableWithoutFeedback
+            onPress={() => {
+              pokeControls();
+              props.onScrollTap();
+            }}
+          >
             <FlatList
+              ref={scrollListRef}
               className="flex-1"
               style={{ paddingHorizontal: marginPx }}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={32}
               data={props.paragraphs}
               keyExtractor={(item, index) => `${item.startOffset}-${index}`}
               onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
@@ -724,6 +759,17 @@ export function ReaderView(props: ReaderViewProps) {
                 {props.mode === 'paged' ? '滚动' : '翻页'}
               </Text>
             </Pressable>
+            {props.mode === 'scroll' ? (
+              <Pressable
+                className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
+                onPress={() => {
+                  hapticLight();
+                  props.onCycleAutoScroll();
+                }}
+              >
+                <Text className={`text-xs ${theme.text}`}>滚屏{props.autoScrollSpeedLabel}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
               onPress={() => {
@@ -785,6 +831,28 @@ export function ReaderView(props: ReaderViewProps) {
             <Text className={`text-xs ${theme.text}`}>下一章</Text>
           </Pressable>
         </View>
+        {props.playingThisChapter && props.segmentCount > 0 ? (
+          <View className="flex-row items-center gap-3 px-4 pb-1">
+            <Text className={`text-[10px] ${theme.muted}`}>播放</Text>
+            <ReaderSlider
+              value={props.segmentIndex}
+              max={Math.max(props.segmentCount - 1, 0)}
+              trackColor={theme.textHex}
+              fillColor={theme.textHex}
+              thumbColor={theme.actionHex}
+              onPreview={() => pokeControls()}
+              onCommit={(index) => {
+                if (index !== props.segmentIndex) {
+                  hapticLight();
+                  props.onSeekSegment(index);
+                }
+              }}
+            />
+            <Text className={`text-[10px] ${theme.muted}`}>
+              {props.segmentIndex + 1}/{props.segmentCount} 段
+            </Text>
+          </View>
+        ) : null}
         <Text className={`pb-2 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
           {progressLabel}
         </Text>

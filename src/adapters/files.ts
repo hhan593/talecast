@@ -57,6 +57,34 @@ function sourcesDirectoryUri(): string {
 }
 
 /** 沙盒按内容寻址存储实现：写后不可变；同哈希重复导入直接复用 */
+/** 备份 JSON 写缓存目录并调起系统分享（v0.10.0，容器注入 backup.share） */
+export const shareJsonBackup = async (name: string, json: string): Promise<void> => {
+  const fileUri = `${FileSystem.cacheDirectory}${name}`;
+  await FileSystem.writeAsStringAsync(fileUri, json, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  const Sharing = await import('expo-sharing');
+  await Sharing.shareAsync(fileUri, { mimeType: 'application/json' });
+};
+
+/** 备份文件选取：复用文档选择器，读 UTF-8 字节（v0.10.0，容器注入 backup.pickBackupFile） */
+export const documentPickerBackupFile = async (): Promise<{ name: string; bytes: Uint8Array } | null> => {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ['application/json', 'text/plain', 'application/octet-stream'],
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (result.canceled || result.assets.length === 0) return null;
+  const asset = result.assets[0];
+  const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { name: asset.name ?? 'talecast-backup.json', bytes };
+};
+
 export const sandboxSourceFileStore: SourceFileStore = {
   async writeRawBytes(sha256, bytes) {
     const dir = await ensureDir(directoryUri(SOURCES_DIR));

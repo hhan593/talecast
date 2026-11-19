@@ -4,7 +4,13 @@ import { Platform } from 'react-native';
 
 import { TrackPlayerAudioService } from '@/adapters/audio-track-player';
 import { EdgeTtsGateway } from '@/adapters/edge/tts';
-import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
+import {
+  documentPickerBackupFile,
+  documentPickerFilePicker,
+  sandboxAudioFileStore,
+  sandboxSourceFileStore,
+  shareJsonBackup,
+} from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
@@ -25,6 +31,8 @@ import { createProjectsService } from '@/services/projects';
 import { createReadingService } from '@/services/reading';
 import { createExportService } from '@/services/export';
 import { createSettingsService } from '@/services/settings';
+import { createStatsService } from '@/services/stats';
+import { createBackupService } from '@/services/backup';
 import { createSplitReviewService } from '@/services/split-review';
 import { createVoicesService } from '@/services/voices';
 import { createBindingsService } from '@/services/bindings';
@@ -160,6 +168,14 @@ const services = {
   search: createSearchService({
     libraryRepository: adapters.libraryRepository,
     sourceFileStore: sandboxSourceFileStore,
+  }),
+  stats: createStatsService({ settingsRepository: adapters.settingsRepository }),
+  backup: createBackupService({
+    projectRepository: adapters.projectRepository,
+    bookmarkRepository: adapters.bookmarkRepository,
+    settingsRepository: adapters.settingsRepository,
+    share: (data) => shareJsonBackup(`talecast-backup-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 2)),
+    pickBackupFile: () => documentPickerBackupFile(),
   }),
   screenOrientation: new ScreenOrientationAdapter(),
   newCommandId,

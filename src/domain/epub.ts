@@ -6,6 +6,10 @@
  * （title + fullText → 正则分章候选兜底）。
  */
 
+/** zip bomb 防护（v0.10.0）：单文件/累计解压文本字符上限（UTF-16 code units） */
+export const MAX_EPUB_ENTRY_CHARS = 4_000_000;
+export const MAX_EPUB_TOTAL_CHARS = 12_000_000;
+
 export interface EpubChapter {
   title: string;
   /** 纯文本（段落数组 join('\n')） */
@@ -96,9 +100,17 @@ export async function parseEpub(deps: EpubDeps, epubBytes: Uint8Array): Promise<
   if (!opf) throw new Error('OPF 解析失败：缺少标题或 spine');
 
   const chapters: EpubChapter[] = [];
+  let totalChars = 0;
   for (const href of opf.spineFiles) {
     const path = resolveRelative(opfDir, href);
     const html = await deps.readFile(path);
+    if (html.length > MAX_EPUB_ENTRY_CHARS) {
+      throw new Error(`EPUB 单文件解压体积异常（${path.slice(-40)}），已中止导入`);
+    }
+    totalChars += html.length;
+    if (totalChars > MAX_EPUB_TOTAL_CHARS) {
+      throw new Error('EPUB 总解压体积超出上限，疑似异常文件，已中止导入');
+    }
     const text = stripHtml(html)
       .split('\n')
       .map((line) => line.trim())

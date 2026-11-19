@@ -1,5 +1,4 @@
-import { fetch } from 'expo/fetch';
-
+import { assertPublicHttpUrlDeep } from '@/domain/url-guard';
 import { err, ok, type Result } from '@/domain/result';
 
 /**
@@ -9,6 +8,8 @@ import { err, ok, type Result } from '@/domain/result';
 export interface UrlTxtDeps {
   /** 下载 → 字节；调用方处理超时与 UA */
   download: (url: string) => Promise<Uint8Array>;
+  /** 可选：DNS 解析复检（v0.10.0 SSRF）；未注入则仅字面校验 */
+  resolveHost?: (host: string) => Promise<string[]>;
 }
 
 const MAX_URL_TXT_BYTES = 16 * 1024 * 1024;
@@ -23,9 +24,9 @@ export function createUrlTxtService(deps: UrlTxtDeps) {
       } catch {
         return err('invalid', 'URL 格式不正确');
       }
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return err('invalid', '仅支持 http/https 链接');
-      }
+      // SSRF 防护（v0.10.0）：协议/凭据/字面私网主机拦截（DNS 复检经 deps 可选注入）
+      const guard = await assertPublicHttpUrlDeep(url, { resolveHost: deps.resolveHost });
+      if (!guard.ok) return err('invalid', guard.message);
       try {
         const response = await deps.download(url);
         if (response.length === 0) return err('invalid', '下载内容为空');

@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { Alert } from 'react-native';
 import { useServices } from '@/container';
+
+/** 与 services/stats.ReadingStats 同构（架构守卫：app 不 import services，类型本地投影） */
+interface ReadingStats {
+  todayMs: number;
+  todayChars: number;
+  totalMs: number;
+  date: string;
+}
 
 /** 设置（docs/plan.md 4.2 / P4）：服务连接（LLM），密钥只进 SecureStore。 */
 export default function SettingsScreen() {
   const services = useServices();
+  const [stats, setStats] = useState<ReadingStats | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [endpoint, setEndpoint] = useState('');
   const [model, setModel] = useState('');
@@ -20,6 +31,7 @@ export default function SettingsScreen() {
     setModel(config.model ?? '');
     setHasApiKey(config.hasApiKey);
     setUsage(await services.settings.getUsage());
+    setStats(await services.stats.getStats());
     setLoading(false);
   }, [services]);
 
@@ -119,6 +131,67 @@ export default function SettingsScreen() {
         </View>
       ) : null}
 
+      {stats ? (
+        <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+          <Text className="font-semibold text-ink dark:text-ink-night">阅读统计（本机）</Text>
+          <Text className="mt-2 text-sm text-muted dark:text-muted-night">
+            · 今日阅读 {Math.round(stats.todayMs / 60000)} 分钟 · {stats.todayChars} 字{'\n'}
+            · 累计阅读 {Math.round(stats.totalMs / 60000)} 分钟
+          </Text>
+          <Pressable className="mt-2 self-start" onPress={() => void reload()}>
+            <Text className="text-xs text-accent">刷新</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+        <Text className="font-semibold text-ink dark:text-ink-night">数据备份（JSON）</Text>
+        <Text className="mt-2 text-sm text-muted dark:text-muted-night">
+          导出书架+偏好+书签为 JSON 分享保存；导入恢复设置项（书籍正文需重新导入原文件）。
+        </Text>
+        <View className="mt-3 flex-row gap-2">
+          <Pressable
+            className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
+            disabled={backupBusy}
+            onPress={() => {
+              setBackupBusy(true);
+              void services.backup
+                .exportAndShare()
+                .then((result) => {
+                  if (!result.ok) setNotice(result.error.message);
+                })
+                .finally(() => setBackupBusy(false));
+            }}
+          >
+            <Text className="font-semibold text-white">导出备份</Text>
+          </Pressable>
+          <Pressable
+            className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
+            disabled={backupBusy}
+            onPress={() => {
+              Alert.alert('导入备份', '将覆盖当前替换净化规则、阅读偏好等设置项（LLM 密钥不受影响）。继续？', [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '导入',
+                  onPress: () => {
+                    setBackupBusy(true);
+                    void services.backup
+                      .importFromPicker()
+                      .then((result) => {
+                        if (result.ok) setNotice(`已恢复 ${result.value.restoredSettings} 项设置`);
+                        else setNotice(result.error.message);
+                      })
+                      .finally(() => setBackupBusy(false));
+                  },
+                },
+              ]);
+            }}
+          >
+            <Text className="text-sm text-ink dark:text-ink-night">导入恢复</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">能力边界</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
@@ -131,7 +204,7 @@ export default function SettingsScreen() {
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">通用</Text>
-        <Text className="mt-2 text-sm text-muted dark:text-muted-night">TaleCast 0.1.0 · P4 加固原型</Text>
+        <Text className="mt-2 text-sm text-muted dark:text-muted-night">TaleCast v0.10.0 · 对话分声 · 阅读器交互补齐</Text>
       </View>
     </ScrollView>
   );
