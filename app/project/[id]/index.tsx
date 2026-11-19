@@ -216,6 +216,9 @@ export default function ProjectWorkbenchScreen() {
         paragraphs: result.value.paragraphs,
       });
       setPendingOffset(charOffset);
+      // 阅读统计基点随切章重置（issue #32）：否则 charsRead = 跨章全书偏移差，字数统计虚高
+      lastKnownOffsetRef.current = charOffset;
+      setCurrentOffset(charOffset);
       setView('reader');
     },
     [projectId, services, library],
