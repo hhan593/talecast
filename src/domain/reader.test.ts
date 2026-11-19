@@ -86,3 +86,21 @@ describe('pageForOffset', () => {
     expect(pageForOffset(pages, 100)).toBe(0);
   });
 });
+
+describe('横屏双栏（columns=2）', () => {
+  it('每屏容量翻倍：4 段单栏 2 页 → 双栏 1 页', () => {
+    const lines = Array.from({ length: 4 }, (_, i) => `第${i + 1}行正文内容完整。`).join('\n');
+    const single = paginateText(lines, 0, M);
+    const dual = paginateText(lines, 0, { ...M, columns: 2 });
+    expect(single.length).toBe(2);
+    expect(dual.length).toBe(1);
+  });
+
+  it('双栏切片仍衔接覆盖全文', () => {
+    const lines = Array.from({ length: 8 }, (_, i) => `第${i + 1}行正文内容完整。`).join('\n');
+    const pages = paginateText(lines, 0, { charsPerLine: 10, linesPerPage: 3, columns: 2 });
+    let rebuilt = '';
+    for (const page of pages) rebuilt += lines.slice(page.startOffset, page.endOffset);
+    expect(rebuilt).toBe(lines);
+  });
+});
