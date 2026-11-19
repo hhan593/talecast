@@ -29,6 +29,7 @@ describe('架构依赖方向守卫', () => {
   it('domain 不 import services / adapters / hooks / components / container', () => {
     const violations: string[] = [];
     for (const file of files) {
+      if (/\.test\.tsx?$/.test(file)) continue; // 测试文件合法跨层接线（集成验证），不参与守卫
       if (!file.includes(`${'domain'}/`) && !file.endsWith(`/${'domain'}`)) continue;
       for (const spec of importsOf(file)) {
         if (/@\/(services|adapters|hooks|components|container)(\/|$)/.test(spec)) {
@@ -44,6 +45,7 @@ describe('架构依赖方向守卫', () => {
     const uiFiles = [...tsFiles(appRoot), ...files.filter((f) => f.includes('/components/'))];
     const violations: string[] = [];
     for (const file of uiFiles) {
+      if (/\.test\.tsx?$/.test(file)) continue;
       for (const spec of importsOf(file)) {
         if (/@\/(services|adapters)(\/|$)/.test(spec)) {
           violations.push(`${file} → ${spec}`);
@@ -56,6 +58,7 @@ describe('架构依赖方向守卫', () => {
   it('services 不 import adapters（跨层常量走 domain/contracts）', () => {
     const violations: string[] = [];
     for (const file of files) {
+      if (/\.test\.tsx?$/.test(file)) continue;
       if (!file.includes(`${'services'}/`)) continue;
       for (const spec of importsOf(file)) {
         if (/@\/adapters(\/|$)/.test(spec)) {
