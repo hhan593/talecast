@@ -3,6 +3,8 @@ import { parseEpub } from '@/domain/epub';
 import { checkImportSize, decodeValidatedUtf8, isValidUtf8 } from '@/domain/source';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
+import { parseMobi } from '@/domain/mobi';
+import { stripHtml } from '@/domain/epub';
 import type { FilePicker, LibraryRepository, ReceiptStore, SourceFileStore } from '@/domain/ports';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { SourceInfo } from '@/domain/types';
@@ -21,7 +23,14 @@ export interface ImportDeps {
   /** EPUB 解析适配（v0.5.0）：jszip 注入实现 */
   epubParser?: {
     parseEpub(bytes: Uint8Array): Promise<{ bookTitle: string; chapters: Array<{ title: string; text: string }> }>;
+    /** 封面提取（v0.14.0）：返回字节与 MIME；无封面/不支持返回 null */
+    extractCover?(bytes: Uint8Array): Promise<{ bytes: Uint8Array; mime: string } | null>;
   };
+  /** 封面持久化（v0.14.0，容器注入沙盒实现）；路径经 settings `cover:<projectId>` 记录 */
+  coverStore?: {
+    write(projectId: string, bytes: Uint8Array, mime: string): Promise<string>;
+  };
+  settingsRepository?: import('@/domain/ports').SettingsRepository;
 }
 
 export interface ImportSourceCommand extends Command {
@@ -36,6 +45,51 @@ export interface ImportSourceResult {
 }
 
 
+
+async function runMobiImport(
+  deps: ImportDeps,
+  command: ImportSourceCommand,
+): Promise<Result<ImportSourceResult>> {
+  const existing = await deps.libraryRepository.getSource(command.projectId);
+  if (existing) {
+    return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
+  }
+  try {
+    const parsed = parseMobi(command.bytes, stripHtml);
+    const drafts: ChapterDraft[] = [];
+    let fullText = '';
+    for (const chapter of parsed.chapters) {
+      const chunk = `${chapter.title}\n${chapter.text}\n`;
+      drafts.push({
+        title: chapter.title,
+        startOffset: fullText.length,
+        endOffset: fullText.length + chunk.length,
+        headingLine: null,
+      });
+      fullText += chunk;
+    }
+    const rawSha256 = sha256Bytes(command.bytes);
+    const textSha256 = sha256Text(fullText);
+    await deps.sourceFileStore.writeRawBytes(rawSha256, command.bytes);
+    await deps.sourceFileStore.writeDecodedText(textSha256, fullText);
+    const source = await deps.libraryRepository.createSourceWithChapters(
+      {
+        id: `src-${command.projectId}-${rawSha256.slice(0, 16)}`,
+        projectId: command.projectId,
+        filename: command.fileName,
+        encoding: 'utf-8',
+        byteSize: command.bytes.length,
+        rawSha256,
+        textSha256,
+        createdAt: Date.now(),
+      },
+      drafts,
+    );
+    return ok({ source, chapters: drafts });
+  } catch (error) {
+    return err('invalid', `MOBI 解析失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 async function runEpubImport(
   deps: ImportDeps,
@@ -65,6 +119,20 @@ async function runEpubImport(
     const textSha256 = sha256Text(fullText);
     await deps.sourceFileStore.writeRawBytes(rawSha256, command.bytes);
     await deps.sourceFileStore.writeDecodedText(textSha256, fullText);
+    // 封面提取（v0.14.0）：失败静默（书架回退生成式封面）
+    if (deps.coverStore && deps.epubParser?.extractCover) {
+      try {
+        const cover = await deps.epubParser.extractCover(command.bytes);
+        if (cover) {
+          const coverPath = await deps.coverStore.write(command.projectId, cover.bytes, cover.mime);
+          if (deps.settingsRepository) {
+            await deps.settingsRepository.set(`cover:${command.projectId}`, coverPath);
+          }
+        }
+      } catch {
+        // 封面失败不影响导入
+      }
+    }
     const source = await deps.libraryRepository.createSourceWithChapters(
       {
         id: `src-${command.projectId}-${rawSha256.slice(0, 16)}`,
@@ -98,6 +166,11 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
   // EPUB 分支（v0.5.0）：二进制 ZIP 容器，内部 XHTML 自身 UTF-8；在 UTF-8 字节校验之前分流
   if (deps.epubParser && (command.fileName.toLowerCase().endsWith('.epub') || (bytes[0] === 0x50 && bytes[1] === 0x4b))) {
     return runEpubImport(deps, command);
+  }
+  // MOBI/AZW3/PRC（v0.14.0）：自研 PalmDOC 解析，整本单章（由"重新分章"提候选）
+  const lowerName = command.fileName.toLowerCase();
+  if (lowerName.endsWith('.mobi') || lowerName.endsWith('.azw3') || lowerName.endsWith('.prc')) {
+    return runMobiImport(deps, command);
   }
   if (!checkImportSize(bytes.length)) {
     return Promise.resolve(

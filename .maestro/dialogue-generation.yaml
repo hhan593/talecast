@@ -1,0 +1,10 @@
+# 对话分声冒烟：工作台开关可见、角色中心入口可达
+appId: com.hhan.talecast
+---
+- launchApp
+- tapOn: ".*示例.*"
+- assertVisible: "对话分声"
+- tapOn: "对话分声"      # 开关切换
+- assertVisible: "对话分声关"
+- tapOn: "角色中心"
+- assertVisible: "绑定音色"

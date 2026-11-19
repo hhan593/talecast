@@ -57,6 +57,19 @@ function sourcesDirectoryUri(): string {
 }
 
 /** 沙盒按内容寻址存储实现：写后不可变；同哈希重复导入直接复用 */
+/** 书籍封面（v0.14.0）：写缓存文档目录，路径存 settings `cover:<projectId>` */
+export const coverFileStore = {
+  async write(projectId: string, bytes: Uint8Array, mime: string): Promise<string> {
+    const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : mime === 'image/gif' ? 'gif' : 'jpg';
+    const fileUri = `${FileSystem.cacheDirectory}cover-${projectId}.${ext}`;
+    const base64 = btoa(String.fromCharCode(...bytes));
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return fileUri;
+  },
+};
+
 /** 文本文件写缓存目录并调起系统分享（v0.10.0 备份 / v0.12.0 笔记导出共用） */
 export const shareTextFile = async (name: string, content: string, mimeType = 'application/json'): Promise<void> => {
   const fileUri = `${FileSystem.cacheDirectory}${name}`;
@@ -143,5 +156,17 @@ export const sandboxAudioFileStore: AudioFileStore = {
     if (info.exists) return target;
     await writeFileAtomically(target, bytesToBase64(bytes), FileSystem.EncodingType.Base64);
     return target;
+  },
+
+  async writeText(path: string, content: string): Promise<void> {
+    await FileSystem.writeAsStringAsync(`${path}.words.json`, content, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+  },
+
+  async readText(path: string): Promise<string> {
+    return FileSystem.readAsStringAsync(`${path}.words.json`, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
   },
 };

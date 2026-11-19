@@ -5,6 +5,8 @@ export interface Project {
   id: ProjectId;
   title: string;
   description: string;
+  /** 书架标签（v0.14.0）：JSON 数组；空数组=未分类 */
+  tags: string[];
   /** 乐观并发修订号：任何采用类命令使它 +1（expectedRevision 校验的基础） */
   revision: number;
   createdAt: number;

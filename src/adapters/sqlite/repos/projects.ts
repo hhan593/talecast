@@ -4,6 +4,7 @@ import type { Project } from '@/domain/types';
 import type { TalecastDatabase } from '../db';
 
 export interface ProjectRow {
+  tags?: string | null;
   id: string;
   title: string;
   description: string;
@@ -12,11 +13,21 @@ export interface ProjectRow {
   updated_at: number;
 }
 
+export function safeTags(raw: string | null | undefined): string[] {
+  try {
+    const parsed = JSON.parse(raw ?? '[]') as unknown;
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export function toProject(row: ProjectRow): Project {
   return {
     id: row.id,
     title: row.title,
     description: row.description,
+    tags: safeTags(row.tags),
     revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -25,6 +36,10 @@ export function toProject(row: ProjectRow): Project {
 
 /** ProjectRepository 的 SQLite 实现（实现在 adapters，接口在 domain/ports） */
 export class SqliteProjectRepository implements ProjectRepository {
+  async updateTags(id: string, tags: string[]): Promise<void> {
+    this.db.runSync('UPDATE projects SET tags = ?, updated_at = ? WHERE id = ?', JSON.stringify(tags), Date.now(), id);
+  }
+
   constructor(private readonly db: TalecastDatabase) {}
 
   list(): Promise<Project[]> {
@@ -44,10 +59,11 @@ export class SqliteProjectRepository implements ProjectRepository {
 
   create(input: { id: string; title: string; description: string; createdAt: number }): Promise<Project> {
     this.db.runSync(
-      'INSERT INTO projects (id, title, description, revision, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+      'INSERT INTO projects (id, title, description, tags, revision, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
       input.id,
       input.title,
       input.description,
+      '[]',
       input.createdAt,
       input.createdAt,
     );
@@ -55,6 +71,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       id: input.id,
       title: input.title,
       description: input.description,
+      tags: [],
       revision: 0,
       createdAt: input.createdAt,
       updatedAt: input.createdAt,

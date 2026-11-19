@@ -10,7 +10,7 @@ import {
 } from './fakes';
 
 async function setup() {
-  const project = { id: 'p1', title: '示例书', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
+  const project = { id: 'p1', title: '示例书', description: '', tags: [], revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);
   const library = {
     listChapters: async () => [

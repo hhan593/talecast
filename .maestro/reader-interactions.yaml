@@ -1,0 +1,15 @@
+# 阅读器交互：打开章节 → 菜单显隐 → 排版循环 → 主题循环 → 返回
+appId: com.hhan.talecast
+---
+- launchApp
+- tapOn: ".*示例.*"
+- tapOn: "第.*章"
+- assertVisible: "返回目录"
+- tapOn: "翻页"          # 切到翻页模式
+- tapOn: "宋"            # 字体循环
+- tapOn: "行距"
+- tapOn: "段"
+- tapOn: "主题"
+- tapOn: "定时关"        # 睡眠循环按钮存在
+- assertVisible: "返回目录"
+- tapOn: "返回目录"

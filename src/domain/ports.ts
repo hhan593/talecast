@@ -21,6 +21,8 @@ export interface ProjectRepository {
   create(input: { id: Project['id']; title: string; description: string; createdAt: number }): Promise<Project>;
   /** 级联删除书籍全部数据（章节/来源/候选/编辑/阅读位置/绑定/角色/生成任务与段/助手会话），同一事务 */
   delete(projectId: Project['id']): Promise<void>;
+  /** 书架标签更新（v0.14.0） */
+  updateTags?(id: Project['id'], tags: string[]): Promise<void>;
 }
 
 export interface ReceiptStore {
@@ -119,10 +121,22 @@ export interface KeyStore {
   delete(key: string): Promise<void>;
 }
 
+export interface WordTimelineItem {
+  offsetMs: number;
+  durationMs: number;
+  word: string;
+}
+
 export interface TtsGateway {
   listVoices(): Promise<VoiceInfo[]>;
   /** 合成单段，返回统一格式的音频字节（写入按内容寻址的 AudioFileStore）；prosody 为 F-2 合成参数 */
   synthesize(input: { text: string; voiceId: string; prosody?: TtsProsody }): Promise<Uint8Array>;
+  /** 合成 + 词级时间线（v0.13.0 卡拉OK，可选：实现方支持时返回词边界） */
+  synthesizeWithTimeline?(input: {
+    text: string;
+    voiceId: string;
+    prosody?: TtsProsody;
+  }): Promise<{ audio: Uint8Array; words: WordTimelineItem[] }>;
 }
 
 export interface LlmGateway {
@@ -206,6 +220,10 @@ export interface AudioFileStore {
   pathFor(textHash: string): string;
   exists(textHash: string): Promise<boolean>;
   write(textHash: string, bytes: Uint8Array): Promise<string>;
+  /** 伴生文本写入（v0.13.0 词级时间线 <path>.words.json）；未实现则卡拉OK不可用 */
+  writeText?(path: string, content: string): Promise<void>;
+  /** 伴生文本读取（v0.13.0） */
+  readText?(path: string): Promise<string>;
 }
 
 export interface AudioPlayer {

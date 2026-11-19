@@ -13,14 +13,16 @@ import {
 } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
+import { coverFileStore } from '@/adapters/files';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
 import { createAnnotationsService } from '@/services/annotations';
 import { createAssistantService } from '@/services/assistant';
+import { createDialogueAttributionService } from '@/services/dialogue-attribution';
 import { createBookmarksService } from '@/services/bookmarks';
 import { createJszipEpubDeps } from '@/adapters/epub';
-import { parseEpub } from '@/domain/epub';
+import { coverMime, findCoverPath, opfPathFromContainer, parseEpub } from '@/domain/epub';
 import { createChapterEditService } from '@/services/chapter-edits';
 import { createSearchService } from '@/services/search';
 import { createCharactersService } from '@/services/characters';
@@ -71,13 +73,25 @@ const audioPlayer =
     ? new TrackPlayerAudioService({ defaultTitle: 'TaleCast', defaultArtist: '有声书' })
     : new WebNoopAudioPlayer();
 
+const coverStore = coverFileStore;
+
 const libraryQuery = createLibraryQueryService({
   libraryRepository: adapters.libraryRepository,
   splitProposalRepository: adapters.splitProposalRepository,
   sourceFileStore: sandboxSourceFileStore,
 });
 
+const dialogueAttributionService = createDialogueAttributionService({
+  llmGateway,
+  settingsRepository: adapters.settingsRepository,
+  characterRepository: adapters.characterRepository,
+  bindingRepository: adapters.bindingRepository,
+  libraryRepository: adapters.libraryRepository,
+  sourceFileStore: sandboxSourceFileStore,
+});
+
 const generationService = createGenerationService({
+  dialogueAttribution: dialogueAttributionService,
   projectRepository: adapters.projectRepository,
   libraryRepository: adapters.libraryRepository,
   libraryQuery,
@@ -104,7 +118,22 @@ const services = {
     receiptStore: adapters.receiptStore,
     epubParser: {
       parseEpub: (bytes) => parseEpub(createJszipEpubDeps(bytes), bytes),
+      extractCover: async (bytes) => {
+        const deps = createJszipEpubDeps(bytes);
+        const containerXml = await deps.readFile('META-INF/container.xml');
+        const opfPath = opfPathFromContainer(containerXml);
+        if (!opfPath) return null;
+        const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : '';
+        const opfXml = await deps.readFile(opfPath);
+        const coverPath = findCoverPath(opfXml, opfDir);
+        if (!coverPath || !deps.readFileBytes) return null;
+        const coverBytes = await deps.readFileBytes(coverPath);
+        if (coverBytes.length === 0) return null;
+        return { bytes: coverBytes, mime: coverMime(coverPath) };
+      },
     },
+    coverStore,
+    settingsRepository: adapters.settingsRepository,
   }),
   libraryQuery,  splitReview: createSplitReviewService({
     projectRepository: adapters.projectRepository,
@@ -150,6 +179,7 @@ const services = {
   }),
   playback: createPlaybackService({
     audioPlayer,
+    audioFileStore: sandboxAudioFileStore,
     generationStore: adapters.generationStore,
     libraryQuery,
     settingsRepository: adapters.settingsRepository,

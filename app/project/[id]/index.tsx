@@ -27,6 +27,7 @@ import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { usePlayback } from '@/hooks/use-playback';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
+import { useI18n } from '@/hooks/use-i18n';
 import { type Paragraph } from '@/domain/source';
 import type { Chapter } from '@/domain/types';
 
@@ -35,6 +36,7 @@ export default function ProjectWorkbenchScreen() {
   const projectId = params.id;
   const { project, loading, notFound } = useProject(projectId);
   const services = useServices();
+  const { t } = useI18n();
   const library = useLibrary(projectId, project?.revision ?? -1);
   const generation = useGeneration(projectId);
   const router = useRouter();
@@ -66,6 +68,7 @@ export default function ProjectWorkbenchScreen() {
   const [volumeKeyTurn, setVolumeKeyTurn] = useState(false);
   const [pageSound, setPageSound] = useState(false);
   const [volumeEvent, setVolumeEvent] = useState<{ seq: number; direction: 'up' | 'down' } | null>(null);
+  const [wordKaraoke, setWordKaraoke] = useState(false);
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -188,6 +191,7 @@ export default function ProjectWorkbenchScreen() {
     void services.settings.getSetting('reader-immersive').then((v) => setImmersive(v !== 'off'));
     void services.settings.getSetting('volume-key-turn').then((v) => setVolumeKeyTurn(v === 'on'));
     void services.settings.getSetting('reader-page-sound').then((v) => setPageSound(v === 'on'));
+    void services.settings.getSetting('word-karaoke').then((v) => setWordKaraoke(v === 'on'));
     void services.settings.getSetting('reader-theme').then((v) => {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
@@ -513,6 +517,7 @@ export default function ProjectWorkbenchScreen() {
           if (autoScrollSpeed !== 'off') setAutoScrollPaused((p) => !p);
         }}
         annotations={annotationRanges}
+        wordHighlight={wordKaraoke ? (playback.state.wordHighlight ?? null) : null}
         longPressRange={longPressRange}
         onLongPressText={setLongPressRange}
         onAnnotate={handleAnnotate}
@@ -587,13 +592,13 @@ export default function ProjectWorkbenchScreen() {
           className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
         >
-          <Text className="text-sm text-ink dark:text-ink-night">角色中心</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.characters')}</Text>
         </Pressable>
         <Pressable accessibilityRole="button"
           className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => setView('assistant')}
         >
-          <Text className="text-sm text-ink dark:text-ink-night">书籍助手</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.assistant')}</Text>
         </Pressable>
       </View>
 
@@ -654,7 +659,7 @@ export default function ProjectWorkbenchScreen() {
             disabled={library.busy}
             onPress={() => void library.importTxt()}
           >
-            <Text className="font-semibold text-white">导入 UTF-8 TXT</Text>
+            <Text className="font-semibold text-white">{t('workbench.importTxt')}</Text>
           </Pressable>
         ) : (
           <>
@@ -672,7 +677,7 @@ export default function ProjectWorkbenchScreen() {
                 });
               }}
             >
-              <Text className="text-sm text-ink dark:text-ink-night">重新分章</Text>
+              <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.resplit')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
@@ -693,7 +698,7 @@ export default function ProjectWorkbenchScreen() {
               <Text
                 className={`text-sm ${dialogueVoices ? 'text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
               >
-                对话分声{dialogueVoices ? '开' : '关'}
+                {t('workbench.dialogueVoices')}{dialogueVoices ? '开' : '关'}
               </Text>
             </Pressable>
           </>
@@ -703,10 +708,10 @@ export default function ProjectWorkbenchScreen() {
       {/* 目录三分区（v0.8.0）：章节 / 书签列表（含摘录） / 全文搜索 */}
       <View className="mt-3 flex-row gap-2">
         {([
-          ['chapters', `章节${chapters.length > 0 ? ` ${chapters.length}` : ''}`],
-          ['bookmarks', `书签${bookmarks.bookmarks.length > 0 ? ` ${bookmarks.bookmarks.length}` : ''}`],
-          ['notes', `笔记${annotations.annotations.length > 0 ? ` ${annotations.annotations.length}` : ''}`],
-          ['search', '搜索'],
+          ['chapters', `${t('workbench.chapters')}${chapters.length > 0 ? ` ${chapters.length}` : ''}`],
+          ['bookmarks', `${t('workbench.bookmarks')}${bookmarks.bookmarks.length > 0 ? ` ${bookmarks.bookmarks.length}` : ''}`],
+          ['notes', `${t('workbench.notes')}${annotations.annotations.length > 0 ? ` ${annotations.annotations.length}` : ''}`],
+          ['search', t('workbench.search')],
         ] as const).map(([key, label]) => (
           <Pressable accessibilityRole="button"
             key={key}
@@ -784,7 +789,7 @@ export default function ProjectWorkbenchScreen() {
         ListEmptyComponent={
           <View className="items-center py-16">
             <Text className="text-center text-sm text-muted dark:text-muted-night">
-              还没有章节。导入一本 UTF-8 TXT 小说开始制作。
+              {t('workbench.catalogEmpty')}
             </Text>
           </View>
         }
@@ -823,7 +828,7 @@ export default function ProjectWorkbenchScreen() {
           ListEmptyComponent={
             <View className="items-center py-16">
               <Text className="text-center text-sm text-muted dark:text-muted-night">
-                还没有书签。阅读时点工具栏「书签」即可收藏当前段落。
+                {t('workbench.bookmarksEmpty')}
               </Text>
             </View>
           }
@@ -849,7 +854,7 @@ export default function ProjectWorkbenchScreen() {
                   });
               }}
             >
-              <Text className="text-sm text-ink dark:text-ink-night">导出 Markdown</Text>
+              <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.exportMarkdown')}</Text>
             </Pressable>
           ) : null}
           <FlatList
@@ -904,7 +909,7 @@ export default function ProjectWorkbenchScreen() {
             ListEmptyComponent={
               <View className="items-center py-16">
                 <Text className="text-center text-sm text-muted dark:text-muted-night">
-                  还没有划线与笔记。阅读时长按段落即可划线或写笔记。
+                  {t('workbench.notesEmpty')}
                 </Text>
               </View>
             }
@@ -917,7 +922,7 @@ export default function ProjectWorkbenchScreen() {
           <View className="flex-row gap-2">
             <TextInput
               className="flex-1 rounded-xl bg-raised px-3 py-2 text-sm text-ink dark:bg-card-night dark:text-ink-night"
-              placeholder="搜索全文关键词"
+              placeholder={t("workbench.searchPlaceholder")}
               placeholderTextColor="#8C8272"
               value={searchInput}
               onChangeText={setSearchInput}
@@ -929,7 +934,7 @@ export default function ProjectWorkbenchScreen() {
               disabled={bookSearch.busy || searchInput.trim().length === 0}
               onPress={() => void bookSearch.search(searchInput)}
             >
-              <Text className="text-sm font-semibold text-white">{bookSearch.busy ? '搜索中' : '搜索'}</Text>
+              <Text className="text-sm font-semibold text-white">{bookSearch.busy ? t('workbench.searching') : t('workbench.searchButton')}</Text>
             </Pressable>
           </View>
           {bookSearch.error ? (

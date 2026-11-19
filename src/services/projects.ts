@@ -55,6 +55,20 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
       });
     },
 
+    /** 书架标签更新（v0.14.0）：全量替换，去重去空 */
+    async updateTags(projectId: string, tags: string[]): Promise<Result<Project>> {
+      try {
+        if (!deps.projectRepository.updateTags) return err('invalid', '当前存储不支持标签');
+        const clean = [...new Set(tags.map((t) => t.trim()).filter((t) => t.length > 0 && t.length <= 12))].slice(0, 8);
+        await deps.projectRepository.updateTags(projectId, clean);
+        const project = await deps.projectRepository.get(projectId);
+        if (!project) return err('not_found', '书籍不存在');
+        return ok(project);
+      } catch (error) {
+        return err('storage', `标签更新失败：${errorMessage(error)}`);
+      }
+    },
+
     /** 删除工程：级联清理全部工程数据（沙盒内容寻址文件共享保留，见 adapters/files.ts） */
     async deleteProject(command: { projectId: string }): Promise<Result<null>> {
       try {

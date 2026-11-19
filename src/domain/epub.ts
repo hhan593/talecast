@@ -87,6 +87,43 @@ export interface EpubDeps {
   readFile: (path: string) => Promise<string>;
   /** 路径存在性（可选） */
   exists: (path: string) => Promise<boolean>;
+  /** 二进制读取（v0.14.0 封面提取；未提供则无封面） */
+  readFileBytes?: (path: string) => Promise<Uint8Array>;
+}
+
+/**
+ * 封面路径解析（v0.14.0）：优先 manifest properties="cover-image"，
+ * 回退 meta name="cover" 的 content 指向 manifest id。
+ */
+export function findCoverPath(opfXml: string, opfDir: string): string | null {
+  const idToHref = new Map<string, { href: string; properties: string }>();
+  for (const itemTag of opfXml.match(/<item\b[^>]*>/g) ?? []) {
+    const id = /id="([^"]+)"/.exec(itemTag)?.[1];
+    const href = /href="([^"]+)"/.exec(itemTag)?.[1];
+    const properties = /properties="([^"]*)"/.exec(itemTag)?.[1] ?? '';
+    if (id && href) idToHref.set(id, { href, properties });
+  }
+  for (const { href, properties } of idToHref.values()) {
+    if (properties.split(/\s+/).includes('cover-image')) {
+      return resolveRelative(opfDir, href);
+    }
+  }
+  const metaCover = /<meta\b[^>]*name="cover"[^>]*content="([^"]+)"[^>]*>/i.exec(opfXml);
+  if (metaCover) {
+    const entry = idToHref.get(metaCover[1]);
+    if (entry) return resolveRelative(opfDir, entry.href);
+  }
+  return null;
+}
+
+/** 常见封面 MIME 推断（扩展名 → mime；未知回退 jpeg） */
+export function coverMime(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  return 'image/jpeg';
 }
 
 /** EPUB → 结构化文本（书名 + 章节文本数组）；解析失败抛出带原因的错误 */

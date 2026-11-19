@@ -77,11 +77,32 @@ export class EdgeTtsGateway implements TtsGateway {
     voiceId: string;
     prosody?: TtsProsody;
   }): Promise<Uint8Array> {
+    const result = await (this.synthesizeWithTimeline
+      ? (await this.synthesizeWithTimeline(input)).audio
+      : this.synthesizeInternal(input).then((r) => r.audio));
+    return result;
+  }
+
+  /** 合成 + 词级时间线（v0.13.0 卡拉OK）：协议 wordBoundary 事件随音频一并返回 */
+  async synthesizeWithTimeline(input: {
+    text: string;
+    voiceId: string;
+    prosody?: TtsProsody;
+  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+    return this.synthesizeInternal(input);
+  }
+
+  private synthesizeInternal(input: {
+    text: string;
+    voiceId: string;
+    prosody?: TtsProsody;
+  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
     const requestId = newHexId();
     const url = buildWssUrl(Date.now(), newHexId());
     const chunks: Uint8Array[] = [];
+    const words: Array<{ offsetMs: number; durationMs: number; word: string }> = [];
 
-    return new Promise<Uint8Array>((resolve, reject) => {
+    return new Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }>((resolve, reject) => {
       let settled = false;
       const ws = new (WebSocket as unknown as RnWebSocketConstructor)(
         url,
@@ -106,7 +127,7 @@ export class EdgeTtsGateway implements TtsGateway {
           ws.close();
         } catch {}
         if (error) reject(error);
-        else resolve(audio as Uint8Array);
+        else resolve({ audio: audio as Uint8Array, words });
       };
 
       const timeout = setTimeout(() => {
@@ -136,6 +157,8 @@ export class EdgeTtsGateway implements TtsGateway {
         );
         if (frame.kind === "audio" && frame.bytes.length > 0) {
           chunks.push(frame.bytes);
+        } else if (frame.kind === "wordBoundary") {
+          words.push(frame.event);
         }
       };
 

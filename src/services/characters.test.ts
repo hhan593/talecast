@@ -31,7 +31,7 @@ function protectedCharacter(name: string): CharacterRecord {
 }
 
 async function setup(existing: CharacterRecord[] = []) {
-  const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: now, updatedAt: now };
+  const project = { id: 'p1', title: '示例', description: '', tags: [], revision: 0, createdAt: now, updatedAt: now };
   const library = new FakeLibraryRepository([project]);
   const files = new FakeSourceFileStore();
   const receipts = new FakeReceiptStore();

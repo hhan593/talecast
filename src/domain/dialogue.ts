@@ -57,7 +57,7 @@ const QUOTE_PAIRS: Array<[string, string]> = [
   ['"', '"'],
 ];
 
-/** 全文引号区：同类型最近闭引号配对；未闭合忽略；跨段允许；超长失控忽略；重叠合并 */
+/** 全文引号区：同类型最近闭引号配对；未闭合忽略；异形引号跨段允许；同形直引号限单行（防跨行误配吞内容）；超长失控忽略；重叠合并 */
 function findQuoteSpans(text: string): QuoteSpan[] {
   const spans: QuoteSpan[] = [];
   for (const [open, close] of QUOTE_PAIRS) {
@@ -66,7 +66,43 @@ function findQuoteSpans(text: string): QuoteSpan[] {
       const start = text.indexOf(open, cursor);
       if (start === -1) break;
       const contentStart = start + open.length;
-      const end = text.indexOf(close, contentStart);
+      let searchEnd = text.length;
+      if (open === close) {
+        // 同形引号（"…"）：闭合限当前行——跨行同形配对会把远处的开引号误当闭合
+        const newline = text.indexOf('\n', contentStart);
+        searchEnd = newline === -1 ? text.length : newline;
+      }
+      // 异形引号隐式闭合（中文多段独白排版约定）：跨段后遇到同类开引号即视为上一段结束
+      //（行首开引号 = 独白新段；行内开引号 = 说话人混排段边界，均切段）
+      let implicitEnd = -1;
+      if (open !== close) {
+        let scan = contentStart;
+        const startLineStart = text.lastIndexOf('\n', start) + 1;
+        for (;;) {
+          const nextOpen = text.indexOf(open, scan);
+          if (nextOpen === -1) break;
+          const nextOpenLineStart = text.lastIndexOf('\n', nextOpen) + 1;
+          if (nextOpenLineStart > startLineStart) {
+            implicitEnd = nextOpenLineStart;
+            break;
+          }
+          scan = nextOpen + open.length;
+        }
+      }
+      let end = text.indexOf(close, contentStart);
+      if (end >= searchEnd) end = -1;
+      if (implicitEnd !== -1 && (end === -1 || implicitEnd < end)) {
+        // 隐式闭合：本段引号区到行首开引号之前；从该开引号重新配对
+        if (implicitEnd - start > MAX_QUOTE_SPAN_CHARS) {
+          cursor = contentStart;
+          continue;
+        }
+        // 闭合点 = 开引号所在行的行首：跨段引号只吃到上一行末尾，
+        // 新段的说话人前缀（如"赵四说："）留给旁白
+        spans.push({ start, end: implicitEnd });
+        cursor = implicitEnd;
+        continue;
+      }
       if (end === -1) break; // 未闭合：后续不再尝试该引号类型
       if (end + close.length - start > MAX_QUOTE_SPAN_CHARS) {
         // 失控引号：跳过本次配对，从此引号内容之后继续找
@@ -82,7 +118,7 @@ function findQuoteSpans(text: string): QuoteSpan[] {
   const merged: QuoteSpan[] = [spans[0]];
   for (const span of spans.slice(1)) {
     const last = merged[merged.length - 1];
-    if (span.start <= last.end) last.end = Math.max(last.end, span.end);
+    if (span.start < last.end) last.end = Math.max(last.end, span.end); // 严格重叠才合并（相邻=隐式闭合的独立段，保留分段）
     else merged.push(span);
   }
   return merged;
@@ -148,6 +184,15 @@ export function planVoiceSpans(
   if (cursor < chapterText.length) narrationPieces.push({ start: cursor, end: chapterText.length });
 
   // 逐引号区归属：判据 = 首尾所在段落（跨段覆盖首尾段）内的旁白文本
+  // 跨段独白跟随（v0.13.0）：行首起引号且紧接上一引号区尾行 → 未命中时继承其归属
+  let prevAttribution: { key: string; lastLineIndex: number } | null = null;
+  const lineIndexOf = (offset: number): number => {
+    for (let i = 0; i < lines.length; i++) {
+      if (offset >= lines[i].start && offset <= lines[i].end) return i;
+      if (offset < lines[i].start) return i;
+    }
+    return lines.length - 1;
+  };
   const quoteKeys = quotes.map((quote) => {
     const firstLine = lineRangeAt(lines, quote.start);
     const lastLine = lineRangeAt(lines, quote.end - 1);
@@ -159,7 +204,15 @@ export function planVoiceSpans(
       const end = Math.min(piece.end, zoneEnd);
       if (start < end) narration += chapterText.slice(start, end);
     }
-    return attributeQuote(narration, candidates) ?? NARRATOR_VOICE_KEY;
+    const attributed = attributeQuote(narration, candidates);
+    if (attributed !== null) {
+      prevAttribution = { key: attributed, lastLineIndex: lineIndexOf(quote.end - 1) };
+      return attributed;
+    }
+    const isContinentLine = firstLine.start === quote.start && prevAttribution !== null && lineIndexOf(quote.start) === prevAttribution.lastLineIndex + 1;
+    const inherited = isContinentLine && prevAttribution ? prevAttribution.key : NARRATOR_VOICE_KEY;
+    prevAttribution = inherited !== NARRATOR_VOICE_KEY ? { key: inherited, lastLineIndex: lineIndexOf(quote.end - 1) } : prevAttribution;
+    return inherited;
   });
 
   const spans: VoiceSpan[] = [];
@@ -191,6 +244,35 @@ export function planVoiceSpans(
     });
   }
   return spans;
+}
+
+/**
+ * LLM 段落级归属覆盖（v0.13.0）：把段落起点 → 角色id 的映射应用到 spans。
+ * 语义：覆盖段落内所有引号区改用该角色音色；旁白区不变；无匹配段落忽略。
+ */
+export function applyAttributionOverrides(
+  spans: VoiceSpan[],
+  chapterText: string,
+  overrides: Array<{ paragraphStart: number; characterId: string }>,
+): VoiceSpan[] {
+  if (overrides.length === 0) return spans;
+  const paragraphs = computeLines(chapterText);
+  const overriddenKeys = new Map<number, string>();
+  for (const override of overrides) {
+    if (overriddenKeys.has(override.paragraphStart)) continue;
+    overriddenKeys.set(override.paragraphStart, override.characterId);
+  }
+  return spans.map((span) => {
+    if (span.voiceKey === NARRATOR_VOICE_KEY) return span;
+    // span 所在段落（以引号区起点为准）被覆盖 → 改写
+    for (const [paragraphStart, characterId] of overriddenKeys) {
+      const line = lineRangeAt(paragraphs, paragraphStart);
+      if (span.startOffset >= line.start && span.startOffset < line.end) {
+        return { ...span, voiceKey: characterId };
+      }
+    }
+    return span;
+  });
 }
 
 export interface VoiceFingerprintEntry {

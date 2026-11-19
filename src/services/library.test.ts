@@ -32,6 +32,7 @@ function setup() {
     id: 'p1',
     title: '示例工程',
     description: '',
+    tags: [],
     revision: 0,
     createdAt: 1,
     updatedAt: 1,

@@ -130,6 +130,8 @@ export interface ReaderViewProps {
   immersive: boolean;
   /** 划线区间（v0.12.0，书级偏移） */
   annotations: Array<{ start: number; end: number }>;
+  /** 词级卡拉OK当前词（v0.13.0，书级偏移；null=关闭） */
+  wordHighlight: { start: number; end: number } | null;
   /**
    * 长按文本块（v0.12.0）：RN Text 无字符级选区回调，采用段落级长按划线。
    * range = 长按内容 的书级偏移；null = 清除操作条。
@@ -402,6 +404,13 @@ export function ReaderView(props: ReaderViewProps) {
           end: Math.min(text.length, annotation.end - absoluteStart),
         });
       }
+    }
+    const word = props.wordHighlight;
+    if (word && word.end > absoluteStart && word.start < absoluteStart + text.length) {
+      ranges.push({
+        start: Math.max(0, word.start - absoluteStart),
+        end: Math.min(text.length, word.end - absoluteStart),
+      });
     }
     if (ranges.length === 0) return text;
     return sliceStyledText(text, ranges).map((slice, index) =>

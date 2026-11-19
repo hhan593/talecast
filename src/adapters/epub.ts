@@ -31,6 +31,12 @@ export function createJszipEpubDeps(epubBytes: Uint8Array): EpubDeps {
     return zipPromise;
   };
   return {
+    async readFileBytes(path: string): Promise<Uint8Array> {
+      const zip = await load();
+      const entry = zip.file(path);
+      if (!entry) throw new Error(`EPUB 内缺少文件：${path}`);
+      return entry.async('uint8array');
+    },
     async readFile(path: string): Promise<string> {
       const zip = await load();
       const entry = zip.file(path);

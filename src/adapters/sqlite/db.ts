@@ -225,6 +225,7 @@ export const MIGRATIONS: Migration[] = [
     version: 8,
     description: '划线与笔记（v0.12.0）：annotations 表',
     statements: [
+      `ALTER TABLE projects ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`,
       `CREATE TABLE IF NOT EXISTS annotations (
         id TEXT PRIMARY KEY NOT NULL,
         project_id TEXT NOT NULL REFERENCES projects(id),

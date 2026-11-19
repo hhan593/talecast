@@ -98,3 +98,36 @@ describe("WS 帧组装/解析对称", () => {
     expect(parseBinaryFrame(frame).kind).toBe("textFrame");
   });
 });
+
+describe('v0.13.0 词级时间线（audio.metadata 帧）', () => {
+  function metadataFrame(json: object): Uint8Array {
+    const header = `X-RequestId:1\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n`;
+    const headerBytes = new TextEncoder().encode(header);
+    const body = new TextEncoder().encode(JSON.stringify(json));
+    const out = new Uint8Array(2 + headerBytes.length + body.length);
+    out[0] = (headerBytes.length >> 8) & 0xff;
+    out[1] = headerBytes.length & 0xff;
+    out.set(headerBytes, 2);
+    out.set(body, 2 + headerBytes.length);
+    return out;
+  }
+
+  it('WordBoundary 事件解析：100ns → ms', () => {
+    const frame = parseBinaryFrame(metadataFrame({
+      type: 'WordBoundary',
+      offset: 51_500_000, // 5150ms
+      duration: 2_100_000, // 210ms
+      text: { Word: '林晚', Length: 2 },
+    }));
+    expect(frame.kind).toBe('wordBoundary');
+    if (frame.kind !== 'wordBoundary') return;
+    expect(frame.event).toEqual({ offsetMs: 5150, durationMs: 210, word: '林晚' });
+  });
+
+  it('非 WordBoundary 元数据/坏 JSON 退化为 textFrame', () => {
+    const sentence = parseBinaryFrame(metadataFrame({ type: 'SentenceBoundary', offset: 1 }));
+    expect(sentence.kind).toBe('textFrame');
+    const broken = parseBinaryFrame(metadataFrame({ broken: true, offset: 'x' }));
+    expect(broken.kind).toBe('textFrame');
+  });
+});

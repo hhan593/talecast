@@ -26,7 +26,7 @@ async function buildEpub(): Promise<Uint8Array> {
 }
 
 async function setup() {
-  const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
+  const project = { id: 'p1', title: '示例', description: '', tags: [], revision: 0, createdAt: 1, updatedAt: 1 };
   const library = new FakeLibraryRepository([project]);
   const files = new FakeSourceFileStore();
   const importService = createImportService({

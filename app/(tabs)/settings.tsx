@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { Alert } from 'react-native';
 import { useServices } from '@/container';
+import { useI18n } from '@/hooks/use-i18n';
 
 /** 与 services/stats.ReadingStats 同构（架构守卫：app 不 import services，类型本地投影） */
 interface ReadingStats {
@@ -15,12 +16,15 @@ interface ReadingStats {
 /** 设置（docs/plan.md 4.2 / P4）：服务连接（LLM），密钥只进 SecureStore。 */
 export default function SettingsScreen() {
   const services = useServices();
+  const { t, changeLanguage } = useI18n();
   const [stats, setStats] = useState<ReadingStats | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [volumeKeyTurn, setVolumeKeyTurn] = useState(false);
   const [immersive, setImmersive] = useState(true);
   const [pageSound, setPageSound] = useState(false);
+  const [wordKaraoke, setWordKaraoke] = useState(false);
+  const [appLanguage, setAppLanguage] = useState<'system' | 'zh' | 'en'>('system');
   const [endpoint, setEndpoint] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -38,6 +42,9 @@ export default function SettingsScreen() {
     setVolumeKeyTurn((await services.settings.getSetting('volume-key-turn')) === 'on');
     setImmersive((await services.settings.getSetting('reader-immersive')) !== 'off');
     setPageSound((await services.settings.getSetting('reader-page-sound')) === 'on');
+    setWordKaraoke((await services.settings.getSetting('word-karaoke')) === 'on');
+    const lang = await services.settings.getSetting('app-language');
+    setAppLanguage(lang === 'zh' || lang === 'en' ? lang : 'system');
     setLoading(false);
   }, [services]);
 
@@ -63,10 +70,10 @@ export default function SettingsScreen() {
       className="flex-1 bg-paper dark:bg-paper-night"
       contentContainerClassName="px-4 pb-10 pt-16"
     >
-      <Text className="text-2xl font-bold text-ink dark:text-ink-night">设置</Text>
+      <Text className="text-2xl font-bold text-ink dark:text-ink-night">{t('settings.title')}</Text>
 
       <View className="mt-6 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">服务连接 · 文本模型（OpenAI 兼容）</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.llmSection')}</Text>
         <Text className="mt-1 text-xs text-muted dark:text-muted-night">
           用于角色抽取与书籍助手。原文会发送给该服务商（docs/plan.md 风险表）。
         </Text>
@@ -118,7 +125,7 @@ export default function SettingsScreen() {
       </View>
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">语音生成</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.ttsSection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
           Edge TTS（免费、无需密钥）。音色库请在书籍内 角色中心 → 刷新音色库 拉取。
         </Text>
@@ -126,7 +133,7 @@ export default function SettingsScreen() {
 
       {usage ? (
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-          <Text className="font-semibold text-ink dark:text-ink-night">请求用量（本机累计）</Text>
+          <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.usageSection')}</Text>
           <Text className="mt-2 text-sm text-muted dark:text-muted-night">
             · 语音合成（Edge）：成功 {usage.ttsOk} 次 / 失败 {usage.ttsFailed} 次{'\n'}
             · 文本模型：成功 {usage.llmOk} 次 / 失败 {usage.llmFailed} 次
@@ -138,12 +145,38 @@ export default function SettingsScreen() {
       ) : null}
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">阅读</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.languageSection')}</Text>
+        <View className="mt-3 flex-row gap-2">
+          {(['system', 'zh', 'en'] as const).map((lang) => (
+            <Pressable
+              key={lang}
+              accessibilityRole="button"
+              className={`flex-1 items-center rounded-xl py-2.5 ${
+                appLanguage === lang ? 'bg-accent' : 'bg-raised dark:bg-card-night'
+              }`}
+              onPress={() => {
+                setAppLanguage(lang);
+                void changeLanguage(lang);
+              }}
+            >
+              <Text
+                className={`text-sm ${appLanguage === lang ? 'font-semibold text-white' : 'text-ink dark:text-ink-night'}`}
+              >
+                {lang === 'system' ? t('settings.languageSystem') : lang === 'zh' ? '中文' : 'English'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.readingSection')}</Text>
         <View className="mt-3 gap-2">
           {([
             ['volume-key-turn', '音量键翻页（Android，阅读器内）', volumeKeyTurn, setVolumeKeyTurn],
             ['reader-immersive', '沉浸全屏（菜单隐藏时收起状态栏）', immersive, setImmersive],
             ['reader-page-sound', '翻页音效', pageSound, setPageSound],
+            ['word-karaoke', '词级卡拉OK跟随（听读逐词高亮）', wordKaraoke, setWordKaraoke],
           ] as const).map(([key, label, value, setter]) => (
             <Pressable
               key={key}
@@ -168,7 +201,7 @@ export default function SettingsScreen() {
 
       {stats ? (
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-          <Text className="font-semibold text-ink dark:text-ink-night">阅读统计（本机）</Text>
+          <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.statsSection')}</Text>
           <Text className="mt-2 text-sm text-muted dark:text-muted-night">
             · 今日阅读 {Math.round(stats.todayMs / 60000)} 分钟 · {stats.todayChars} 字{'\n'}
             · 累计阅读 {Math.round(stats.totalMs / 60000)} 分钟
@@ -180,7 +213,7 @@ export default function SettingsScreen() {
       ) : null}
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">数据备份（JSON）</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.backupSection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
           导出书架+偏好+书签为 JSON 分享保存；导入恢复设置项（书籍正文需重新导入原文件）。
         </Text>
@@ -198,7 +231,7 @@ export default function SettingsScreen() {
                 .finally(() => setBackupBusy(false));
             }}
           >
-            <Text className="font-semibold text-white">导出备份</Text>
+            <Text className="font-semibold text-white">{t('settings.exportBackup')}</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
             className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
@@ -222,13 +255,13 @@ export default function SettingsScreen() {
               ]);
             }}
           >
-            <Text className="text-sm text-ink dark:text-ink-night">导入恢复</Text>
+            <Text className="text-sm text-ink dark:text-ink-night">{t('settings.importBackup')}</Text>
           </Pressable>
         </View>
       </View>
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">能力边界</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.errorBoundarySection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
           · 原文文本会发送给 TTS / LLM 服务商{'\n'}
           · 生成任务仅前台运行；任务与段状态持久化，重进应用可恢复{'\n'}

@@ -24,6 +24,8 @@ export interface PlaybackState {
   queueOffsets: number[];
   /** 播放倍速（0.8–2.0，播放端即时生效） */
   rate: number;
+  /** 词级卡拉OK（v0.13.0）：当前朗读词的书级偏移；null=无时间线/未在播放 */
+  wordHighlight: { start: number; end: number } | null;
   /** 睡眠定时（v0.11.0）：当前生效模式；null=未开启 */
   sleepMode: SleepTimerMode | null;
   /** minutes 模式的到期时间戳；其余模式为 null */
@@ -36,10 +38,13 @@ interface QueueItem {
   text: string;
   startOffset: number;
   endOffset: number;
+  /** 词级时间线（v0.13.0，加载时读取伴生 JSON；null=无） */
+  words: Array<{ offsetMs: number; durationMs: number; word: string }> | null;
 }
 
 export interface PlaybackDeps {
   audioPlayer: AudioPlayer;
+  audioFileStore?: import('@/domain/ports').AudioFileStore;
   generationStore: GenerationStore;
   libraryQuery: import('@/services/library-query').LibraryQueryService;
   readingStateRepository: ReadingStateRepository;
@@ -64,6 +69,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     segmentStartOffset: null,
     queueOffsets: [],
     rate: 1,
+    wordHighlight: null,
     sleepMode: null,
     sleepDeadline: null,
   };
@@ -94,8 +100,38 @@ export function createPlaybackService(deps: PlaybackDeps) {
     for (const listener of listeners) listener(state);
   }
 
+  /** 词级对齐（v0.13.0）：进度 ms → 当前词的书级偏移（词序单调，indexOf 游标累进） */
+  function alignWord(item: QueueItem, positionMs: number): { start: number; end: number } | null {
+    if (!item.words || item.words.length === 0) return null;
+    let cursor = 0;
+    for (const word of item.words) {
+      if (positionMs < word.offsetMs) break;
+      const charIndex = item.text.indexOf(word.word, cursor);
+      if (charIndex === -1) continue;
+      cursor = charIndex + word.word.length;
+      if (positionMs <= word.offsetMs + word.durationMs) {
+        return {
+          start: item.startOffset + charIndex,
+          end: item.startOffset + charIndex + word.word.length,
+        };
+      }
+    }
+    return null;
+  }
+
   async function loadAndPlay(index: number): Promise<void> {
     const item = queue[index];
+    // 词级时间线随段加载（v0.13.0）：伴生 JSON 读取失败视为无卡拉OK
+    if (deps.audioFileStore?.readText) {
+      try {
+        const raw = await deps.audioFileStore.readText(item.filePath);
+        const parsed = JSON.parse(raw) as { words?: Array<{ offsetMs: number; durationMs: number; word: string }> };
+        item.words = Array.isArray(parsed.words) ? parsed.words : null;
+      } catch {
+        item.words = null;
+      }
+    }
+    setState({ wordHighlight: null });
     await deps.audioPlayer.load(item.filePath);
     if (rate !== 1) await deps.audioPlayer.setRate(rate);
     try {
@@ -135,6 +171,12 @@ export function createPlaybackService(deps: PlaybackDeps) {
     const item = queue[state.segmentIndex];
     if (item && state.status === 'playing') {
       persistPosition(item.ordinal, positionMs);
+      // 词级对齐（v0.13.0）：当前词变化才更新状态（避免每秒整树渲染）
+      const word = alignWord(item, positionMs);
+      const prev = state.wordHighlight;
+      if ((word?.start ?? null) !== (prev?.start ?? null) || (word?.end ?? null) !== (prev?.end ?? null)) {
+        setState({ wordHighlight: word });
+      }
     }
   });
   // 自动连播：queue 完结后按 settings 开关取下一章 done 任务续播（RE-2）
@@ -187,6 +229,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
         text: segment.text,
         startOffset,
         endOffset,
+        words: null,
       });
       if (found !== -1) cursor = found + segment.text.length;
     }
@@ -389,7 +432,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     stop(): void {
       deps.audioPlayer.release();
       queue = [];
-      setState({ status: 'idle', chapterId: null, segmentIndex: 0, segmentCount: 0, segmentStartOffset: null, queueOffsets: [] });
+      setState({ status: 'idle', chapterId: null, segmentIndex: 0, segmentCount: 0, segmentStartOffset: null, queueOffsets: [], wordHighlight: null });
     },
   };
 }

@@ -110,14 +110,22 @@ function escapeXml(text: string): string {
 
 // WebSocket 入站帧解析（二进制音频帧与文本控制帧）
 
+/** 词级时间线事件（v0.13.0 卡拉OK）：Edge 协议 offset/duration 单位为 100ns */
+export interface WordBoundaryEvent {
+  offsetMs: number;
+  durationMs: number;
+  word: string;
+}
+
 export type EdgeFrame =
   | { kind: "audio"; bytes: Uint8Array }
+  | { kind: "wordBoundary"; event: WordBoundaryEvent }
   | { kind: "turnEnd" }
   | { kind: "turnStart" }
   | { kind: "response"; headers: Record<string, string> }
   | { kind: "textFrame"; path: string; body: string };
 
-/** 二进制帧：2 字节大端头长 + 头部（含 Path:audio）+ 音频载荷 */
+/** 二进制帧：2 字节大端头长 + 头部（含 Path:audio / Path:audio.metadata）+ 载荷 */
 export function parseBinaryFrame(data: Uint8Array): EdgeFrame {
   if (data.length < 2) return { kind: "textFrame", path: "unknown", body: "" };
   const headerLength = (data[0] << 8) | data[1];
@@ -128,6 +136,27 @@ export function parseBinaryFrame(data: Uint8Array): EdgeFrame {
   const path = headers.Path ?? "";
   if (path === "audio") {
     return { kind: "audio", bytes: data.subarray(2 + headerLength) };
+  }
+  if (path === "audio.metadata") {
+    try {
+      const payload = JSON.parse(
+        new TextDecoder().decode(data.subarray(2 + headerLength)),
+      ) as { type?: string; offset?: number; duration?: number; text?: { Word?: string; Length?: number } };
+      if (payload.type === "WordBoundary" && typeof payload.offset === "number") {
+        return {
+          kind: "wordBoundary",
+          event: {
+            // 100ns 单位 → 毫秒
+            offsetMs: Math.round(payload.offset / 10_000),
+            durationMs: Math.round((payload.duration ?? 0) / 10_000),
+            word: payload.text?.Word ?? "",
+          },
+        };
+      }
+      return { kind: "textFrame", path, body: "" };
+    } catch {
+      return { kind: "textFrame", path, body: "" };
+    }
   }
   return { kind: "textFrame", path, body: "" };
 }

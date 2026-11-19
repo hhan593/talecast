@@ -21,7 +21,7 @@ import {
 } from './fakes';
 
 async function setupWithGeneratedChapter() {
-  const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
+  const project = { id: 'p1', title: '示例', description: '', tags: [], revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);
   const library = new FakeLibraryRepository([project]);
   const files = new FakeSourceFileStore();
@@ -85,6 +85,7 @@ async function setupWithGeneratedChapter() {
   const settingsRepository = new (await import('./fakes')).FakeSettingsRepository();
   const playback = createPlaybackService({
     audioPlayer,
+    audioFileStore: audio,
     generationStore,
     libraryQuery,
     settingsRepository,
@@ -265,5 +266,26 @@ describe('v0.11.0 睡眠模式', () => {
     s.playback.cancelSleepTimer();
     expect(s.playback.getState().sleepMode).toBeNull();
     expect(s.playback.getState().sleepDeadline).toBeNull();
+  });
+});
+
+describe('v0.13.0 词级卡拉OK对齐', () => {
+  it('合成段带时间线：进度回调对齐当前词（书级偏移）', async () => {
+    const s = await setupWithGeneratedChapter();
+    const played = await s.playback.playChapter('p1', s.chapters[0].id);
+    expect(played.ok).toBe(true);
+    if (!played.ok) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const base = s.playback.getState().queueOffsets[0];
+    s.audioPlayer.fireProgress(300); // 100–500ms → 第 1 词（段文本前 2 字）
+    expect(s.playback.getState().wordHighlight).toEqual({ start: base, end: base + 2 });
+    s.audioPlayer.fireProgress(700); // 500ms 后 → 第 2 词
+    expect(s.playback.getState().wordHighlight).toEqual({ start: base + 2, end: base + 4 });
+  });
+
+  it('无时间线：wordHighlight 保持 null（降级）', async () => {
+    const s = await setupWithGeneratedChapter();
+    await s.playback.playChapter('p1', s.chapters[0].id);
+    expect(s.playback.getState().wordHighlight).toBeNull();
   });
 });

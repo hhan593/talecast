@@ -34,17 +34,32 @@ export class FakeTtsGateway implements TtsGateway {
     ];
   }
 
-  async synthesize(input: { text: string; voiceId: string }): Promise<Uint8Array> {
+  /** 最近一次合成请求的 prosody（v0.13.0 按角色分语速断言用） */
+  public lastProsody?: { rate?: string; pitch?: string; volume?: string };
+
+  async synthesize(input: { text: string; voiceId: string; prosody?: { rate?: string; pitch?: string; volume?: string } }): Promise<Uint8Array> {
+    return (await this.synthesizeWithTimeline(input)).audio;
+  }
+
+  /** 时间线：首两词固定（'夜里'@100ms、'落了'@500ms），供卡拉OK对齐测试 */
+  async synthesizeWithTimeline(input: { text: string; voiceId: string; prosody?: { rate?: string; pitch?: string; volume?: string } }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
     const index = this.synthCalls.length;
     if (this.synthDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.synthDelayMs));
     }
     this.synthCalls.push(`${input.voiceId}:${input.text}`);
+    if (input.prosody) this.lastProsody = input.prosody;
     if (this.failCallIndexes.includes(index) || this.failTextIncludes.some((marker) => input.text.includes(marker))) {
       throw new Error('模拟合成失败');
     }
     // 确定性伪音频载荷
-    return new TextEncoder().encode(`audio(${input.voiceId}):${input.text}`);
+    return {
+      audio: new TextEncoder().encode(`audio(${input.voiceId}):${input.text}`),
+      words: [
+        { offsetMs: 100, durationMs: 400, word: input.text.slice(0, 2) },
+        { offsetMs: 500, durationMs: 400, word: input.text.slice(2, 4) },
+      ],
+    };
   }
 }
 
@@ -62,6 +77,18 @@ export class FakeAudioFileStore implements AudioFileStore {
   async write(textHash: string, _bytes: Uint8Array): Promise<string> {
     this.files.set(textHash, this.pathFor(textHash));
     return this.pathFor(textHash);
+  }
+
+  public texts = new Map<string, string>();
+
+  async writeText(path: string, content: string): Promise<void> {
+    this.texts.set(`${path}.words.json`, content);
+  }
+
+  async readText(path: string): Promise<string> {
+    const content = this.texts.get(`${path}.words.json`);
+    if (content === undefined) throw new Error(`伴生文本不存在 ${path}`);
+    return content;
   }
 }
 

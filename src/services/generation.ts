@@ -1,5 +1,5 @@
-import { assertJobStartable, buildSegmentPlan, buildVoiceSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash } from '@/domain/jobs';
-import { NARRATOR_VOICE_KEY, buildVoicePlanFingerprint, planVoiceSpans, type DialogueCandidate } from '@/domain/dialogue';
+import { assertJobStartable, buildSegmentPlan, buildVoiceSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from '@/domain/jobs';
+import { NARRATOR_VOICE_KEY, applyAttributionOverrides, buildVoicePlanFingerprint, planVoiceSpans, type DialogueCandidate } from '@/domain/dialogue';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { segmentForTts } from '@/domain/segmenter';
@@ -32,6 +32,8 @@ const PROVIDER = EDGE_TTS_PROVIDER;
 const PROVIDER_PARAMS_JSON = '{}';
 
 export interface GenerationDeps {
+  /** 可选：LLM 段落级说话人归属（v0.13.0，测试可省略） */
+  dialogueAttribution?: import('@/services/dialogue-attribution').DialogueAttributionService;
   projectRepository: ProjectRepository;
   libraryRepository: LibraryRepository;
   libraryQuery: import('@/services/library-query').LibraryQueryService;
@@ -50,7 +52,7 @@ export interface GenerationDeps {
 /**
  * 对话分声候选：已确认角色 × 已绑定音色（无绑定的角色命中后仍只能是旁白，直接剔除）。
  */
-function buildDialogueCandidates(
+export function buildDialogueCandidates(
   characters: CharacterRecord[],
   bindings: BindingRecord[],
 ): DialogueCandidate[] {
@@ -115,6 +117,7 @@ export function createGenerationService(deps: GenerationDeps) {
    */
   async function planChapterSegments(
     projectId: string,
+    chapterId: string,
     chapterText: string,
     binding: BindingRecord,
   ): Promise<{ plan: PlannedSegment[]; voicePlanJson?: string }> {
@@ -134,7 +137,19 @@ export function createGenerationService(deps: GenerationDeps) {
     const characters = await deps.characterRepository.list(projectId);
     const bindings = await deps.bindingRepository.list(projectId);
     const candidates = buildDialogueCandidates(characters, bindings);
-    const spans = planVoiceSpans(chapterText, candidates);
+    let spans = planVoiceSpans(chapterText, candidates);
+    // LLM 段落级归属（v0.13.0 可选）：启发式之上的补充覆盖；失败/未配置静默回退
+    const llmAttributionOn = (await deps.settingsRepository?.get('llm-attribute-dialogue')) === 'on';
+    if (llmAttributionOn && deps.dialogueAttribution) {
+      try {
+        const overrides = await deps.dialogueAttribution.attributeChapter(projectId, chapterId, chapterText);
+        if (overrides.ok && overrides.value.length > 0) {
+          spans = applyAttributionOverrides(spans, chapterText, overrides.value);
+        }
+      } catch {
+        // 归属失败不影响生成（回退启发式）
+      }
+    }
     const voiceByKey = new Map([
       [NARRATOR_VOICE_KEY, { voiceId, providerParamsJson, revision: binding.revision }],
     ]);
@@ -198,13 +213,36 @@ export function createGenerationService(deps: GenerationDeps) {
       try {
         // 段级音色（v0.9.0 对话分声）：null = 旧单声任务回落 job.voiceId
         const voiceId = segment.voiceId ?? job.voiceId;
-        const audio = await deps.ttsGateway.synthesize({
+        // 段级合成参数（v0.13.0）：角色绑定的语速/音调/音量真正落地
+        const prosody = parseProsodyJson(segment.providerParamsJson ?? '{}');
+        const synthesizeInput = {
           text: segment.text,
           voiceId,
-        });
+          prosody: Object.keys(prosody).length > 0 ? prosody : undefined,
+        };
+        let audio: Uint8Array;
+        let words: import('@/domain/ports').WordTimelineItem[] = [];
+        if (deps.ttsGateway.synthesizeWithTimeline) {
+          const result = await deps.ttsGateway.synthesizeWithTimeline(synthesizeInput);
+          audio = result.audio;
+          words = result.words;
+        } else {
+          audio = await deps.ttsGateway.synthesize(synthesizeInput);
+        }
         const cancelledNow = cancelledJobs.has(jobId);
         // 取消时已产出的音频仍落盘为缓存，不浪费本次请求
         const filePath = await deps.audioFileStore.write(segment.textHash, audio);
+        // 词级时间线落盘（v0.13.0 卡拉OK）：伴生 JSON，播放端按进度对齐
+        if (words.length > 0 && deps.audioFileStore.writeText) {
+          try {
+            await deps.audioFileStore.writeText(
+              filePath,
+              JSON.stringify({ segmentText: segment.text, words }),
+            );
+          } catch {
+            // 时间线失败不影响音频
+          }
+        }
         await deps.generationStore.updateSegment(segment.id, { status: 'done', filePath, error: null });
         if (!cancelledNow) {
           await deps.requestLogRepository.log('tts', true, segment.textHash.slice(0, 16));
@@ -255,7 +293,7 @@ export function createGenerationService(deps: GenerationDeps) {
 
         const voiceId = binding!.voiceId;
         const providerParamsJson = binding!.providerParamsJson || '{}';
-        const { plan, voicePlanJson } = await planChapterSegments(command.projectId, chapterText, binding!);
+        const { plan, voicePlanJson } = await planChapterSegments(command.projectId, command.chapterId, chapterText, binding!);
 
         const input = {
           chapterTextSha256: sha256Text(chapterText),
@@ -373,7 +411,7 @@ export function createGenerationService(deps: GenerationDeps) {
       const chapterText = loaded.chapterText;
       if (chapterText.length === 0) return err('invalid', '本章内容为空');
       // 试听与生成共用同一计划（v0.9.0）：段哈希一致 → 试听文件生成时零请求转正
-      const { plan } = await planChapterSegments(command.projectId, chapterText, binding);
+      const { plan } = await planChapterSegments(command.projectId, command.chapterId, chapterText, binding);
       if (plan.length === 0) return err('invalid', '本章内容为空');
       const first = plan.find((segment) => segment.text.length >= PREVIEW_MIN_CHARS) ?? plan[0];
       const existingPath = deps.audioFileStore.pathFor(first.textHash);
@@ -381,7 +419,12 @@ export function createGenerationService(deps: GenerationDeps) {
         return ok({ filePath: existingPath, textHash: first.textHash, cached: true });
       }
       try {
-        const audio = await deps.ttsGateway.synthesize({ text: first.text, voiceId: first.voiceId });
+        const firstProsody = parseProsodyJson(first.providerParamsJson ?? '{}');
+        const audio = await deps.ttsGateway.synthesize({
+          text: first.text,
+          voiceId: first.voiceId,
+          prosody: Object.keys(firstProsody).length > 0 ? firstProsody : undefined,
+        });
         const filePath = await deps.audioFileStore.write(first.textHash, audio);
         await deps.requestLogRepository.log('tts', true, first.textHash.slice(0, 16));
         return ok({ filePath, textHash: first.textHash, cached: false });

@@ -1,0 +1,9 @@
+# 冒烟：导入 → 目录 → 进入阅读 → 返回（真机/模拟器本地跑：maestro test .maestro/smoke-import-play.yaml）
+appId: com.hhan.talecast
+---
+- launchApp
+- tapOn: "新建书籍"
+- tapOn: "导入 UTF-8 TXT"
+# 系统文件选择器（SAF）内交互由 MAESTRO 文件注入或手动配合；此处只断言应用回到工作台
+- assertVisible: "角色中心"
+- assertVisible: "书籍助手"

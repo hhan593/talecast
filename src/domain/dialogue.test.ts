@@ -116,3 +116,41 @@ describe('attributeQuote / buildVoicePlanFingerprint', () => {
     expect(c).not.toBe(a);
   });
 });
+
+describe('v0.13.0 跨段引号说话人跟随', () => {
+  it('多段独白：第二段起未命中时继承首段归属', () => {
+    const source = '林晚说：“第一段。\n“第二段还接着说。\n“第三段结束。”\n旁白收尾。';
+    const spans = planVoiceSpans(source, [
+      { key: 'char-lin', names: ['林晚'] },
+    ]);
+    const joinedAll = spans.map((span) => source.slice(span.startOffset, span.endOffset)).join('');
+    expect(joinedAll).toBe(source);
+    const quoteSpans = spans.filter((span) => span.text.includes('第二段'));
+    expect(quoteSpans.length).toBe(1);
+    expect(quoteSpans[0].voiceKey).toBe('char-lin');
+    const third = spans.find((span) => span.text.includes('第三段'))!;
+    expect(third.voiceKey).toBe('char-lin');
+    // 中间出现显式说话人后不再跟随
+  });
+
+  it('跨段引号链：独白跟随 + 显式说话人接管', () => {
+    const source = '林晚说：“第一段。\n“第二段。\n赵四说：“第三段。”';
+    const spans = planVoiceSpans(source, [
+      { key: 'char-lin', names: ['林晚'] },
+      { key: 'char-zhao', names: ['赵四'] },
+    ]);
+    // 多段独白第二段跟随林晚；"赵四说："旁白归旁白；第三段显式赵四
+    expect(spans.find((span) => span.text.includes('第二段'))!.voiceKey).toBe('char-lin');
+    expect(spans.find((span) => span.text.includes('第三段'))!.voiceKey).toBe('char-zhao');
+    // 拼接覆盖不变量
+    expect(spans.map((span) => source.slice(span.startOffset, span.endOffset)).join('')).toBe(source);
+  });
+
+  it('非行首引号不跟随（普通段落内的独立引号）', () => {
+    const source = '林晚说：“第一段。”\n旁白：“第二段是引用。”';
+    const spans = planVoiceSpans(source, [
+      { key: 'char-lin', names: ['林晚'] },
+    ]);
+    expect(spans.find((span) => span.text.includes('第二段'))!.voiceKey).toBe(NARRATOR_VOICE_KEY);
+  });
+});

@@ -45,5 +45,13 @@ export function useProjects() {
     [refresh, services],
   );
 
-  return { projects, error, refresh, createProject, deleteProject };
+
+  const updateTags = useCallback(
+    async (projectId: string, tags: string[]) => {
+      await services.projects.updateTags(projectId, tags);
+      await refresh();
+    },
+    [refresh, services],
+  );
+  return { projects, error, refresh, createProject, deleteProject, updateTags };
 }

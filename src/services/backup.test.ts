@@ -4,7 +4,7 @@ import { createBackupService } from './backup';
 import { FakeBookmarkRepository, FakeProjectRepository, FakeSettingsRepository } from './fakes';
 
 function setup(overrides: Partial<Parameters<typeof createBackupService>[0]> = {}) {
-  const project = { id: 'p1', title: '示例书', description: '', revision: 2, createdAt: 1, updatedAt: 1 };
+  const project = { id: 'p1', title: '示例书', description: '', tags: [], revision: 2, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);
   const bookmarks = new FakeBookmarkRepository();
   const settings = new FakeSettingsRepository();
