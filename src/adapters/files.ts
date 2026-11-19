@@ -22,7 +22,7 @@ const decodedTextCache = new Map<string, string>();
 export const documentPickerFilePicker: FilePicker = {
   async pickTextFile() {
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['text/plain', 'application/octet-stream'],
+      type: ['text/plain', 'application/octet-stream', 'application/epub+zip'],
       copyToCacheDirectory: true,
       multiple: false,
     });

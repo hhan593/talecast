@@ -12,6 +12,8 @@ import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
 import { createAssistantService } from '@/services/assistant';
 import { createBookmarksService } from '@/services/bookmarks';
+import { createJszipEpubDeps } from '@/adapters/epub';
+import { parseEpub } from '@/domain/epub';
 import { createChapterEditService } from '@/services/chapter-edits';
 import { createSearchService } from '@/services/search';
 import { createCharactersService } from '@/services/characters';
@@ -75,6 +77,9 @@ const services = {
     libraryRepository: adapters.libraryRepository,
     sourceFileStore: sandboxSourceFileStore,
     receiptStore: adapters.receiptStore,
+    epubParser: {
+      parseEpub: (bytes) => parseEpub(createJszipEpubDeps(bytes), bytes),
+    },
   }),
   libraryQuery,  splitReview: createSplitReviewService({
     projectRepository: adapters.projectRepository,

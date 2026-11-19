@@ -1,4 +1,5 @@
 import { buildInitialChapterDrafts, type ChapterDraft } from '@/domain/split';
+import { parseEpub } from '@/domain/epub';
 import { checkImportSize, decodeValidatedUtf8, isValidUtf8 } from '@/domain/source';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
@@ -17,6 +18,10 @@ export interface ImportDeps {
   libraryRepository: LibraryRepository;
   sourceFileStore: SourceFileStore;
   receiptStore: ReceiptStore;
+  /** EPUB 解析适配（v0.5.0）：jszip 注入实现 */
+  epubParser?: {
+    parseEpub(bytes: Uint8Array): Promise<{ bookTitle: string; chapters: Array<{ title: string; text: string }> }>;
+  };
 }
 
 export interface ImportSourceCommand extends Command {
@@ -30,10 +35,90 @@ export interface ImportSourceResult {
   chapters: ChapterDraft[];
 }
 
+function chaptersFromEpubChapters(
+  chapters: Array<{ title: string; text: string }>,
+  baseOffset: number,
+): ChapterDraft[] {
+  // EPUB 自带章节结构：直接按章节文本偏移生成草案（跳过正则候选）
+  const drafts: ChapterDraft[] = [];
+  let cursor = 0;
+  for (const chapter of chapters) {
+    const chunk = chapter.text + '\n';
+    const titleLine = chapter.title + '\n';
+    drafts.push({
+      title: chapter.title,
+      startOffset: baseOffset + cursor,
+      endOffset: baseOffset + cursor + titleLine.length + chunk.length,
+      headingLine: null,
+    });
+    cursor += titleLine.length + chunk.length;
+  }
+  void baseOffset;
+  return drafts;
+}
+
+
+async function runEpubImport(
+  deps: ImportDeps,
+  command: ImportSourceCommand,
+): Promise<Result<ImportSourceResult>> {
+  if (!deps.epubParser) return err('invalid', 'EPUB 支持未启用');
+  const existing = await deps.libraryRepository.getSource(command.projectId);
+  if (existing) {
+    return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
+  }
+  try {
+    const parsed = await deps.epubParser.parseEpub(command.bytes);
+    // 组装全文：每章 = 标题行 + 正文 + 换行；章节草案指向标题行起点（EPUB 自带结构，不走正则候选）
+    const drafts: ChapterDraft[] = [];
+    let fullText = '';
+    for (const chapter of parsed.chapters) {
+      const chunk = `${chapter.title}\n${chapter.text}\n`;
+      drafts.push({
+        title: chapter.title,
+        startOffset: fullText.length,
+        endOffset: fullText.length + chunk.length,
+        headingLine: null,
+      });
+      fullText += chunk;
+    }
+    const rawSha256 = sha256Bytes(command.bytes);
+    const textSha256 = sha256Text(fullText);
+    await deps.sourceFileStore.writeRawBytes(rawSha256, command.bytes);
+    await deps.sourceFileStore.writeDecodedText(textSha256, fullText);
+    const source = await deps.libraryRepository.createSourceWithChapters(
+      {
+        id: `src-${command.projectId}-${rawSha256.slice(0, 16)}`,
+        projectId: command.projectId,
+        filename: command.fileName,
+        encoding: 'utf-8',
+        rawSha256,
+        textSha256,
+        byteSize: command.bytes.length,
+        createdAt: Date.now(),
+      },
+      drafts,
+    );
+    const result: ImportSourceResult = { source, chapters: drafts };
+    await deps.receiptStore.put({
+      commandId: command.commandId,
+      result: ok(result),
+      createdAt: Date.now(),
+    });
+    return ok(result);
+  } catch (error) {
+    return err('invalid', `EPUB 解析失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Result<ImportSourceResult>> {
   const { bytes, projectId } = command;
 
   if (bytes.length === 0) return Promise.resolve(err('invalid', '文件内容为空'));
+  // EPUB 分支（v0.5.0）：二进制 ZIP 容器，内部 XHTML 自身 UTF-8；在 UTF-8 字节校验之前分流
+  if (deps.epubParser && (command.fileName.toLowerCase().endsWith('.epub') || (bytes[0] === 0x50 && bytes[1] === 0x4b))) {
+    return runEpubImport(deps, command);
+  }
   if (!checkImportSize(bytes.length)) {
     return Promise.resolve(
       err('invalid', `文件超出首版 16MB 上限（当前 ${(bytes.length / 1024 / 1024).toFixed(1)}MB），请拆分后导入`),
@@ -44,6 +129,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
       err('invalid', '该文件不是 UTF-8 编码。首版只接受 UTF-8，请先在电脑上转码后重新导入'),
     );
   }
+
 
   return deps.libraryRepository.getSource(projectId).then((existing) => {
     if (existing) {
