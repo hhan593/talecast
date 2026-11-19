@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
 import type { AnnotationRecord } from '@/domain/annotations';
+import type { Result } from '@/domain/result';
 
-/** 划线与笔记数据入口（v0.12.0）：列表/添加/删除/笔记编辑 */
+/** 划线与笔记数据入口（v0.12.0）：列表/添加/删除/笔记编辑（失败经 Result 透出，issue #33） */
 export function useAnnotations(projectId: string) {
   const services = useServices();
   const [annotations, setAnnotations] = useState<AnnotationRecord[]>([]);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setAnnotations(await services.annotations.listAnnotations(projectId));
@@ -18,7 +20,7 @@ export function useAnnotations(projectId: string) {
 
   const add = useCallback(
     async (chapterId: string, startOffset: number, endOffset: number, note: string) => {
-      await services.annotations.addAnnotation({
+      const result = await services.annotations.addAnnotation({
         commandId: services.newCommandId(),
         projectId,
         chapterId,
@@ -26,7 +28,13 @@ export function useAnnotations(projectId: string) {
         endOffset,
         note,
       });
+      if (!result.ok) {
+        setLastError(result.error.message);
+        return result;
+      }
+      setLastError(null);
       await refresh();
+      return result;
     },
     [projectId, refresh, services],
   );
@@ -47,5 +55,5 @@ export function useAnnotations(projectId: string) {
     [refresh, services],
   );
 
-  return { annotations, refresh, add, remove, setNote };
+  return { annotations, lastError, refresh, add, remove, setNote };
 }
