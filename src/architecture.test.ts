@@ -40,15 +40,27 @@ describe('架构依赖方向守卫', () => {
     expect(violations).toEqual([]);
   });
 
-  it('app 路由与 components 不直接 import services / adapters', () => {
+  it('app 路由与 components 不直接 import services / adapters；hooks 不 import adapters', () => {
+    // app/components：禁止 services 与 adapters（只经 hooks）
+    // hooks：允许 services（其职责即服务入口），禁止 adapters
     const appRoot = join(process.cwd(), 'app');
-    const uiFiles = [...tsFiles(appRoot), ...files.filter((f) => f.includes('/components/'))];
+    const appAndComponents = [
+      ...tsFiles(appRoot),
+      ...files.filter((f) => f.includes('/components/')),
+    ].filter((f) => !/\.test\.tsx?$/.test(f));
+    const hookFiles = files.filter((f) => f.includes(`${'hooks'}/`));
     const violations: string[] = [];
-    for (const file of uiFiles) {
-      if (/\.test\.tsx?$/.test(file)) continue;
+    for (const file of appAndComponents) {
       for (const spec of importsOf(file)) {
         if (/@\/(services|adapters)(\/|$)/.test(spec)) {
-          violations.push(`${file} → ${spec}`);
+          violations.push(`${file.replace(process.cwd(), '')} → ${spec}`);
+        }
+      }
+    }
+    for (const file of hookFiles) {
+      for (const spec of importsOf(file)) {
+        if (/@\/adapters(\/|$)/.test(spec)) {
+          violations.push(`${file.replace(process.cwd(), '')} → ${spec}`);
         }
       }
     }
