@@ -89,7 +89,6 @@ xcodebuild -workspace TaleCast.xcworkspace -scheme TaleCast -configuration Relea
 
 ## 已知限制
 
-- **"＋ 添加书籍"按钮尚未接入创建弹窗**：`createProject` service/hook 已就绪，但书籍创建 UI 入口未实现（书架页 `createVisible` 状态无消费方）。
 - **iOS 构建需 Xcode 26+ / Swift 6.2**：Expo SDK 58 的 `expo-modules-jsi` 硬要求；本机 Xcode 16.3（Swift 6.1）无法构建，模拟器/真机包未产出。
 - **Web 预览不支持播放**：`react-native-track-player` 为原生模块，Web 端走 noop player，仅可用于 UI 预览。
 - **真机最小化验证待用户执行**：P0–P4 的实机验收（双端启动、数据持久化、后台播放、密钥存储）尚未由用户在本机确认。

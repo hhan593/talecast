@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react
 
 import { useProjects } from '@/hooks/use-projects';
 import { useServices } from '@/container';
+import { EditDialog } from '@/components/edit-dialog';
 
 export default function BookshelfScreen() {
   const { projects, error, createProject, deleteProject, refresh } = useProjects();
@@ -24,6 +25,19 @@ export default function BookshelfScreen() {
       return next;
     });
   }, [services]);
+
+  // 创建书籍：成功后跳书详情页，用户从那里导入文本（service/hook 已就绪，仅缺此 UI 入口）
+  const handleCreate = useCallback(
+    (title: string) => {
+      void createProject(title).then((result) => {
+        if (result.ok && result.value) {
+          setCreateVisible(false);
+          router.push({ pathname: '/project/[id]', params: { id: result.value.id } });
+        }
+      });
+    },
+    [createProject],
+  );
 
   /** 封面底色：按书名确定性取色（网格卡与列表封面同源） */
   const coverFor = useCallback((title: string) => {
@@ -138,6 +152,15 @@ export default function BookshelfScreen() {
             </Pressable>
           ) : undefined
         }
+      />
+
+      <EditDialog
+        visible={createVisible}
+        title="添加书籍"
+        initialValue=""
+        confirmLabel="创建"
+        onConfirm={handleCreate}
+        onClose={() => setCreateVisible(false)}
       />
     </View>
   );

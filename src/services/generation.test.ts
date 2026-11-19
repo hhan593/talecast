@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBindingsService } from './bindings';
-import { createGenerationService } from './generation';
+import { createGenerationService, type GenerationProgress } from './generation';
 import { createVoicesService } from './voices';
 import {
   FakeAudioFileStore,
@@ -15,6 +15,22 @@ import {
   FakeGenerationStore,
   textToBytes,
 } from './fakes';
+
+/** 轮询等待任务进入终态，避免固定 setTimeout 在并行测试负载下被压缩导致 flaky */
+async function waitForJobStatus(
+  getProgress: (jobId: string) => Promise<GenerationProgress | null>,
+  jobId: string,
+  terminal: GenerationProgress['status'][],
+  timeoutMs = 2000,
+): Promise<GenerationProgress | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const progress = await getProgress(jobId);
+    if (progress && terminal.includes(progress.status)) return progress;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return getProgress(jobId);
+}
 
 async function setupWithImport() {
   const project = { id: 'p1', title: '示例', description: '', revision: 0, createdAt: 1, updatedAt: 1 };
@@ -252,9 +268,8 @@ describe('P4 优化：取消与级联删除', () => {
     await new Promise((resolve) => setTimeout(resolve, 150)); // 首段完成、次段进行中
     const cancelled = await s.generation.cancelGeneration({ projectId: 'p1', jobId: started.value.jobId });
     expect(cancelled.ok).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 100)); // 等循环感知取消
 
-    const afterCancel = await s.generation.getProgress(started.value.jobId);
+    const afterCancel = await waitForJobStatus(s.generation.getProgress, started.value.jobId, ['failed', 'done']);
     expect(afterCancel?.status).toBe('failed');
     expect(afterCancel?.error).toContain('已取消');
     const doneAfterCancel = (afterCancel?.segments ?? []).filter((seg) => seg.status === 'done').length;
@@ -264,8 +279,7 @@ describe('P4 优化：取消与级联删除', () => {
     s.tts.synthDelayMs = 0;
     const retried = await s.generation.retryGeneration({ projectId: 'p1', jobId: started.value.jobId });
     expect(retried.ok).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const after = await s.generation.getProgress(started.value.jobId);
+    const after = await waitForJobStatus(s.generation.getProgress, started.value.jobId, ['done']);
     expect(after?.status).toBe('done');
     expect(after?.segments.every((seg) => seg.status === 'done')).toBe(true);
   });
