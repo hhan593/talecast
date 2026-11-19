@@ -88,8 +88,8 @@ describe('pageForOffset', () => {
 });
 
 describe('横屏双栏（columns=2）', () => {
-  it('每屏容量翻倍：4 段单栏 2 页 → 双栏 1 页', () => {
-    const lines = Array.from({ length: 4 }, (_, i) => `第${i + 1}行正文内容完整。`).join('\n');
+  it('每屏容量翻倍：6 段单栏 2 页 → 双栏 1 页', () => {
+    const lines = Array.from({ length: 6 }, (_, i) => `第${i + 1}行正文内容完整。`).join('\n');
     const single = paginateText(lines, 0, M);
     const dual = paginateText(lines, 0, { ...M, columns: 2 });
     expect(single.length).toBe(2);
