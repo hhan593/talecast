@@ -213,7 +213,7 @@ const services = {
     projectRepository: adapters.projectRepository,
     bookmarkRepository: adapters.bookmarkRepository,
     settingsRepository: adapters.settingsRepository,
-    share: (data) => shareTextFile(`talecast-backup-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 2)),
+    share: (file) => shareTextFile(file.name, file.content),
     pickBackupFile: () => documentPickerBackupFile(),
   }),
   screenOrientation: new ScreenOrientationAdapter(),
@@ -233,8 +233,10 @@ if (Platform.OS === 'android' || Platform.OS === 'ios') {
 
 export type Services = typeof services;
 
-// 类组件（ErrorBoundary）无法经 hook 取服务：组合根把服务面挂到全局引用（唯一出口）
-(globalThis as { __talecastServices?: Services }).__talecastServices = services;
+// 类组件（ErrorBoundary）无法经 hook 取服务：组合根经全局引用注入**最小载荷**（issue #41）
+(globalThis as { __talecastServices?: Pick<Services, 'crashLog'> }).__talecastServices = {
+  crashLog: services.crashLog,
+};
 
 const ServicesContext = createContext<Services>(services);
 

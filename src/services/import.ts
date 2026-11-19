@@ -46,6 +46,26 @@ export interface ImportSourceResult {
 
 
 
+/** 解析结果 → 章节草案 + 全文（EPUB/MOBI 共用组装，issue #41） */
+function assembleChaptersFromParsed(chapters: Array<{ title: string; text: string }>): {
+  drafts: ChapterDraft[];
+  fullText: string;
+} {
+  const drafts: ChapterDraft[] = [];
+  let fullText = '';
+  for (const chapter of chapters) {
+    const chunk = `${chapter.title}\n${chapter.text}\n`;
+    drafts.push({
+      title: chapter.title,
+      startOffset: fullText.length,
+      endOffset: fullText.length + chunk.length,
+      headingLine: null,
+    });
+    fullText += chunk;
+  }
+  return { drafts, fullText };
+}
+
 async function runMobiImport(
   deps: ImportDeps,
   command: ImportSourceCommand,
@@ -56,18 +76,7 @@ async function runMobiImport(
   }
   try {
     const parsed = parseMobi(command.bytes, stripHtml);
-    const drafts: ChapterDraft[] = [];
-    let fullText = '';
-    for (const chapter of parsed.chapters) {
-      const chunk = `${chapter.title}\n${chapter.text}\n`;
-      drafts.push({
-        title: chapter.title,
-        startOffset: fullText.length,
-        endOffset: fullText.length + chunk.length,
-        headingLine: null,
-      });
-      fullText += chunk;
-    }
+    const { drafts, fullText } = assembleChaptersFromParsed(parsed.chapters);
     const rawSha256 = sha256Bytes(command.bytes);
     const textSha256 = sha256Text(fullText);
     await deps.sourceFileStore.writeRawBytes(rawSha256, command.bytes);
@@ -108,18 +117,7 @@ async function runEpubImport(
   try {
     const parsed = await deps.epubParser.parseEpub(command.bytes);
     // 组装全文：每章 = 标题行 + 正文 + 换行；章节草案指向标题行起点（EPUB 自带结构，不走正则候选）
-    const drafts: ChapterDraft[] = [];
-    let fullText = '';
-    for (const chapter of parsed.chapters) {
-      const chunk = `${chapter.title}\n${chapter.text}\n`;
-      drafts.push({
-        title: chapter.title,
-        startOffset: fullText.length,
-        endOffset: fullText.length + chunk.length,
-        headingLine: null,
-      });
-      fullText += chunk;
-    }
+    const { drafts, fullText } = assembleChaptersFromParsed(parsed.chapters);
     const rawSha256 = sha256Bytes(command.bytes);
     const textSha256 = sha256Text(fullText);
     await deps.sourceFileStore.writeRawBytes(rawSha256, command.bytes);
