@@ -2,7 +2,7 @@
   "expo": {
     "name": "TaleCast",
     "slug": "talecast",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "talecast",
@@ -11,9 +11,7 @@
       "bundleIdentifier": "com.hhan593.talecast",
       "icon": "./assets/expo.icon",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ]
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
