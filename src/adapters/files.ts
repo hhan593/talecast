@@ -62,7 +62,13 @@ export const coverFileStore = {
   async write(projectId: string, bytes: Uint8Array, mime: string): Promise<string> {
     const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : mime === 'image/gif' ? 'gif' : 'jpg';
     const fileUri = `${FileSystem.cacheDirectory}cover-${projectId}.${ext}`;
-    const base64 = btoa(String.fromCharCode(...bytes));
+    // 分块 base64：一次性展开整张封面字节会撞引擎参数上限（~64KB）且极慢（issue #30）
+    let binary = '';
+    const CHUNK = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + CHUNK));
+    }
+    const base64 = btoa(binary);
     await FileSystem.writeAsStringAsync(fileUri, base64, {
       encoding: FileSystem.EncodingType.Base64,
     });
