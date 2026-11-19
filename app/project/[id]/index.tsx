@@ -268,7 +268,11 @@ export default function ProjectWorkbenchScreen() {
       if (kind === 'underline') {
         void annotations
           .add(current.chapter.id, longPressRange.start, longPressRange.end, '')
-          .then(() => setLongPressRange(null));
+          .then((result) => {
+            // 失败保留选区并提示（issue #33）：静默关闭会让用户误以为已保存
+            if (result.ok) setLongPressRange(null);
+            else Alert.alert('划线失败', result.error.message);
+          });
         return;
       }
       // 笔记：对话框输入后写入
@@ -988,7 +992,10 @@ export default function ProjectWorkbenchScreen() {
           } else if (dialog.kind === 'note-annotation') {
             void annotations
               .add(current!.chapter.id, dialog.range.start, dialog.range.end, value)
-              .then(() => setLongPressRange(null));
+              .then((result) => {
+                if (result.ok) setLongPressRange(null);
+                else Alert.alert('保存笔记失败', result.error.message);
+              });
           } else if (dialog.kind === 'edit-note') {
             void annotations.setNote(dialog.annotationId, value);
           } else if (dialog.kind === 'split') {
