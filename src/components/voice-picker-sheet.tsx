@@ -68,7 +68,7 @@ export function VoicePickerSheet(props: {
             ListEmptyComponent={
               <View className="items-center py-10">
                 <Text className="text-center text-sm text-muted dark:text-muted-night">
-                  没有匹配的音色。点上方"刷新音色列表"从服务拉取（首次使用必须刷新一次）。
+                  没有匹配的音色。点上方「刷新音色列表」从服务拉取（首次使用必须刷新一次）。
                 </Text>
               </View>
             }

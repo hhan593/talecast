@@ -58,7 +58,7 @@ export default function CharactersScreen() {
           {narratorVoiceName ? `当前音色：${narratorVoiceName}` : '未绑定。生成整章前必须给旁白绑定音色。'}
         </Text>
         <Text className="mt-1 text-xs text-faint">
-          给角色绑定音色并确认后，在工作台开启"对话分声"，该角色的台词将用其音色朗读。
+          给角色绑定音色并确认后，在工作台开启「对话分声」，该角色的台词将用其音色朗读。
         </Text>
         {characters.narratorBinding ? (
           <View className="mt-2 flex-row items-center gap-2">
@@ -131,7 +131,7 @@ export default function CharactersScreen() {
                   <Pressable
                     className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                     onPress={() =>
-                      Alert.alert('删除候选', `删除未确认的角色候选"${item.name}"？`, [
+                      Alert.alert('删除候选', `删除未确认的角色候选「${item.name}」？`, [
                         { text: '取消', style: 'cancel' },
                         { text: '删除', style: 'destructive', onPress: () => void characters.remove(item.id) },
                       ])
@@ -148,7 +148,7 @@ export default function CharactersScreen() {
         ListEmptyComponent={
           <View className="items-center py-12">
             <Text className="text-center text-sm text-muted dark:text-muted-night">
-              还没有角色。点"LLM 抽取角色"（需先在 设置 → 服务连接 配置文本模型），
+              还没有角色。点「LLM 抽取角色」（需先在 设置 → 服务连接 配置文本模型），
               或等候选审阅后人工确认。
             </Text>
           </View>

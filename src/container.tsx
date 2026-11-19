@@ -14,6 +14,7 @@ import {
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { coverFileStore } from '@/adapters/files';
+import { createCrashLogService, installCrashLog } from '@/adapters/crash-log';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
@@ -216,6 +217,7 @@ const services = {
     pickBackupFile: () => documentPickerBackupFile(),
   }),
   screenOrientation: new ScreenOrientationAdapter(),
+  crashLog: createCrashLogService(),
   newCommandId,
   /** 通用文本文件分享（笔记导出等）：adapter 能力经组合根透出（唯一出口） */
   shareTextFile,
@@ -224,11 +226,15 @@ const services = {
 // 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）。
 // 仅原生环境执行：Expo Router 的 server 渲染 pass 会执行本模块（Node 无原生模块）
 if (Platform.OS === 'android' || Platform.OS === 'ios') {
+  installCrashLog();
   void services.generation.recoverInterrupted();
   void services.playback.restoreRate();
 }
 
 export type Services = typeof services;
+
+// 类组件（ErrorBoundary）无法经 hook 取服务：组合根把服务面挂到全局引用（唯一出口）
+(globalThis as { __talecastServices?: Services }).__talecastServices = services;
 
 const ServicesContext = createContext<Services>(services);
 

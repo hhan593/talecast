@@ -25,6 +25,7 @@ export default function SettingsScreen() {
   const [pageSound, setPageSound] = useState(false);
   const [wordKaraoke, setWordKaraoke] = useState(false);
   const [appLanguage, setAppLanguage] = useState<'system' | 'zh' | 'en'>('system');
+  const [crashEntries, setCrashEntries] = useState<Array<{ at: number; source: string; message: string }> | null>(null);
   const [endpoint, setEndpoint] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
     setWordKaraoke((await services.settings.getSetting('word-karaoke')) === 'on');
     const lang = await services.settings.getSetting('app-language');
     setAppLanguage(lang === 'zh' || lang === 'en' ? lang : 'system');
+    void services.crashLog.recent().then(setCrashEntries);
     setLoading(false);
   }, [services]);
 
@@ -256,6 +258,44 @@ export default function SettingsScreen() {
             }}
           >
             <Text className="text-sm text-ink dark:text-ink-night">{t('settings.importBackup')}</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
+        <Text className="font-semibold text-ink dark:text-ink-night">错误日志（本机 JS 异常）</Text>
+        <Text className="mt-2 text-sm text-muted dark:text-muted-night">
+          记录最近 {crashEntries === null ? '—' : crashEntries.length} 条异常（仅本地，无上报）。
+        </Text>
+        <View className="mt-2 flex-row gap-2">
+          <Pressable
+            accessibilityRole="button"
+            className="rounded-xl bg-raised px-3 py-2 dark:bg-card-night"
+            onPress={() => {
+              void services.crashLog.recent().then((entries) => {
+                setCrashEntries(entries);
+                if (entries.length === 0) {
+                  Alert.alert('错误日志', '暂无记录');
+                  return;
+                }
+                const latest = entries[entries.length - 1];
+                Alert.alert(
+                  `最近 1 条（共 ${entries.length} 条）`,
+                  `${new Date(latest.at).toLocaleString('zh-CN')}\n[${latest.source}] ${latest.message}`,
+                );
+              });
+            }}
+          >
+            <Text className="text-sm text-ink dark:text-ink-night">查看</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            className="rounded-xl bg-danger-soft px-3 py-2 dark:bg-danger-nightsoft"
+            onPress={() => {
+              void services.crashLog.clear().then(() => setCrashEntries([]));
+            }}
+          >
+            <Text className="text-sm text-danger dark:text-danger-night">清空</Text>
           </Pressable>
         </View>
       </View>

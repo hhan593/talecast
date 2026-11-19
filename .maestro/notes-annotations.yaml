@@ -1,0 +1,8 @@
+# 划线笔记冒烟：目录页笔记分区可达 + 导出按钮存在（配合真机长按交互手动验证）
+appId: com.hhan.talecast
+---
+- launchApp
+- tapOn: ".*示例.*"
+- assertVisible: "笔记"
+- tapOn: "笔记"
+- assertVisible: "还没有划线与笔记.*|导出 Markdown"
