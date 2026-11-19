@@ -26,6 +26,7 @@ export interface ReaderViewProps {
   fontSize: FontSizeKey;
   /** 翻页样式：slide 平移（pager-view）/ cover 覆盖（Animated ScrollView，v0.4.0） */
   pageTurnStyle: 'slide' | 'cover';
+  onCyclePageTurnStyle(): void;
   /** 边听边读跟随（paged 模式：播放偏移变化自动翻页） */
   followPlayback: boolean;
   highlightOffset: number | null;
