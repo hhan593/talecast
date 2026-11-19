@@ -41,6 +41,9 @@ export default function ProjectWorkbenchScreen() {
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
   const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
+  const [readerLineSpacing, setReaderLineSpacing] = useState<'compact' | 'standard' | 'relaxed'>('standard');
+  const [readerMargin, setReaderMargin] = useState<'narrow' | 'standard' | 'wide'>('standard');
+  const [readerTheme, setReaderTheme] = useState<'paper' | 'green' | 'white' | 'night'>('paper');
   const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover' | 'curl'>('slide');
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
@@ -77,6 +80,15 @@ export default function ProjectWorkbenchScreen() {
     void services.reading.restoreReaderPrefs(projectId).then((prefs) => {
       setReaderMode(prefs.mode);
       setReaderFontSize(prefs.fontSize);
+    });
+    void services.settings.getSetting('reader-line-spacing').then((v) => {
+      if (v === 'compact' || v === 'standard' || v === 'relaxed') setReaderLineSpacing(v);
+    });
+    void services.settings.getSetting('reader-margin').then((v) => {
+      if (v === 'narrow' || v === 'standard' || v === 'wide') setReaderMargin(v);
+    });
+    void services.settings.getSetting('reader-theme').then((v) => {
+      if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
     void services.settings.getPageTurnStyle().then(setPageTurnStyle);
     void services.reading.restorePosition(projectId, library.chapters).then((position) => {
@@ -188,7 +200,10 @@ export default function ProjectWorkbenchScreen() {
         mode={readerMode}
         fontSize={readerFontSize}
         followPlayback={true}
-        paragraphs={paragraphs}
+        paragraphs={current.paragraphs}
+        lineSpacing={readerLineSpacing}
+        margin={readerMargin}
+        theme={readerTheme}
         pageTurnStyle={pageTurnStyle}
         initialOffset={pendingOffset}
         highlightOffset={
@@ -219,6 +234,24 @@ export default function ProjectWorkbenchScreen() {
           const next = cycle[(cycle.indexOf(readerFontSize) + 1) % cycle.length];
           setReaderFontSize(next);
           void services.reading.saveReaderPrefs(projectId, readerMode, next);
+        }}
+        onCycleLineSpacing={() => {
+          const cycle: Array<'compact' | 'standard' | 'relaxed'> = ['compact', 'standard', 'relaxed'];
+          const next = cycle[(cycle.indexOf(readerLineSpacing) + 1) % cycle.length];
+          setReaderLineSpacing(next);
+          void services.settings.setSetting('reader-line-spacing', next);
+        }}
+        onCycleMargin={() => {
+          const cycle: Array<'narrow' | 'standard' | 'wide'> = ['narrow', 'standard', 'wide'];
+          const next = cycle[(cycle.indexOf(readerMargin) + 1) % cycle.length];
+          setReaderMargin(next);
+          void services.settings.setSetting('reader-margin', next);
+        }}
+        onCycleTheme={() => {
+          const cycle: Array<'paper' | 'green' | 'white' | 'night'> = ['paper', 'green', 'white', 'night'];
+          const next = cycle[(cycle.indexOf(readerTheme) + 1) % cycle.length];
+          setReaderTheme(next);
+          void services.settings.setSetting('reader-theme', next);
         }}
         onToggleMode={() => {
           const next = readerMode === 'paged' ? 'scroll' : 'paged';
