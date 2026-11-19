@@ -1,22 +1,33 @@
-import { Animated, FlatList, Pressable, Text, TouchableWithoutFeedback, View } from 'react-native';
+import {
+  Animated,
+  FlatList,
+  Pressable,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import PagerView from 'react-native-pager-view';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 import { pageForOffset, paginateText } from '@/domain/reader';
+import { READER_THEMES, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
 
 /**
- * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2）：
- * 双模式——上下滚动（FlatList，听书高亮跟随）+ 左右翻页（PagerView，市面阅读器形态）。
- * 分页为字符偏移确定性算法（domain/reader.ts）；边听边读：播放偏移自动翻页。
+ * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2 + reading-experience-plan RE-1）：
+ * 双模式——滚动/翻页；主题四套（纸感/护眼/纯白/暖黑）；排版（字号/行距/边距）；
+ * 沉浸模式（工具栏 3 秒自动隐藏，点击呼出）；听读跟随。
  * 纯展示组件：状态与回调经 props 注入（components 不 import services/adapters）。
  */
 
 export type ReaderMode = 'scroll' | 'paged';
-/** 字号四档（manual-reading-plan §2） */
 export const FONT_SIZES = { small: 14, standard: 15.5, large: 18, xlarge: 21 } as const;
 export type FontSizeKey = keyof typeof FONT_SIZES;
+export const LINE_SPACINGS = { compact: 1.5, standard: 1.7, relaxed: 1.9 } as const;
+export type LineSpacingKey = keyof typeof LINE_SPACINGS;
+export const MARGINS = { narrow: 12, standard: 20, wide: 32 } as const;
+export type MarginKey = keyof typeof MARGINS;
 
 export interface ReaderViewProps {
   chapterTitle: string;
@@ -24,9 +35,12 @@ export interface ReaderViewProps {
   chapterBaseOffset: number;
   mode: ReaderMode;
   fontSize: FontSizeKey;
-  /** 翻页样式：slide 平移 / cover 覆盖 / curl 卷页（3D 翻页近似；Skia 真卷页后置） */
+  /** 翻页样式：slide 平移 / cover 覆盖 / curl 卷页近似 */
   pageTurnStyle: 'slide' | 'cover' | 'curl';
   onCyclePageTurnStyle(): void;
+  lineSpacing: LineSpacingKey;
+  margin: MarginKey;
+  theme: ReaderThemeKey;
   /** 边听边读跟随（paged 模式：播放偏移变化自动翻页） */
   followPlayback: boolean;
   highlightOffset: number | null;
@@ -38,49 +52,70 @@ export interface ReaderViewProps {
   /** 恢复阅读位置的初始偏移（paged 模式按页首回位） */
   initialOffset: number;
   paragraphs: Paragraph[];
-  /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
-  onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
-  /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
-  onPageChange(charOffset: number): void;
   onBack(): void;
   onPlayChapter(): void;
   onPause(): void;
   onResume(): void;
   onCycleRate(): void;
   onCycleFontSize(): void;
+  onCycleLineSpacing(): void;
+  onCycleMargin(): void;
+  onCycleTheme(): void;
   onToggleMode(): void;
-  /** 在当前阅读位置加书签（R3） */
   onAddBookmark(): void;
+  /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
+  onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
+  /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
+  onPageChange(charOffset: number): void;
 }
 
 export function ReaderView(props: ReaderViewProps) {
   const fontSize = FONT_SIZES[props.fontSize];
+  const lineSpacing = LINE_SPACINGS[props.lineSpacing];
+  const marginPx = MARGINS[props.margin];
+  const theme = READER_THEMES[props.theme];
   const { width: windowW } = useWindowDimensions();
   const [contentSize, setContentSize] = useState<{ w: number; h: number } | null>(null);
   const pagerRef = useRef<PagerView | null>(null);
   const currentPageRef = useRef(0);
-  const viewableCbRef = useRef<((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null>(null);
+  // 覆盖动画：滚动偏移驱动每页位移（当前页静止，下一页从右滑入覆盖）
+  const coverScrollX = useRef(new Animated.Value(0)).current;
+  const coverScrollRef = useRef<FlatList | null>(null);
+  const viewableCbRef = useRef<
+    ((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null
+  >(null);
   viewableCbRef.current = (info) => props.onViewableItems(info);
-  const playingHere = props.playingThisChapter && props.playbackStatus === 'playing';
-  const pausedHere = props.playingThisChapter && props.playbackStatus === 'paused';
 
-  // 分页 metrics：CJK 方块字假设（±1 字取舍见计划书 §2），容器尺寸/字号变化自动重算
+  // 沉浸模式：工具栏 3 秒无操作自动隐藏，任意点击重置（RE-1）
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pokeControls = () => {
+    setControlsVisible(true);
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
+  };
+  useEffect(() => {
+    return () => {
+      if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    };
+  }, []);
+
+  // 分页 metrics：CJK 方块字假设；排版（边距/行距/字号）全部进 metrics（RE-1 §2）
   const metrics = useMemo(() => {
     if (!contentSize) return null;
+    const contentW = contentSize.w - marginPx * 2;
     return {
-      charsPerLine: Math.max(1, Math.floor(contentSize.w / fontSize)),
-      linesPerPage: Math.max(1, Math.floor(contentSize.h / (fontSize * 1.7))),
+      charsPerLine: Math.max(1, Math.floor(contentW / fontSize)),
+      linesPerPage: Math.max(1, Math.floor(contentSize.h / (fontSize * lineSpacing))),
     };
-  }, [contentSize, fontSize]);
+  }, [contentSize, fontSize, lineSpacing, marginPx]);
 
   const pages = useMemo(
     () => (metrics ? paginateText(props.chapterText, props.chapterBaseOffset, metrics) : []),
     [props.chapterText, props.chapterBaseOffset, metrics],
   );
 
-  // 覆盖动画：滚动偏移驱动每页位移（当前页静止，下一页从右滑入覆盖）
-  const coverScrollX = useRef(new Animated.Value(0)).current;
-  const coverScrollRef = useRef<FlatList | null>(null);
+  // 覆盖动画：per-page 位移插值（当前页静止，下一页从右滑入覆盖）
   const coverTransforms = useMemo(() => {
     if (contentSize === null) return [];
     const w = contentSize.w;
@@ -99,10 +134,10 @@ export function ReaderView(props: ReaderViewProps) {
             }),
           },
         ],
-        // 滑入页在下方页之上：绝对叠放由渲染顺序保证，shadow 用 zIndex/阴影补充
       };
     });
   }, [pages, contentSize, coverScrollX]);
+
 
   // 听读跟随：播放偏移推进 → 自动翻到所在页（仅 paged 模式 + 跟随开启）
   useEffect(() => {
@@ -113,7 +148,7 @@ export function ReaderView(props: ReaderViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.highlightOffset, props.mode, pages.length, props.followPlayback, props.playingThisChapter]);
 
-  // 初始偏移恢复：进入阅读/字号变化后按偏移回位
+  // 初始偏移恢复：进入阅读/排版变化后按偏移回位
   useEffect(() => {
     if (props.mode !== 'paged' || pages.length === 0 || props.initialOffset <= 0) return;
     const target = pageForOffset(pages, props.initialOffset);
@@ -121,8 +156,9 @@ export function ReaderView(props: ReaderViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.initialOffset, pages.length, props.mode]);
 
-  // 点击分区：左 1/3 上一页，右 1/3 下一页，中 1/3 呼出菜单
+  // 点击分区：左 1/3 上一页，右 1/3 下一页，中 1/3 切换工具栏
   const handleTap = (event: { nativeEvent: { pageX: number } }) => {
+    pokeControls();
     const x = event.nativeEvent.pageX;
     const zoneW = windowW / 3;
     if (props.mode !== 'paged') return;
@@ -130,120 +166,175 @@ export function ReaderView(props: ReaderViewProps) {
       const prev = Math.max(0, currentPageRef.current - 1);
       pagerRef.current?.setPage(prev);
     } else if (x >= zoneW * 2) {
-      if (currentPageRef.current + 1 < pages.length) pagerRef.current?.setPage(currentPageRef.current + 1);
+      if (currentPageRef.current + 1 < pages.length) {
+        pagerRef.current?.setPage(currentPageRef.current + 1);
+      }
     }
   };
 
-  const controls = (
-    <>
-      {playingHere ? (
-        <Pressable
-          className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
-          onPress={props.onPause}
-        >
-          <Text className="text-xs text-ink dark:text-ink-night">暂停</Text>
-        </Pressable>
-      ) : pausedHere ? (
-        <Pressable
-          className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
-          onPress={props.onResume}
-        >
-          <Text className="text-xs text-ink dark:text-ink-night">继续</Text>
-        </Pressable>
-      ) : (
-        <Pressable className="rounded-lg bg-accent px-3 py-1.5" onPress={props.onPlayChapter}>
-          <Text className="text-xs font-semibold text-white">播放整章</Text>
-        </Pressable>
-      )}
-      {props.playingThisChapter && props.segmentCount > 0 ? (
-        <Text className="text-xs text-muted dark:text-muted-night">
-          正在朗读第 {props.segmentIndex + 1}/{props.segmentCount} 段
-        </Text>
-      ) : (
-        <Text className="text-xs text-faint">段级播放：当前段即高亮单元</Text>
-      )}
-      <Pressable
-        className="ml-auto rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
-        onPress={props.onCycleRate}
-      >
-        <Text className="text-xs text-ink dark:text-ink-night">{props.playbackRate}×</Text>
-      </Pressable>
-      <Pressable
-        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
-        onPress={props.onCycleFontSize}
-      >
-        <Text className="text-xs text-ink dark:text-ink-night">字{props.fontSize === 'small' ? '小' : props.fontSize === 'standard' ? '中' : props.fontSize === 'large' ? '大' : '特大'}</Text>
-      </Pressable>
-      <Pressable
-        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
-        onPress={props.onToggleMode}
-      >
-        <Text className="text-xs text-ink dark:text-ink-night">{props.mode === 'paged' ? '滚动' : '翻页'}</Text>
-      </Pressable>
-      <Pressable
-        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
-        onPress={props.onAddBookmark}
-      >
-        <Text className="text-xs text-ink dark:text-ink-night">书签</Text>
-      </Pressable>
-      <Pressable
-        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
-        onPress={props.onCyclePageTurnStyle}
-      >
-        <Text className="text-xs text-ink dark:text-ink-night">
-          {props.pageTurnStyle === 'slide' ? '平移' : props.pageTurnStyle === 'cover' ? '覆盖' : '卷页'}
-        </Text>
-      </Pressable>
-    </>
-  );
+  const playingHere = props.playingThisChapter && props.playbackStatus === 'playing';
+  const pausedHere = props.playingThisChapter && props.playbackStatus === 'paused';
+  const chipBase = `rounded-lg ${theme.surface}`;
 
   return (
-    <View className="flex-1 bg-paper pt-14 dark:bg-paper-night">
+    <View className={`flex-1 pt-14 ${theme.bg}`}>
       <View className="flex-row items-center justify-between px-4">
         <Pressable
-          className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
-          onPress={props.onBack}
+          className={`rounded-lg ${theme.surface} px-3 py-1.5`}
+          onPress={() => {
+            pokeControls();
+            props.onBack();
+          }}
         >
-          <Text className="text-sm text-ink dark:text-ink-night">返回目录</Text>
+          <Text className={`text-sm ${theme.text}`}>返回目录</Text>
         </Pressable>
         <Text
-          className="font-serif flex-1 mx-3 text-center text-sm font-semibold text-ink dark:text-ink-night"
+          className={`font-serif flex-1 mx-3 text-center text-sm font-semibold ${theme.text}`}
           numberOfLines={1}
         >
           {props.chapterTitle}
         </Text>
         <View className="w-16" />
       </View>
-      <View className="mt-2 flex-row flex-wrap items-center gap-2 px-4">{controls}</View>
+      {controlsVisible ? (
+        <View className="mt-2 flex-row flex-wrap items-center gap-2 px-4">
+          {playingHere ? (
+            <Pressable
+              className={`rounded-lg ${theme.surface} px-3 py-1.5`}
+              onPress={() => {
+                pokeControls();
+                props.onPause();
+              }}
+            >
+              <Text className={`text-xs ${theme.text}`}>暂停</Text>
+            </Pressable>
+          ) : pausedHere ? (
+            <Pressable
+              className={`rounded-lg ${theme.surface} px-3 py-1.5`}
+              onPress={() => {
+                pokeControls();
+                props.onResume();
+              }}
+            >
+              <Text className={`text-xs ${theme.text}`}>继续</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              className={`rounded-lg ${theme.action} px-3 py-1.5`}
+              onPress={() => {
+                pokeControls();
+                props.onPlayChapter();
+              }}
+            >
+              <Text className={`text-xs font-semibold ${theme.actionText}`}>播放整章</Text>
+            </Pressable>
+          )}
+          {props.playingThisChapter && props.segmentCount > 0 ? (
+            <Text className={`text-xs ${theme.muted}`}>
+              第 {props.segmentIndex + 1}/{props.segmentCount} 段
+            </Text>
+          ) : (
+            <Text className={`text-xs ${theme.muted}`}>段级播放：当前段即高亮单元</Text>
+          )}
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onCycleRate();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>{props.playbackRate}×</Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onCycleFontSize();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>
+              字
+              {props.fontSize === 'small'
+                ? '小'
+                : props.fontSize === 'standard'
+                  ? '中'
+                  : props.fontSize === 'large'
+                    ? '大'
+                    : '特大'}
+            </Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onCycleLineSpacing();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>行距</Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onCycleMargin();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>边距</Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onCycleTheme();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>主题</Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onToggleMode();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>
+              {props.mode === 'paged' ? '滚动' : '翻页'}
+            </Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-lg ${theme.surface} px-2.5 py-1.5`}
+            onPress={() => {
+              pokeControls();
+              props.onAddBookmark();
+            }}
+          >
+            <Text className={`text-xs ${theme.text}`}>书签</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View
-        className="mt-2 flex-1 px-5"
+        className="mt-2 flex-1"
         onLayout={(e) =>
           setContentSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
         }
       >
-        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'slide' ? (
-          <TouchableWithoutFeedback onPress={handleTap}>
-            <View className="flex-1">
-              <PagerView
-                ref={pagerRef}
-                style={{ flex: 1 }}
-                initialPage={0}
-                overdrag={false}
-                onPageSelected={(e) => {
-                  currentPageRef.current = e.nativeEvent.position;
-                  const page = pages[e.nativeEvent.position];
-                  if (page) props.onPageChange(page.startOffset);
-                }}
-              >
+        {props.mode === 'paged' && contentSize && metrics ? (
+          <TouchableWithoutFeedback
+            onPress={(e) => {
+              handleTap(e);
+            }}
+          >
+            <View className="flex-1" style={{ paddingHorizontal: marginPx }}>
+              <PagerView ref={pagerRef} style={{ flex: 1 }} initialPage={0} overdrag={false}>
                 {pages.map((page) => (
                   <View key={page.ordinal} className="flex-1">
                     <Text
-                      className="font-serif text-ink dark:text-ink-night"
-                      style={{ fontSize, lineHeight: fontSize * 1.7 }}
+                      className={`font-serif ${theme.text}`}
+                      style={{ fontSize, lineHeight: fontSize * lineSpacing }}
                     >
                       {props.chapterText.slice(page.startOffset, page.endOffset)}
                     </Text>
-                    <Text className="mt-4 text-center text-[10px] text-faint dark:text-faint-night">
+                    <Text className={`mt-4 text-center text-[10px] ${theme.muted}`}>
                       {page.ordinal + 1} / {pages.length}
                     </Text>
                   </View>
@@ -252,7 +343,7 @@ export function ReaderView(props: ReaderViewProps) {
             </View>
           </TouchableWithoutFeedback>
         ) : null}
-        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'curl' ? (
+{props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'curl' ? (
           <TouchableWithoutFeedback onPress={handleTap}>
             <View className="flex-1">
               <Animated.FlatList
@@ -269,7 +360,7 @@ export function ReaderView(props: ReaderViewProps) {
                 )}
                 renderItem={({ item: page }) => (
                   <Animated.View
-                    className="bg-paper dark:bg-paper-night"
+                    className={theme.bg}
                     style={[
                       { width: contentSize.w, height: contentSize.h },
                       coverTransforms[page.ordinal],
@@ -294,12 +385,12 @@ export function ReaderView(props: ReaderViewProps) {
                     ]}
                   >
                     <Text
-                      className="font-serif text-ink dark:text-ink-night"
-                      style={{ fontSize, lineHeight: fontSize * 1.7 }}
+                      className={`font-serif ${theme.text}`}
+                      style={{ fontSize, lineHeight: fontSize * lineSpacing }}
                     >
                       {props.chapterText.slice(page.startOffset, page.endOffset)}
                     </Text>
-                    <Text className="mt-4 text-center text-[10px] text-faint dark:text-faint-night">
+                    <Text className={`mt-4 text-center text-[10px] ${theme.muted}`}>
                       {page.ordinal + 1} / {pages.length}
                     </Text>
                   </Animated.View>
@@ -308,7 +399,8 @@ export function ReaderView(props: ReaderViewProps) {
             </View>
           </TouchableWithoutFeedback>
         ) : null}
-        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'cover' ? (
+        
+{props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'cover' ? (
           <TouchableWithoutFeedback onPress={handleTap}>
             <View className="flex-1">
               <Animated.FlatList
@@ -325,19 +417,19 @@ export function ReaderView(props: ReaderViewProps) {
                 )}
                 renderItem={({ item: page }) => (
                   <Animated.View
-                    className="bg-paper dark:bg-paper-night"
+                    className={theme.bg}
                     style={[
                       { width: contentSize.w, height: contentSize.h },
                       coverTransforms[page.ordinal],
                     ]}
                   >
                     <Text
-                      className="font-serif text-ink dark:text-ink-night"
-                      style={{ fontSize, lineHeight: fontSize * 1.7 }}
+                      className={`font-serif ${theme.text}`}
+                      style={{ fontSize, lineHeight: fontSize * lineSpacing }}
                     >
                       {props.chapterText.slice(page.startOffset, page.endOffset)}
                     </Text>
-                    <Text className="mt-4 text-center text-[10px] text-faint dark:text-faint-night">
+                    <Text className={`mt-4 text-center text-[10px] ${theme.muted}`}>
                       {page.ordinal + 1} / {pages.length}
                     </Text>
                   </Animated.View>
@@ -346,9 +438,11 @@ export function ReaderView(props: ReaderViewProps) {
             </View>
           </TouchableWithoutFeedback>
         ) : null}
+        
         {props.mode === 'scroll' ? (
           <FlatList
             className="flex-1"
+            style={{ paddingHorizontal: marginPx }}
             data={props.paragraphs}
             keyExtractor={(item, index) => `${item.startOffset}-${index}`}
             onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
@@ -359,12 +453,10 @@ export function ReaderView(props: ReaderViewProps) {
                 props.highlightOffset < item.endOffset;
               return (
                 <Text
-                  className={
-                    isHighlighted
-                      ? 'rounded-lg bg-accent-soft py-2 font-serif text-[15.5px] leading-7 text-accent-deep dark:bg-accent-nightsoft dark:text-ink-night'
-                      : 'py-2 font-serif text-[15.5px] leading-7 text-ink dark:text-ink-night'
-                  }
-                  style={{ fontSize }}
+                  className={`font-serif ${theme.text} ${
+                    isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
+                  }`}
+                  style={{ fontSize, lineHeight: fontSize * lineSpacing, paddingVertical: 8 }}
                 >
                   {item.text}
                 </Text>
