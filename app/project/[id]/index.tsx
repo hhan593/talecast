@@ -41,6 +41,7 @@ export default function ProjectWorkbenchScreen() {
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
   const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
+  const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover'>('slide');
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -77,6 +78,7 @@ export default function ProjectWorkbenchScreen() {
       setReaderMode(prefs.mode);
       setReaderFontSize(prefs.fontSize);
     });
+    void services.settings.getPageTurnStyle().then(setPageTurnStyle);
     void services.reading.restorePosition(projectId, library.chapters).then((position) => {
       if (!position || position.charOffset === 0) return; // 无历史位置/在开头 → 停留目录
       void openChapterRef.current(position.chapterId, position.charOffset);
@@ -187,6 +189,7 @@ export default function ProjectWorkbenchScreen() {
         fontSize={readerFontSize}
         followPlayback={true}
         paragraphs={paragraphs}
+        pageTurnStyle={pageTurnStyle}
         initialOffset={pendingOffset}
         highlightOffset={
           playback.state.chapterId === current.chapter.id ? playback.state.segmentStartOffset : null
@@ -221,6 +224,11 @@ export default function ProjectWorkbenchScreen() {
           const next = readerMode === 'paged' ? 'scroll' : 'paged';
           setReaderMode(next);
           void services.reading.saveReaderPrefs(projectId, next, readerFontSize);
+        }}
+        onCyclePageTurnStyle={() => {
+          const next = pageTurnStyle === 'slide' ? 'cover' : 'slide';
+          setPageTurnStyle(next);
+          void services.settings.setPageTurnStyle(next);
         }}
         onPageChange={(charOffset) => {
           setLastPageOffset(charOffset);
