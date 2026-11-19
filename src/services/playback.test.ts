@@ -145,7 +145,7 @@ describe('P3 播放服务', () => {
   it('播放进度写 reading_state 且不覆盖文本阅读位置', async () => {
     const s = await setupWithGeneratedChapter();
     // 先保存文本阅读位置
-    await s.readingStates.set({ projectId: 'p1', chapterId: s.chapters[0].id, charOffset: 123, audioSegmentOrdinal: null, audioOffsetMs: null });
+    await s.readingStates.set({ projectId: 'p1', chapterId: s.chapters[0].id, charOffset: 123, audioSegmentOrdinal: null, audioOffsetMs: null, readerMode: null, fontSize: null });
     vi.useFakeTimers();
     try {
       await s.playback.playChapter('p1', s.chapters[0].id);

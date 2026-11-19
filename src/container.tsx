@@ -7,6 +7,7 @@ import { EdgeTtsGateway } from '@/adapters/edge/tts';
 import { documentPickerFilePicker, sandboxAudioFileStore, sandboxSourceFileStore } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
+import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
 import { secureStoreKeyStore } from '@/adapters/secure-store';
 import { createAssistantService } from '@/services/assistant';
@@ -140,6 +141,7 @@ const services = {
     sourceFileStore: sandboxSourceFileStore,
     splitProposalRepository: adapters.splitProposalRepository,
   }),
+  screenOrientation: new ScreenOrientationAdapter(),
   newCommandId,
 };
 

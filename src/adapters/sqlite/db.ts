@@ -173,6 +173,23 @@ export const MIGRATIONS: Migration[] = [
     ],
   },
   {
+    version: 6,
+    description: 'R2/R3：reading_state 阅读偏好 + bookmarks 书签表',
+    statements: [
+      `ALTER TABLE reading_state ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'scroll'`,
+      `ALTER TABLE reading_state ADD COLUMN font_size TEXT NOT NULL DEFAULT 'standard'`,
+      `CREATE TABLE IF NOT EXISTS bookmarks (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        chapter_id TEXT NOT NULL,
+        char_offset INTEGER NOT NULL,
+        excerpt TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        UNIQUE(project_id, chapter_id, char_offset)
+      )`,
+    ],
+  },
+  {
     version: 4,
     description: 'P3：书籍助手会话与消息',
     statements: [
