@@ -71,6 +71,12 @@ export interface GenerationProgress {
   segments: Array<GenerationSegmentRecord>;
 }
 
+/** 合成参数归一（issue #41）：空参数对象转 undefined，两处合成调用共用 */
+function prosodyOrNull(json: string): import('@/domain/jobs').TtsProsody | undefined {
+  const prosody = parseProsodyJson(json);
+  return Object.keys(prosody).length > 0 ? prosody : undefined;
+}
+
 export function createGenerationService(deps: GenerationDeps) {
   /** 取消标记：内存态（重启即清空，中断恢复走 markInterruptedJobsFailed） */
   const cancelledJobs = new Set<string>();
@@ -186,11 +192,10 @@ export function createGenerationService(deps: GenerationDeps) {
         // 段级音色（v0.9.0 对话分声）：null = 旧单声任务回落 job.voiceId
         const voiceId = segment.voiceId ?? job.voiceId;
         // 段级合成参数（v0.13.0）：角色绑定的语速/音调/音量真正落地
-        const prosody = parseProsodyJson(segment.providerParamsJson ?? '{}');
         const synthesizeInput = {
           text: segment.text,
           voiceId,
-          prosody: Object.keys(prosody).length > 0 ? prosody : undefined,
+          prosody: prosodyOrNull(segment.providerParamsJson ?? '{}'),
         };
         let audio: Uint8Array;
         let words: import('@/domain/ports').WordTimelineItem[] = [];
@@ -397,11 +402,10 @@ export function createGenerationService(deps: GenerationDeps) {
         return ok({ filePath: existingPath, textHash: first.textHash, cached: true });
       }
       try {
-        const firstProsody = parseProsodyJson(first.providerParamsJson ?? '{}');
         const audio = await deps.ttsGateway.synthesize({
           text: first.text,
           voiceId: first.voiceId,
-          prosody: Object.keys(firstProsody).length > 0 ? firstProsody : undefined,
+          prosody: prosodyOrNull(first.providerParamsJson ?? '{}'),
         });
         const filePath = await deps.audioFileStore.write(first.textHash, audio);
         await deps.requestLogRepository.log('tts', true, first.textHash.slice(0, 16));

@@ -188,12 +188,10 @@ export function planVoiceSpans(
   // 逐引号区归属：判据 = 首尾所在段落（跨段覆盖首尾段）内的旁白文本
   // 跨段独白跟随（v0.13.0）：行首起引号且紧接上一引号区尾行 → 未命中时继承其归属
   let prevAttribution: { key: string; lastLineIndex: number } | null = null;
-  const lineIndexOf = (offset: number): number => {
-    for (let i = 0; i < lines.length; i++) {
-      if (offset >= lines[i].start && offset <= lines[i].end) return i;
-      if (offset < lines[i].start) return i;
-    }
-    return lines.length - 1;
+  let scanLine = 0; // 引号区按偏移有序：行索引单调推进，避免逐引号区全量扫行（issue #41）
+  const lineIndexOfAt = (offset: number): number => {
+    while (scanLine < lines.length - 1 && lines[scanLine].end < offset) scanLine += 1;
+    return scanLine;
   };
   const quoteKeys = quotes.map((quote) => {
     const firstLine = lineRangeAt(lines, quote.start);
@@ -208,12 +206,12 @@ export function planVoiceSpans(
     }
     const attributed = attributeQuote(narration, candidates);
     if (attributed !== null) {
-      prevAttribution = { key: attributed, lastLineIndex: lineIndexOf(quote.end - 1) };
+      prevAttribution = { key: attributed, lastLineIndex: lineIndexOfAt(quote.end - 1) };
       return attributed;
     }
-    const isContinentLine = firstLine.start === quote.start && prevAttribution !== null && lineIndexOf(quote.start) === prevAttribution.lastLineIndex + 1;
-    const inherited = isContinentLine && prevAttribution ? prevAttribution.key : NARRATOR_VOICE_KEY;
-    prevAttribution = inherited !== NARRATOR_VOICE_KEY ? { key: inherited, lastLineIndex: lineIndexOf(quote.end - 1) } : prevAttribution;
+    const isContinuationLine = firstLine.start === quote.start && prevAttribution !== null && lineIndexOfAt(quote.start) === prevAttribution.lastLineIndex + 1;
+    const inherited = isContinuationLine && prevAttribution ? prevAttribution.key : NARRATOR_VOICE_KEY;
+    prevAttribution = inherited !== NARRATOR_VOICE_KEY ? { key: inherited, lastLineIndex: lineIndexOfAt(quote.end - 1) } : prevAttribution;
     return inherited;
   });
 

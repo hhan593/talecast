@@ -77,10 +77,7 @@ export class EdgeTtsGateway implements TtsGateway {
     voiceId: string;
     prosody?: TtsProsody;
   }): Promise<Uint8Array> {
-    const result = await (this.synthesizeWithTimeline
-      ? (await this.synthesizeWithTimeline(input)).audio
-      : this.synthesizeInternal(input).then((r) => r.audio));
-    return result;
+    return (await this.synthesizeInternal(input)).audio;
   }
 
   /** 合成 + 词级时间线（v0.13.0 卡拉OK）：协议 wordBoundary 事件随音频一并返回 */

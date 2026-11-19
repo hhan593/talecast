@@ -78,6 +78,25 @@ export default function BookshelfScreen() {
     setTagDialog({ projectId, title, initial: tags });
   }, []);
 
+  /** 长按书籍动作（issue #41）：list/grid 共用 */
+  const buildLongPressActions = useCallback(
+    (item: { id: string; title: string; tags: string[] }) =>
+      Alert.alert(item.title, undefined, [
+        { text: t('shelf.editTags'), onPress: () => openTagDialog(item.id, item.title, item.tags) },
+        {
+          text: t('shelf.deleteBook'),
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('删除书籍', `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
+              { text: '取消', style: 'cancel' },
+              { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
+            ]),
+        },
+        { text: '取消', style: 'cancel' },
+      ]),
+    [deleteProject, openTagDialog, t],
+  );
+
   /** 封面底色：按书名确定性取色（网格卡与列表封面同源） */
   const coverFor = useCallback((title: string) => {
     const palette = ['#3E4A5B', '#6B4A3A', '#44584A', '#5B3E4A', '#4A5B3E', '#44405B'];
@@ -161,21 +180,7 @@ export default function BookshelfScreen() {
             <Pressable accessibilityRole="button"
               className="rounded-r-xl rounded-l-sm border-l-[3px] border-accent bg-card p-4 active:bg-raised dark:bg-card-night dark:active:bg-raised-night"
               onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
-              onLongPress={() =>
-                Alert.alert(item.title, undefined, [
-                  { text: t('shelf.editTags'), onPress: () => openTagDialog(item.id, item.title, item.tags) },
-                  {
-                    text: t('shelf.deleteBook'),
-                    style: 'destructive',
-                    onPress: () =>
-                      Alert.alert('删除书籍', `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
-                        { text: '取消', style: 'cancel' },
-                        { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
-                      ]),
-                  },
-                  { text: '取消', style: 'cancel' },
-                ])
-              }
+              onLongPress={() => buildLongPressActions(item)}
             >
               <Text className="font-serif text-base font-semibold tracking-wide text-ink dark:text-ink-night">{item.title}</Text>
               {item.tags.length > 0 ? (
@@ -191,21 +196,7 @@ export default function BookshelfScreen() {
             <Pressable accessibilityRole="button"
               className="flex-1 rounded-2xl border border-line bg-card p-2.5 active:bg-raised dark:bg-card-night dark:active:bg-raised-night"
               onPress={() => router.push({ pathname: '/project/[id]', params: { id: item.id } })}
-              onLongPress={() =>
-                Alert.alert(item.title, undefined, [
-                  { text: t('shelf.editTags'), onPress: () => openTagDialog(item.id, item.title, item.tags) },
-                  {
-                    text: t('shelf.deleteBook'),
-                    style: 'destructive',
-                    onPress: () =>
-                      Alert.alert('删除书籍', `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
-                        { text: '取消', style: 'cancel' },
-                        { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
-                      ]),
-                  },
-                  { text: '取消', style: 'cancel' },
-                ])
-              }
+              onLongPress={() => buildLongPressActions(item)}
             >
               <View
                 className="aspect-[3/4] rounded-lg items-center justify-center"

@@ -11,8 +11,8 @@ export interface BackupDeps {
   projectRepository: ProjectRepository;
   bookmarkRepository: BookmarkRepository;
   settingsRepository: SettingsRepository;
-  /** 备份文件分享（容器注入平台实现） */
-  share?: (data: BackupData) => Promise<void>;
+  /** 备份文件分享（容器注入平台实现；服务产出文件名与内容） */
+  share?: (file: { name: string; content: string }) => Promise<void>;
   /** 备份文件选取（容器注入；未注入则导入入口不可用） */
   pickBackupFile?: () => Promise<{ name: string; bytes: Uint8Array } | null>;
 }
@@ -51,13 +51,14 @@ export function createBackupService(deps: BackupDeps) {
       }
     },
 
-    /** 导出并调起系统分享（未注入 share 时返回明确错误） */
+    /** 导出并调起系统分享（文件名/序列化是服务输出契约，issue #41） */
     async exportAndShare(): Promise<Result<null>> {
       const backup = await this.exportBackup();
       if (!backup.ok) return backup;
       if (!deps.share) return err('invalid', '当前环境不支持分享');
       try {
-        await deps.share(backup.value);
+        const filename = `talecast-backup-${backup.value.exportedAt.slice(0, 10)}.json`;
+        await deps.share({ name: filename, content: JSON.stringify(backup.value, null, 2) });
         return ok(null);
       } catch (error) {
         return err('storage', `备份分享失败：${errorMessage(error)}`);
