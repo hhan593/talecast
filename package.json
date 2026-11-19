@@ -19,6 +19,8 @@
     "expo-sqlite": "~58.0.17",
     "expo-status-bar": "~58.0.5",
     "expo-system-ui": "~58.0.7",
+    "fast-xml-parser": "^5.12.1",
+    "jszip": "^3.10.2",
     "nativewind": "^4.2.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
