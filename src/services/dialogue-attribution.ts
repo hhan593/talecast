@@ -1,4 +1,4 @@
-import { buildDialogueCandidates } from './generation';
+import { buildDialogueCandidates } from '@/domain/dialogue';
 import type { DialogueCandidate } from '@/domain/dialogue';
 import type { CharacterRepository, LlmGateway, LibraryRepository, SettingsRepository, SourceFileStore, BindingRepository } from '@/domain/ports';
 import { sha256Text } from '@/domain/hash';
