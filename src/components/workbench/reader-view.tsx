@@ -186,6 +186,14 @@ export function ReaderView(props: ReaderViewProps) {
       >
         <Text className="text-xs text-ink dark:text-ink-night">书签</Text>
       </Pressable>
+      <Pressable
+        className="rounded-lg bg-raised px-2.5 py-1.5 dark:bg-raised-night"
+        onPress={props.onCyclePageTurnStyle}
+      >
+        <Text className="text-xs text-ink dark:text-ink-night">
+          {props.pageTurnStyle === 'slide' ? '平移' : props.pageTurnStyle === 'cover' ? '覆盖' : '卷页'}
+        </Text>
+      </Pressable>
     </>
   );
 
