@@ -90,6 +90,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
       charOffset: null,
       audioSegmentOrdinal: segmentOrdinal,
       audioOffsetMs: Math.round(offsetMs),
+      readerMode: null,
+      fontSize: null,
     });
   }
 

@@ -47,7 +47,39 @@ export function createReadingService(deps: ReadingDeps) {
         charOffset,
         audioSegmentOrdinal: null,
         audioOffsetMs: null,
+        readerMode: null,
+        fontSize: null,
       });
+    },
+
+    /** 阅读偏好持久化（R2）：模式与字号，不动文本/音频位置 */
+    saveReaderPrefs(
+      projectId: string,
+      readerMode: 'scroll' | 'paged',
+      fontSize: 'small' | 'standard' | 'large' | 'xlarge',
+    ): Promise<void> {
+      return deps.readingStateRepository.set({
+        projectId,
+        chapterId: null,
+        charOffset: null,
+        audioSegmentOrdinal: null,
+        audioOffsetMs: null,
+        readerMode,
+        fontSize,
+      });
+    },
+
+    async restoreReaderPrefs(
+      projectId: string,
+    ): Promise<{ mode: 'scroll' | 'paged'; fontSize: 'small' | 'standard' | 'large' | 'xlarge' }> {
+      const state = await deps.readingStateRepository.get(projectId);
+      return {
+        mode: state?.readerMode === 'paged' ? 'paged' : 'scroll',
+        fontSize:
+          state?.fontSize === 'small' || state?.fontSize === 'large' || state?.fontSize === 'xlarge'
+            ? state.fontSize
+            : 'standard',
+      };
     },
 
     /** 章节正文读取：解码文本按章节偏移切片 + 分段（正文高亮/播放映射共用） */

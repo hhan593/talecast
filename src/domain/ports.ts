@@ -63,6 +63,9 @@ export interface SplitProposalRepository {
   setPreviousJson(id: string, previousJson: string): Promise<void>;
 }
 
+export type ReaderModePref = 'scroll' | 'paged';
+export type FontSizePref = 'small' | 'standard' | 'large' | 'xlarge';
+
 export interface ReadingState {
   projectId: Project['id'];
   /** 章节落点（文本阅读）；可为 null（只更新音频位置） */
@@ -70,10 +73,13 @@ export interface ReadingState {
   charOffset: number | null;
   audioSegmentOrdinal: number | null;
   audioOffsetMs: number | null;
+  /** 阅读模式与字号偏好（R2，随 reading_state 持久化） */
+  readerMode: ReaderModePref | null;
+  fontSize: FontSizePref | null;
   updatedAt: number;
 }
 
-/** set 支持部分更新：未提供的字段保留旧值（文本位置与音频位置互不覆盖） */
+/** set 支持部分更新：未提供的字段保留旧值（文本位置/音频位置/偏好互不覆盖） */
 export interface ReadingStateRepository {
   get(projectId: Project['id']): Promise<ReadingState | null>;
   set(state: Omit<ReadingState, 'updatedAt'>): Promise<void>;

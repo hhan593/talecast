@@ -169,6 +169,8 @@ export class FakeReadingStateRepository implements ReadingStateRepository {
       charOffset: state.charOffset ?? existing?.charOffset ?? null,
       audioSegmentOrdinal: state.audioSegmentOrdinal ?? existing?.audioSegmentOrdinal ?? null,
       audioOffsetMs: state.audioOffsetMs ?? existing?.audioOffsetMs ?? null,
+      readerMode: state.readerMode ?? existing?.readerMode ?? null,
+      fontSize: state.fontSize ?? existing?.fontSize ?? null,
       updatedAt: Date.now(),
     };
     this.rows.set(state.projectId, merged);

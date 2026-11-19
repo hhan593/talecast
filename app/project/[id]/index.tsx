@@ -35,8 +35,14 @@ export default function ProjectWorkbenchScreen() {
   const playback = usePlayback(projectId);
   const assistant = useAssistant(projectId);
   const [view, setView] = useState<'chapters' | 'reader' | 'assistant'>('chapters');
+  const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
+  const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
   const [assistantInput, setAssistantInput] = useState('');
-  const [current, setCurrent] = useState<{ chapter: Chapter; paragraphs: Paragraph[] } | null>(null);
+  const [current, setCurrent] = useState<{
+    chapter: Chapter;
+    chapterText: string;
+    paragraphs: Paragraph[];
+  } | null>(null);
   const [pendingOffset, setPendingOffset] = useState(0);
   const [restored, setRestored] = useState(false);
   const [dialog, setDialog] = useState<
@@ -46,12 +52,26 @@ export default function ProjectWorkbenchScreen() {
     | null
   >(null);
   const lastSaveRef = useRef(0);
+  const orientation = services.screenOrientation;
+
+  // 阅读屏开放横屏（manual-reading-plan §4.4）；离开恢复竖屏
+  useEffect(() => {
+    if (view !== 'reader') return;
+    void orientation.allowAll();
+    return () => {
+      void orientation.lockPortrait();
+    };
+  }, [view, orientation]);
 
   // 打开工程恢复上次阅读位置（4.1.1）：直接回到上次阅读的章节与偏移
   const openChapterRef = useRef<(chapterId: string, charOffset?: number) => Promise<void>>(async () => {});
   useEffect(() => {
     if (restored || !library.chapters || library.chapters.length === 0) return;
     setRestored(true);
+    void services.reading.restoreReaderPrefs(projectId).then((prefs) => {
+      setReaderMode(prefs.mode);
+      setReaderFontSize(prefs.fontSize);
+    });
     void services.reading.restorePosition(projectId, library.chapters).then((position) => {
       if (!position || position.charOffset === 0) return; // 无历史位置/在开头 → 停留目录
       void openChapterRef.current(position.chapterId, position.charOffset);
@@ -66,7 +86,11 @@ export default function ProjectWorkbenchScreen() {
         library.setError(result.error.message);
         return;
       }
-      setCurrent({ chapter: result.value.chapter, paragraphs: result.value.paragraphs });
+      setCurrent({
+        chapter: result.value.chapter,
+        chapterText: result.value.chapterText,
+        paragraphs: result.value.paragraphs,
+      });
       setPendingOffset(charOffset);
       setView('reader');
     },
@@ -124,7 +148,7 @@ export default function ProjectWorkbenchScreen() {
   const viewableCallbackRef = useRef<((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null>(null);
   viewableCallbackRef.current = (info) => {
     const first = info.viewableItems[0];
-    if (first?.item && current) {
+    if (first?.item && current && view === 'reader' && readerMode === 'scroll') {
       saveReadingPosition(current.chapter.id, (first.item as Paragraph).startOffset);
     }
   };
@@ -152,9 +176,13 @@ export default function ProjectWorkbenchScreen() {
     return (
       <ReaderView
         chapterTitle={current.chapter.title}
+        chapterText={current.chapterText}
+        chapterBaseOffset={current.chapter.startOffset}
+        mode={readerMode}
+        fontSize={readerFontSize}
+        followPlayback={true}
         paragraphs={paragraphs}
-        initialIndex={initialIndex}
-        layout={layout}
+        initialOffset={pendingOffset}
         highlightOffset={
           playback.state.chapterId === current.chapter.id ? playback.state.segmentStartOffset : null
         }
@@ -163,6 +191,7 @@ export default function ProjectWorkbenchScreen() {
         playbackRate={playback.state.rate}
         segmentIndex={playback.state.segmentIndex}
         segmentCount={playback.state.segmentCount}
+        onViewableItems={(info) => viewableCallbackRef.current?.(info)}
         onBack={() => setView('chapters')}
         onPlayChapter={() => void playback.playChapter(current.chapter.id)}
         onPause={() => void playback.pause()}
@@ -172,8 +201,23 @@ export default function ProjectWorkbenchScreen() {
           const next = rates[(rates.indexOf(playback.state.rate) + 1) % rates.length];
           void playback.setRate(next);
         }}
-        onSeekParagraph={(paragraph) => void seekToParagraph(paragraph)}
-        onViewableItems={(info) => viewableCallbackRef.current?.(info)}
+        onCycleFontSize={() => {
+          const cycle: Array<'small' | 'standard' | 'large' | 'xlarge'> = [
+            'small',
+            'standard',
+            'large',
+            'xlarge',
+          ];
+          const next = cycle[(cycle.indexOf(readerFontSize) + 1) % cycle.length];
+          setReaderFontSize(next);
+          void services.reading.saveReaderPrefs(projectId, readerMode, next);
+        }}
+        onToggleMode={() => {
+          const next = readerMode === 'paged' ? 'scroll' : 'paged';
+          setReaderMode(next);
+          void services.reading.saveReaderPrefs(projectId, next, readerFontSize);
+        }}
+        onPageChange={(charOffset) => saveReadingPosition(current.chapter.id, charOffset)}
       />
     );
   }
