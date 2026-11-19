@@ -40,7 +40,7 @@ export function splitPalmDbRecords(bytes: Uint8Array): Uint8Array[] {
   return records;
 }
 
-/** 解析 record 0 的 PalmDOC + MOBI 头（压缩方式 / 文本记录数 / 编码 / 首条非文本记录索引） */
+/** 解析 record 0 的 PalmDOC + MOBI 头（压缩方式 / 文本记录数 / 编码 / 正文长度） */
 export interface MobiHeader {
   compression: number; // 1 = 未压缩, 2 = PalmDOC, 17480 = HUFF/CDIC
   textRecordCount: number;
@@ -135,7 +135,7 @@ export function palmdocCompressForTest(data: Uint8Array): Uint8Array {
     if (byte >= 0x09 && byte <= 0x7f && byte !== 0x51) out.push(byte);
     else if (byte === 0x00) out.push(0x00);
     else {
-      // 0x00-0x08 / 0x51 特例 / 高位字节：1 字节计数串
+      // 0x01-0x08 / 0x51 特例 / 高位字节：1 字节计数串（0x00 已单独处理）
       out.push(0x01, byte);
     }
   }
