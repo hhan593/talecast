@@ -15,6 +15,8 @@
  * - 命中多个候选时最长匹配名优先（长度相同取出现位置最早）；未命中 → 旁白
  */
 
+import { coverMime, findCoverPath } from './epub';
+
 export const DIALOGUE_VERSION = 'dv-1';
 
 /** 旁白 voiceKey（generation 里映射为旁白绑定） */
@@ -273,6 +275,53 @@ export function applyAttributionOverrides(
     }
     return span;
   });
+}
+
+/**
+ * 对话分声候选（v0.15.0 自 generation 下沉）：已确认角色 × 已绑定音色。
+ * 无绑定的角色命中后仍只能是旁白，直接剔除——services 层只做装配。
+ */
+export function buildDialogueCandidates(
+  characters: Array<{ id: string; name: string; aliasesJson: string; confirmed: boolean }>,
+  bindings: Array<{ targetType: string; targetId: string | null }>,
+): DialogueCandidate[] {
+  const boundIds = new Set(
+    bindings
+      .filter((b) => b.targetType === 'character' && b.targetId !== null)
+      .map((b) => b.targetId as string),
+  );
+  const candidates: DialogueCandidate[] = [];
+  for (const character of characters) {
+    if (!character.confirmed || !boundIds.has(character.id)) continue;
+    let aliases: string[] = [];
+    try {
+      const parsed = JSON.parse(character.aliasesJson) as unknown;
+      if (Array.isArray(parsed)) aliases = parsed.filter((a): a is string => typeof a === 'string');
+    } catch {
+      aliases = [];
+    }
+    const names = [character.name, ...aliases].filter((n) => n.trim().length > 0);
+    if (names.length > 0) candidates.push({ key: character.id, names });
+  }
+  return candidates;
+}
+
+/** 封面提取（v0.15.0 自 container 下沉）：OPF 封面定位 + 二进制读取（依赖注入） */
+export async function extractEpubCover(
+  deps: { readFile(path: string): Promise<string>; readFileBytes?: (path: string) => Promise<Uint8Array> },
+  opfPathFromContainerImpl: (containerXml: string) => string | null,
+  bytes: Uint8Array,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  const containerXml = await deps.readFile('META-INF/container.xml');
+  const opfPath = opfPathFromContainerImpl(containerXml);
+  if (!opfPath) return null;
+  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : '';
+  const opfXml = await deps.readFile(opfPath);
+  const coverPath = findCoverPath(opfXml, opfDir);
+  if (!coverPath || !deps.readFileBytes) return null;
+  const coverBytes = await deps.readFileBytes(coverPath);
+  if (coverBytes.length === 0) return null;
+  return { bytes: coverBytes, mime: coverMime(coverPath) };
 }
 
 export interface VoiceFingerprintEntry {

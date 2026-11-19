@@ -1,5 +1,5 @@
 import { assertJobStartable, buildSegmentPlan, buildVoiceSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from '@/domain/jobs';
-import { NARRATOR_VOICE_KEY, applyAttributionOverrides, buildVoicePlanFingerprint, planVoiceSpans, type DialogueCandidate } from '@/domain/dialogue';
+import { NARRATOR_VOICE_KEY, applyAttributionOverrides, buildDialogueCandidates, buildVoicePlanFingerprint, planVoiceSpans } from '@/domain/dialogue';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { segmentForTts } from '@/domain/segmenter';
@@ -47,34 +47,6 @@ export interface GenerationDeps {
   receiptStore: ReceiptStore;
   /** 可选：对话分声开关读取（缺省视为开启） */
   settingsRepository?: SettingsRepository;
-}
-
-/**
- * 对话分声候选：已确认角色 × 已绑定音色（无绑定的角色命中后仍只能是旁白，直接剔除）。
- */
-export function buildDialogueCandidates(
-  characters: CharacterRecord[],
-  bindings: BindingRecord[],
-): DialogueCandidate[] {
-  const boundIds = new Set(
-    bindings
-      .filter((b) => b.targetType === 'character' && b.targetId !== null)
-      .map((b) => b.targetId as string),
-  );
-  const candidates: DialogueCandidate[] = [];
-  for (const character of characters) {
-    if (!character.confirmed || !boundIds.has(character.id)) continue;
-    let aliases: string[] = [];
-    try {
-      const parsed = JSON.parse(character.aliasesJson) as unknown;
-      if (Array.isArray(parsed)) aliases = parsed.filter((a): a is string => typeof a === 'string');
-    } catch {
-      aliases = [];
-    }
-    const names = [character.name, ...aliases].filter((n) => n.trim().length > 0);
-    if (names.length > 0) candidates.push({ key: character.id, names });
-  }
-  return candidates;
 }
 
 interface PlannedSegment {
