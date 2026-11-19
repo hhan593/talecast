@@ -24,6 +24,7 @@ import { useBookmarks } from '@/hooks/use-bookmarks';
 import { useGeneration } from '@/hooks/use-generation';
 import { useLibrary } from '@/hooks/use-library';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
+import { usePageSound } from '@/hooks/use-page-sound';
 import { usePlayback } from '@/hooks/use-playback';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
@@ -99,6 +100,7 @@ export default function ProjectWorkbenchScreen() {
   }, [view, orientation]);
 
   // 自动滚屏（v0.10.0）：滚动模式 + 速度档驱动；离开阅读/切模式/关闭即停
+  const playPageSound = usePageSound(pageSound);
   const autoScroll = useAutoScroll({
     enabled: autoScrollSpeed !== 'off',
     fontSize: readerFontSize,
@@ -540,6 +542,7 @@ export default function ProjectWorkbenchScreen() {
         onCycleSleep={() => void cycleSleep()}
         volumeEvent={volumeEvent}
         pageSoundEnabled={pageSound}
+        playPageSound={playPageSound}
         immersive={immersive}
         onAddBookmark={() => {
           const offset = lastPageOffset >= 0 ? lastPageOffset : pendingOffset;

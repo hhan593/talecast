@@ -12,7 +12,6 @@ import {
 import PagerView from 'react-native-pager-view';
 import * as Haptics from 'expo-haptics';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createAudioPlayer } from 'expo-audio';
 import { useWindowDimensions } from 'react-native';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
@@ -126,6 +125,8 @@ export interface ReaderViewProps {
   volumeEvent: { seq: number; direction: 'up' | 'down' } | null;
   /** 翻页音效（v0.11.0） */
   pageSoundEnabled: boolean;
+  /** 翻页音效播放回调（v0.15.0，hooks 注入——组件不直连 expo-audio） */
+  playPageSound(): void;
   /** 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏 */
   immersive: boolean;
   /** 划线区间（v0.12.0，书级偏移） */
@@ -273,28 +274,7 @@ export function ReaderView(props: ReaderViewProps) {
   const bodyFontClass =
     props.fontFamily === 'sans' ? 'font-sans' : props.fontFamily === 'system' ? '' : 'font-serif';
 
-  // 翻页音效（v0.11.0）：懒加载短音效，翻页时重播
-  const pageSoundRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const playPageSound = (): void => {
-    if (!props.pageSoundEnabled || Platform.OS === 'web') return;
-    try {
-      if (!pageSoundRef.current) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        pageSoundRef.current = createAudioPlayer(require('../../../assets/sounds/page-turn.wav'));
-      }
-      const player = pageSoundRef.current;
-      player.seekTo(0);
-      player.play();
-    } catch {
-      // 音效失败静默（非核心功能）
-    }
-  };
-  useEffect(() => {
-    const player = pageSoundRef.current;
-    return () => {
-      if (player) player.remove();
-    };
-  }, []);
+  // 翻页音效（v0.15.0）：播放回调经 hooks 注入（issue #38：组件不直连 expo-audio）
 
   // 音量键翻页（v0.11.0）：父级监听系统音量后下发事件，这里只管翻页
   const volumeSeqRef = useRef(0);
@@ -323,7 +303,7 @@ export function ReaderView(props: ReaderViewProps) {
   /** 按页索引跳转（slide → PagerView；cover/curl → 滚动定位） */
   const goToPage = (index: number): void => {
     const clamped = Math.min(Math.max(index, 0), Math.max(pages.length - 1, 0));
-    if (clamped !== currentPageRef.current) playPageSound();
+    if (clamped !== currentPageRef.current) props.playPageSound();
     if (props.pageTurnStyle === 'slide') {
       pagerRef.current?.setPage(clamped);
     } else {
