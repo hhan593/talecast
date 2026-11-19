@@ -1,4 +1,4 @@
-import { FlatList, Pressable, Text, TouchableWithoutFeedback, View } from 'react-native';
+import { Animated, FlatList, Pressable, Text, TouchableWithoutFeedback, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
@@ -24,6 +24,8 @@ export interface ReaderViewProps {
   chapterBaseOffset: number;
   mode: ReaderMode;
   fontSize: FontSizeKey;
+  /** 翻页样式：slide 平移（pager-view）/ cover 覆盖（Animated ScrollView，v0.4.0） */
+  pageTurnStyle: 'slide' | 'cover';
   /** 边听边读跟随（paged 模式：播放偏移变化自动翻页） */
   followPlayback: boolean;
   highlightOffset: number | null;
@@ -74,6 +76,32 @@ export function ReaderView(props: ReaderViewProps) {
     () => (metrics ? paginateText(props.chapterText, props.chapterBaseOffset, metrics) : []),
     [props.chapterText, props.chapterBaseOffset, metrics],
   );
+
+  // 覆盖动画：滚动偏移驱动每页位移（当前页静止，下一页从右滑入覆盖）
+  const coverScrollX = useRef(new Animated.Value(0)).current;
+  const coverScrollRef = useRef<FlatList | null>(null);
+  const coverTransforms = useMemo(() => {
+    if (contentSize === null) return [];
+    const w = contentSize.w;
+    return pages.map((page) => {
+      const pageOffset = page.ordinal * w;
+      if (page.ordinal === 0) {
+        return { transform: [{ translateX: 0 }] };
+      }
+      return {
+        transform: [
+          {
+            translateX: coverScrollX.interpolate({
+              inputRange: [pageOffset - w, pageOffset],
+              outputRange: [w, 0],
+              extrapolate: 'clamp',
+            }),
+          },
+        ],
+        // 滑入页在下方页之上：绝对叠放由渲染顺序保证，shadow 用 zIndex/阴影补充
+      };
+    });
+  }, [pages, contentSize, coverScrollX]);
 
   // 听读跟随：播放偏移推进 → 自动翻到所在页（仅 paged 模式 + 跟随开启）
   useEffect(() => {
@@ -184,7 +212,7 @@ export function ReaderView(props: ReaderViewProps) {
           setContentSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
         }
       >
-        {props.mode === 'paged' && contentSize && metrics ? (
+        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'slide' ? (
           <TouchableWithoutFeedback onPress={handleTap}>
             <View className="flex-1">
               <PagerView
@@ -212,6 +240,44 @@ export function ReaderView(props: ReaderViewProps) {
                   </View>
                 ))}
               </PagerView>
+            </View>
+          </TouchableWithoutFeedback>
+        ) : null}
+        {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'cover' ? (
+          <TouchableWithoutFeedback onPress={handleTap}>
+            <View className="flex-1">
+              <Animated.FlatList
+                ref={coverScrollRef}
+                style={{ flex: 1 }}
+                data={pages}
+                keyExtractor={(item) => String(item.ordinal)}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { x: coverScrollX } } }],
+                  { useNativeDriver: true },
+                )}
+                renderItem={({ item: page }) => (
+                  <Animated.View
+                    className="bg-paper dark:bg-paper-night"
+                    style={[
+                      { width: contentSize.w, height: contentSize.h },
+                      coverTransforms[page.ordinal],
+                    ]}
+                  >
+                    <Text
+                      className="font-serif text-ink dark:text-ink-night"
+                      style={{ fontSize, lineHeight: fontSize * 1.7 }}
+                    >
+                      {props.chapterText.slice(page.startOffset, page.endOffset)}
+                    </Text>
+                    <Text className="mt-4 text-center text-[10px] text-faint dark:text-faint-night">
+                      {page.ordinal + 1} / {pages.length}
+                    </Text>
+                  </Animated.View>
+                )}
+              />
             </View>
           </TouchableWithoutFeedback>
         ) : null}

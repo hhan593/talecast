@@ -44,6 +44,16 @@ export function createSettingsService(deps: SettingsDeps) {
       return deps.requestLogRepository.counts();
     },
 
+    /** 翻页样式偏好（slide 平移 / cover 覆盖） */
+    async getPageTurnStyle(): Promise<'slide' | 'cover'> {
+      const value = await deps.settingsRepository.get('page-turn-style');
+      return value === 'cover' ? 'cover' : 'slide';
+    },
+
+    async setPageTurnStyle(style: 'slide' | 'cover'): Promise<void> {
+      return deps.settingsRepository.set('page-turn-style', style);
+    },
+
     /** 非敏感界面偏好（书架视图、字号等）：随 settings 表持久化 */
     async getSetting(key: string): Promise<string | null> {
       return deps.settingsRepository.get(key);
