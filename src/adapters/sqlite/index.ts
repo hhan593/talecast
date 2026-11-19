@@ -1,5 +1,6 @@
 import { migrateDatabase, openDatabase } from './db';
 import { SqliteAssistantRepository } from './repos/assistant';
+import { SqliteBookmarkRepository } from './repos/bookmarks';
 import { SqliteBindingRepository } from './repos/bindings';
 import { SqliteCharacterRepository } from './repos/characters';
 import { SqliteGenerationStore } from './repos/generation';
@@ -29,5 +30,6 @@ export function createSqliteAdapters() {
     settingsRepository: new SqliteSettingsRepository(db),
     requestLogRepository: new SqliteRequestLogRepository(db),
     assistantRepository: new SqliteAssistantRepository(db),
+    bookmarkRepository: new SqliteBookmarkRepository(db),
   };
 }

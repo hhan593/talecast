@@ -3,6 +3,7 @@ import type { TtsProsody } from './jobs';
 import type { ChapterDraft, ProposalStatus } from './split';
 import type {
   BindingRecord,
+  BookmarkRecord,
   BindingTargetType,
   CharacterRecord,
   Chapter,
@@ -184,6 +185,13 @@ export interface RequestLogRepository {
 export interface ChapterExporter {
   concatToFile(segmentPaths: string[], outputPath: string): Promise<string>;
   share(uri: string): Promise<void>;
+}
+
+export interface BookmarkRepository {
+  list(projectId: Project['id']): Promise<Array<BookmarkRecord>>;
+  /** 同一章节同一偏移幂等（UNIQUE 约束语义，冲突返回 exists） */
+  add(record: BookmarkRecord): Promise<'added' | 'exists'>;
+  remove(id: string): Promise<void>;
 }
 
 export interface AudioFileStore {

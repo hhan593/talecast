@@ -1,3 +1,4 @@
+export { FakeBookmarkRepository } from './bookmarks';
 export { FakeProjectRepository } from './projects';
 export { FakeReceiptStore } from './receipts';
 export { FakeTtsGateway, FakeAudioFileStore, FakeBindingRepository, FakeCharacterRepository, FakeGenerationStore } from './generation';
