@@ -90,6 +90,18 @@ export function assertPublicHttpUrl(url: string): UrlGuardResult {
       return reject('private', '不允许访问私网/保留地址');
     }
   }
+  // 数字/十六进制/缩写 IP 绕过（issue #36）：2130706433、0x7f000001、127.1 等会被
+  // 系统 DNS 解析为环回/私网地址——只要 host 是"纯数字/0x 十六进制"形态一律拒绝
+  if (/^\d+$/.test(host)) {
+    return reject('private', '不允许访问数字形式的地址');
+  }
+  if (/^0x[0-9a-f]+$/i.test(host)) {
+    return reject('private', '不允许访问十六进制形式的地址');
+  }
+  if (/^\d+(\.\d+)+$/.test(host)) {
+    // 点分但段数不足四段（如 127.1）→ 系统解析为 A/B 类地址，拒绝
+    return reject('private', '不允许访问缩写形式的地址');
+  }
   if (host.includes(':') || (host.startsWith('[') && host.endsWith(']'))) {
     if (isPrivateIpv6(host)) {
       return reject('private', '不允许访问私网/保留地址');
