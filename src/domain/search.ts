@@ -11,6 +11,9 @@ export interface SearchHit {
   excerpt: string;
 }
 
+/** 搜索结果上限（防大书高频词全量返回打爆 UI） */
+export const SEARCH_RESULT_LIMIT = 100;
+
 const EXCERPT_RADIUS = 18;
 
 function normalize(s: string): string {
@@ -30,6 +33,7 @@ export function findHitOffsets(text: string, query: string): number[] {
     if (found === -1) break;
     offsets.push(found);
     cursor = found + needle.length;
+    if (offsets.length >= SEARCH_RESULT_LIMIT) break;
   }
   return offsets;
 }
