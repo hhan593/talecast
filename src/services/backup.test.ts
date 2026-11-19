@@ -32,15 +32,13 @@ describe('v0.10.0 JSON 备份', () => {
   });
 
   it('导出并分享：服务产出 {name, content} 交给注入的 share（issue #41）', async () => {
-    let shared: { name: string; content: string } | null = null;
-    const s = setup({ share: async (file) => void (shared = file) });
+    const shared: Array<{ name: string; content: string }> = [];
+    const s = setup({ share: async (file) => void shared.push(file) });
     const result = await s.service.exportAndShare();
     expect(result.ok).toBe(true);
-    expect(shared).not.toBeNull();
-    if (shared) {
-      expect(shared.name).toMatch(/^talecast-backup-\d{4}-\d{2}-\d{2}\.json$/);
-      expect(shared.content).toContain('"version": 1');
-    }
+    expect(shared.length).toBe(1);
+    expect(shared[0].name).toMatch(/^talecast-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(shared[0].content).toContain('"version": 1');
   });
 
   it('导入：非法 JSON / 版本不符给出明确错误', async () => {
