@@ -35,14 +35,14 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 
 ### 已发布版本
 
-| 版本 | 主题 |
-| --- | --- |
-| v0.1.0 | 首个 Android 发布（P0–P4 全链路） |
-| v0.1.1 | 工程化收敛（六路评审 / 9 PR / CI 上线） |
-| v0.2.0 | 墨韵纸感 UI + 后台播放 + 章节 MP3 导出 |
+| 版本   | 主题                                             |
+| ------ | ------------------------------------------------ |
+| v0.1.0 | 首个 Android 发布（P0–P4 全链路）                |
+| v0.1.1 | 工程化收敛（六路评审 / 9 PR / CI 上线）          |
+| v0.2.0 | 墨韵纸感 UI + 后台播放 + 章节 MP3 导出           |
 | v0.4.0 | 阅读器升级（双模式/翻页动画/横屏双栏/书签/搜索） |
-| v0.5.0 | EPUB 导入 + 在线书源骨架 |
-| v0.5.1 | 质量收敛（#21/#22 + 架构守卫 + EPUB 修复） |
+| v0.5.0 | EPUB 导入 + 在线书源骨架                         |
+| v0.5.1 | 质量收敛（#21/#22 + 架构守卫 + EPUB 修复）       |
 
 全部 Release 见 [GitHub Releases](https://github.com/hhan593/talecast/releases)。
 
@@ -57,10 +57,11 @@ pnpm web         # Web 预览（播放不支持，见"已知限制"）
 ```
 
 日常运行（Expo Go，最快验证）：
+
 1. `pnpm start`，终端出现二维码
 2. 手机装 Expo Go（App Store / 各应用商店），扫二维码
 3. 书架 → 添加书籍 → 导入 UTF-8 TXT / EPUB / URL TXT → 按里程碑流程使用
-（注意：手机与电脑需同一局域网；`pnpm start --tunnel` 可走隧道）
+   （注意：手机与电脑需同一局域网；`pnpm start --tunnel` 可走隧道）
 
 ## 构建发版（本地产物）
 
@@ -95,15 +96,15 @@ xcodebuild -workspace TaleCast.xcworkspace -scheme TaleCast -configuration Relea
 
 ## 技术栈（概览）
 
-| 层次 | 选型 |
-| --- | --- |
-| 框架 | Expo 58 + React Native 0.88 + React 19 + TypeScript 6（pnpm） |
-| 路由 | Expo Router（typedRoutes） |
-| 样式 | NativeWind 4 + Tailwind CSS；墨韵纸感设计系统（衬线正文） |
-| 本地存储 | expo-sqlite（SQLite 为唯一权威状态，数据库 schema v6） |
-| 语音生成 | Edge TTS（免费、非官方 WebSocket 协议，按绑定可配 rate/pitch/volume；官方 provider 作为后备位） |
-| 文本模型 | 远程 OpenAI 兼容 API（助手与角色抽取） |
-| 阅读器 | 确定性字符偏移分页、滚动/翻页双模式、翻页动画（平移/覆盖/卷页近似）、横屏双栏 |
-| 导入格式 | UTF-8 TXT、EPUB（spine 解析，jszip + fast-xml-parser）、URL TXT；MOBI 后置 |
-| 播放/导出 | react-native-track-player（后台/锁屏播放）、章节 MP3 导出 + 系统分享 |
-| 架构 | ports & adapters：domain 纯 TS + vitest，平台能力收口 adapters，hooks 为 UI 唯一服务入口；`architecture.test.ts` 编码 3 条依赖方向守卫 |
+| 层次      | 选型                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 框架      | Expo 58 + React Native 0.88 + React 19 + TypeScript 6（pnpm）                                                                          |
+| 路由      | Expo Router（typedRoutes）                                                                                                             |
+| 样式      | NativeWind 4 + Tailwind CSS；墨韵纸感设计系统（衬线正文）                                                                              |
+| 本地存储  | expo-sqlite（SQLite 为唯一权威状态，数据库 schema v6）                                                                                 |
+| 语音生成  | Edge TTS（免费、非官方 WebSocket 协议，按绑定可配 rate/pitch/volume；官方 provider 作为后备位）                                        |
+| 文本模型  | 远程 OpenAI 兼容 API（助手与角色抽取）                                                                                                 |
+| 阅读器    | 确定性字符偏移分页、滚动/翻页双模式、翻页动画（平移/覆盖/卷页近似）、横屏双栏                                                          |
+| 导入格式  | UTF-8 TXT、EPUB（spine 解析，jszip + fast-xml-parser）、URL TXT；MOBI 后置                                                             |
+| 播放/导出 | react-native-track-player（后台/锁屏播放）、章节 MP3 导出 + 系统分享                                                                   |
+| 架构      | ports & adapters：domain 纯 TS + vitest，平台能力收口 adapters，hooks 为 UI 唯一服务入口；`architecture.test.ts` 编码 3 条依赖方向守卫 |
