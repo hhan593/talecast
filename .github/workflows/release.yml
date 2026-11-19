@@ -1,0 +1,49 @@
+name: Release (Android)
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm test       # 发版前再过一道门
+      - name: 版本一致性校验
+        run: |
+          TAG=${GITHUB_REF_NAME#v}
+          APP=$(node -p "require('./app.json').expo.version")
+          [ "$TAG" = "$APP" ] || { echo "tag $TAG != app.json $APP"; exit 1; }
+
+      - run: pnpm expo prebuild --platform android --no-install
+      - name: Build APK
+        working-directory: android
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules/.pnpm/node_modules
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 产物整理 + 校验和
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          cp android/app/build/outputs/apk/release/app-release.apk TaleCast-v${VER}-android.apk
+          sha256sum TaleCast-v${VER}-android.apk > SHA256SUMS
+
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            TaleCast-v*-android.apk SHA256SUMS \
+            --title "TaleCast $GITHUB_REF_NAME" --generate-notes
