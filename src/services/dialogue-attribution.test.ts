@@ -70,6 +70,17 @@ describe('v0.13.0 LLM 段落级说话人归属', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('空行排版：段落序号跳过空行对齐段首（issue #29）', async () => {
+    const { service, settings } = setup('[{"p":1,"s":"林晚"}]', { llmOn: true });
+    const spaced = '林晚走了进来。\n\n她冷冷开口："都出去。"\n\n没人敢动。';
+    const result = await service.attributeChapter('p1', 'ch1', spaced);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 段落 1 = 第一个非空行之后的有内容行 → "她冷冷开口" 段首（不是空行位置）
+    expect(result.value).toEqual([{ paragraphStart: spaced.indexOf('她冷冷开口'), characterId: 'char-lin' }]);
+    void settings;
+  });
+
   it('未知角色名/越界段落被过滤', async () => {
     const { service } = setup('[{"p":1,"s":"路人甲"},{"p":99,"s":"林晚"}]', { llmOn: true });
     const result = await service.attributeChapter('p1', 'ch1', text);
