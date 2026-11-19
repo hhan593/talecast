@@ -43,3 +43,4 @@ yarn-error.*
 
 # 本地编译产物
 releases/
+/.workbuddy
