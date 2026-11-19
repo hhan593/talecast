@@ -311,8 +311,14 @@ export function createGenerationService(deps: GenerationDeps) {
           return ok({ jobId: existing.id, totalSegments: existing.totalSegments, reusedSegments: existing.totalSegments });
         }
 
+        // 并发窗口缩窄（issue #40）：createJob 前再查一次 input_hash——
+        // 双击/手动与预生成并发时，先到者已建任务则复用
+        const raced = await deps.generationStore.findByInputHash(command.projectId, inputHash);
+        if (raced && (raced.status === 'pending' || raced.status === 'running' || raced.status === 'done')) {
+          return ok({ jobId: raced.id, totalSegments: raced.totalSegments, reusedSegments: raced.progress });
+        }
         const now = Date.now();
-        const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等
+        const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等 // 命令 id 即任务 id：重复提交天然幂等
         const existences = await Promise.all(plan.map((s) => deps.audioFileStore.exists(s.textHash)));
         let reusedSegments = 0;
         const segments: Array<GenerationSegmentRecord> = plan.map((segment, i) => {

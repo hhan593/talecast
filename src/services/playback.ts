@@ -192,7 +192,11 @@ export function createPlaybackService(deps: PlaybackDeps) {
         cancelSleepTimerInternal();
         return;
       }
-      void loadAndPlay(next);
+      loadAndPlay(next).catch((error) => {
+        // 下一段文件被删/播放器报错：终止播放并暴露状态（issue #40）
+        setState({ status: 'idle', wordHighlight: null });
+        console.error('[playback] 段推进失败', error);
+      });
     } else {
       setState({ status: 'done' });
       if (sleepMode === 'chapter') {
@@ -200,7 +204,9 @@ export function createPlaybackService(deps: PlaybackDeps) {
         cancelSleepTimerInternal();
         return;
       }
-      void autoNextChapter(state.projectId, state.chapterId);
+      autoNextChapter(state.projectId, state.chapterId).catch((error) => {
+        console.error('[playback] 自动连播失败', error);
+      });
     }
   });
 
