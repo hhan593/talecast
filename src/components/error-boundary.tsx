@@ -2,11 +2,16 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 
-/** 组件树外取服务（ErrorBoundary 是类组件）：组合根经全局引用注入 */
-function getGlobalServices() {
-  return (globalThis as { __talecastServices?: { crashLog?: { record(source: 'boundary', error: unknown): Promise<void> } } }).__talecastServices ?? {};
+let crashLog: { record(source: 'boundary', error: unknown): Promise<void> } | null = null;
+function getCrashLog() {
+  if (!crashLog) {
+    // 惰性解析：模块加载时组合根尚未装配（_layout 先 import 本文件），快照会永久拿到空对象（issue #31）
+    crashLog =
+      (globalThis as { __talecastServices?: { crashLog?: { record(source: 'boundary', error: unknown): Promise<void> } } })
+        .__talecastServices?.crashLog ?? null;
+  }
+  return crashLog;
 }
-const crashLog = getGlobalServices();
 
 /**
  * 全局错误边界（v0.8.0）：渲染异常不再白屏，给出可操作的兜底界面。
@@ -29,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[ErrorBoundary]', error, info.componentStack);
-    void crashLog.crashLog?.record('boundary', error);
+    void getCrashLog()?.record('boundary', error);
   }
 
   render() {
