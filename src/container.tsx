@@ -45,6 +45,7 @@ class WebNoopAudioPlayer {
   async pause() { throw new Error('Web 预览不支持播放'); }
   async seek() { throw new Error('Web 预览不支持播放'); }
   async setRate() { throw new Error('Web 预览不支持播放'); }
+  async setVolume(): Promise<void> { /* noop：睡眠渐弱在 Web 退化为直接暂停 */ }
   onProgress(): () => void { return () => undefined; }
   onPlaybackEnd(): () => void { return () => undefined; }
   release(): void { /* noop */ }
@@ -65,6 +66,20 @@ const libraryQuery = createLibraryQueryService({
   libraryRepository: adapters.libraryRepository,
   splitProposalRepository: adapters.splitProposalRepository,
   sourceFileStore: sandboxSourceFileStore,
+});
+
+const generationService = createGenerationService({
+  projectRepository: adapters.projectRepository,
+  libraryRepository: adapters.libraryRepository,
+  libraryQuery,
+  sourceFileStore: sandboxSourceFileStore,
+  bindingRepository: adapters.bindingRepository,
+  generationStore: adapters.generationStore,
+  ttsGateway: edgeTtsGateway,
+  audioFileStore: sandboxAudioFileStore,
+  requestLogRepository: adapters.requestLogRepository,
+  receiptStore: adapters.receiptStore,
+  settingsRepository: adapters.settingsRepository,
 });
 
 const services = {
@@ -111,18 +126,7 @@ const services = {
     characterRepository: adapters.characterRepository,
     receiptStore: adapters.receiptStore,
   }),
-  generation: createGenerationService({
-    projectRepository: adapters.projectRepository,
-    libraryRepository: adapters.libraryRepository,
-    libraryQuery,
-    sourceFileStore: sandboxSourceFileStore,
-    bindingRepository: adapters.bindingRepository,
-    generationStore: adapters.generationStore,
-    ttsGateway: edgeTtsGateway,
-    audioFileStore: sandboxAudioFileStore,
-    requestLogRepository: adapters.requestLogRepository,
-    receiptStore: adapters.receiptStore,
-  }),
+  generation: generationService,
   export: createExportService({
     generationStore: adapters.generationStore,
     exporter: new Mp3ChapterExporter(),
@@ -140,6 +144,7 @@ const services = {
     libraryQuery,
     settingsRepository: adapters.settingsRepository,
     readingStateRepository: adapters.readingStateRepository,
+    generationService,
   }),
   assistant: createAssistantService({
     assistantRepository: adapters.assistantRepository,

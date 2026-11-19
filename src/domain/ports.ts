@@ -209,6 +209,8 @@ export interface AudioPlayer {
   seek(positionMs: number): Promise<void>;
   /** 播放速率（0.8–2.0），即时生效（F-1） */
   setRate(rate: number): Promise<void>;
+  /** 音量（0–1）：睡眠定时器渐弱用（v0.8.0） */
+  setVolume(volume: number): Promise<void>;
   onProgress(callback: (positionMs: number) => void): () => void;
   onPlaybackEnd(callback: () => void): () => void;
   release(): void;

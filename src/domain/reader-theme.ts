@@ -23,8 +23,14 @@ export interface ReaderThemeTokens {
   actionText: string;
   /** 强调（朗读段高亮底） */
   highlightBg: string;
+  /** 强调高亮底的原始色值（嵌套 Text 内联样式用，类名无法表达） */
+  highlightBgHex: string;
   /** 章节序号点缀 */
   accent: string;
+  /** 正文原始色值（滑块等内联样式用） */
+  textHex: string;
+  /** 行动按钮原始色值（滑块等内联样式用） */
+  actionHex: string;
 }
 
 export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: string }> = {
@@ -38,7 +44,10 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
     action: 'bg-[#B5442D]',
     actionText: 'text-[#FDFBF5]',
     highlightBg: 'bg-[#F3E2DB]',
+    highlightBgHex: '#F3E2DB',
     accent: 'text-[#B5442D]',
+    textHex: '#2C2822',
+    actionHex: '#B5442D',
   },
   green: {
     label: '护眼',
@@ -50,7 +59,10 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
     action: 'bg-[#3E6B4C]',
     actionText: 'text-[#DDEFD4]',
     highlightBg: 'bg-[#B4D9BF]',
+    highlightBgHex: '#B4D9BF',
     accent: 'text-[#3E6B4C]',
+    textHex: '#28372B',
+    actionHex: '#3E6B4C',
   },
   white: {
     label: '纯白',
@@ -62,7 +74,10 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
     action: 'bg-[#4F46E5]',
     actionText: 'text-white',
     highlightBg: 'bg-[#EEF0FE]',
+    highlightBgHex: '#EEF0FE',
     accent: 'text-[#4F46E5]',
+    textHex: '#111827',
+    actionHex: '#4F46E5',
   },
   night: {
     label: '暖黑',
@@ -74,7 +89,10 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
     action: 'bg-[#D9A441]',
     actionText: 'text-[#10131B]',
     highlightBg: 'bg-[#3A3446]',
+    highlightBgHex: '#3A3446',
     accent: 'text-[#D9A441]',
+    textHex: '#EAE7E0',
+    actionHex: '#D9A441',
   },
 };
 

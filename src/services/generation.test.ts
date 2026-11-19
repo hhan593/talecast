@@ -6,6 +6,7 @@ import { createVoicesService } from './voices';
 import {
   FakeAudioFileStore,
   FakeBindingRepository,
+  FakeSettingsRepository,
   FakeLibraryRepository,
   FakeProjectRepository,
   FakeReceiptStore,
@@ -64,7 +65,9 @@ async function setupWithImport() {
   const sample =
     '第一章 起\n' +
     // 约 1400 字，确保默认分段上限（1200 字）能切出多段
-    `${filler.repeat(30)}第二段在这之后。${filler.repeat(10)}第三段收尾。`;
+    `${filler.repeat(30)}第二段在这之后。${filler.repeat(10)}第三段收尾。\n` +
+    '第二章 承\n' +
+    `${filler.repeat(8)}第二章正文收束。`;
   const imported = await importService.importSource({
     commandId: 'c-import',
     projectId: 'p1',
@@ -89,10 +92,12 @@ async function setupWithImport() {
     },
     receiptStore: receipts,
   });
+  const settings = new FakeSettingsRepository();
   const generation = createGenerationService({
     projectRepository: projects,
     libraryRepository: library,
     libraryQuery,
+    settingsRepository: settings,
     sourceFileStore: files,
     bindingRepository: bindings,
     generationStore,
@@ -102,7 +107,7 @@ async function setupWithImport() {
     receiptStore: receipts,
   });
 
-  return { project, projects, library, files, tts, audio, bindings, bindingsService, generationStore, requestLog, receipts, voices, generation };
+  return { project, projects, library, files, tts, audio, bindings, bindingsService, generationStore, requestLog, receipts, voices, settings, generation };
 }
 
 describe('P2 生成任务：段级幂等与重试', () => {
@@ -295,5 +300,73 @@ describe('P4 优化：取消与级联删除', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('busy');
+  });
+});
+
+describe('v0.8.0 章节预生成', () => {
+  const bindNarrator = async (s: Awaited<ReturnType<typeof setupWithImport>>) => {
+    const bind = await s.bindingsService.bindVoice({
+      commandId: 'c-bind',
+      projectId: 'p1',
+      targetType: 'narrator',
+      targetId: null,
+      voiceId: 'zh-CN-XiaoxiaoNeural',
+    });
+    expect(bind.ok).toBe(true);
+  };
+
+  it('下一章无任务时自动建任务（连播零等待）', async () => {
+    const s = await setupWithImport();
+    await bindNarrator(s);
+    const chapters = await s.library.listChapters('p1');
+    expect(chapters.length).toBeGreaterThanOrEqual(2);
+
+    await s.generation.pregenNextChapter('p1', chapters[0].id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const jobs = await s.generation.listJobsByChapter('p1', chapters[1].id);
+    expect(jobs.length).toBe(1);
+    expect(['pending', 'running', 'done']).toContain(jobs[0].status);
+  });
+
+  it('下一章已有任务（任意状态）时跳过', async () => {
+    const s = await setupWithImport();
+    await bindNarrator(s);
+    const chapters = await s.library.listChapters('p1');
+    const started = await s.generation.startGeneration({
+      commandId: 'c-manual-next',
+      projectId: 'p1',
+      chapterId: chapters[1].id,
+    });
+    expect(started.ok).toBe(true);
+
+    await s.generation.pregenNextChapter('p1', chapters[0].id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const jobs = await s.generation.listJobsByChapter('p1', chapters[1].id);
+    expect(jobs.length).toBe(1); // 未重复建任务
+  });
+
+  it('开关 auto-pregen-next=false 时不生成', async () => {
+    const s = await setupWithImport();
+    await bindNarrator(s);
+    s.settings.map.set('auto-pregen-next', 'false');
+    const chapters = await s.library.listChapters('p1');
+
+    await s.generation.pregenNextChapter('p1', chapters[0].id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const jobs = await s.generation.listJobsByChapter('p1', chapters[1].id);
+    expect(jobs.length).toBe(0);
+  });
+
+  it('最后一章无下一章：静默返回', async () => {
+    const s = await setupWithImport();
+    await bindNarrator(s);
+    const chapters = await s.library.listChapters('p1');
+    const last = chapters[chapters.length - 1];
+    await expect(s.generation.pregenNextChapter('p1', last.id)).resolves.toBeUndefined();
+    const jobs = await s.generation.listJobsByChapter('p1', chapters[0].id);
+    expect(jobs.length).toBe(0);
   });
 });

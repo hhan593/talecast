@@ -7,6 +7,11 @@
  * （每段 1 个视觉行；空行 = 零宽段，计 1 行）；视觉段按 linesPerPage
  * 打包成页，页边界落在段边界上——长段落可跨页，页为半开字符区间
  * [startOffset, endOffset)，衔接覆盖全文（与 chapters 表同一套不变量）。
+ *
+ * 段间距（v0.8.0）：提供 lineHeightPx + paragraphSpacingPx 时改按像素预算
+ * 打包——段边界（上一段尾与下一段首同页）额外计段间距；跨页边界处不重复计，
+ * 渲染层对应规则：页内最后一块不加 marginBottom。缩进（indentChars）在
+ * 段首行少排 N 字，渲染层以全角空格补齐，保证分页与渲染一致不切字。
  */
 
 export interface PageMetrics {
@@ -16,6 +21,12 @@ export interface PageMetrics {
   linesPerPage: number;
   /** 栏数：1=竖屏单栏（默认），2=横屏对页（一个滑动单位 = columns 个栏） */
   columns?: 1 | 2;
+  /** 行高（像素）：与 paragraphSpacingPx 同时提供时启用像素预算分页 */
+  lineHeightPx?: number;
+  /** 段间距（像素）：段尾额外预留高度 */
+  paragraphSpacingPx?: number;
+  /** 首行缩进（字符数）：段首行少排 N 字，渲染层补全角空格 */
+  indentChars?: number;
 }
 
 export interface ReaderPage {
@@ -30,6 +41,8 @@ export interface ReaderSegment {
   endOffset: number;
   /** 段文本（不含换行；空行为空串） */
   text: string;
+  /** 该段是否为原始行末段（行尾换行已纳入 endOffset）——像素预算分页的段间距判据 */
+  endsLine?: boolean;
 }
 
 export function assertMetrics(metrics: PageMetrics): void {
@@ -45,23 +58,29 @@ export function assertMetrics(metrics: PageMetrics): void {
 }
 
 /** 视觉段：原始行按 charsPerLine 硬切（CJK 逐字换行假设；空行为零宽段） */
-function toSegments(text: string, baseOffset: number, charsPerLine: number): ReaderSegment[] {
+function toSegments(text: string, baseOffset: number, metrics: PageMetrics): ReaderSegment[] {
+  const charsPerLine = metrics.charsPerLine;
+  const indent = metrics.indentChars ?? 0;
   const segments: ReaderSegment[] = [];
   let lineStart = 0;
   for (;;) {
     const newline = text.indexOf('\n', lineStart);
     const lineEnd = newline === -1 ? text.length : newline;
     const raw = text.slice(lineStart, lineEnd);
-    for (let i = 0; i < raw.length; i += charsPerLine) {
-      const chunkEnd = Math.min(i + charsPerLine, raw.length);
-      const isLastChunk = i + charsPerLine >= raw.length;
+    for (let i = 0; i < raw.length; ) {
+      // 段首行按缩进少排 N 字（渲染层补全角空格）；行内后续段满排
+      const cap = i === 0 && indent > 0 ? Math.max(1, charsPerLine - indent) : charsPerLine;
+      const chunkEnd = Math.min(i + cap, raw.length);
+      const isLastChunk = chunkEnd >= raw.length;
       // 行尾段把换行符纳入 endOffset：页切片直接拼接即全文（不丢任何字符）
       const segEnd = isLastChunk && newline !== -1 ? lineEnd + 1 : lineStart + chunkEnd;
       segments.push({
         startOffset: baseOffset + lineStart + i,
         endOffset: baseOffset + segEnd,
         text: raw.slice(i, chunkEnd),
+        endsLine: isLastChunk,
       });
+      i = chunkEnd;
     }
     if (raw.length === 0) {
       // 空行 = 一个换行符：段覆盖该字符（有宽度），保证页切片拼接不丢换行
@@ -69,6 +88,7 @@ function toSegments(text: string, baseOffset: number, charsPerLine: number): Rea
         startOffset: baseOffset + lineStart,
         endOffset: baseOffset + lineEnd + (newline !== -1 ? 1 : 0),
         text: '',
+        endsLine: true,
       });
     }
     if (newline === -1) break;
@@ -77,15 +97,44 @@ function toSegments(text: string, baseOffset: number, charsPerLine: number): Rea
   return segments;
 }
 
-/** 分页：视觉段按 linesPerPage×columns 打包（确定性：同输入同分页） */
+/** 分页：视觉段打包（确定性：同输入同分页） */
 export function paginateText(text: string, baseOffset: number, metrics: PageMetrics): ReaderPage[] {
   assertMetrics(metrics);
-  const segments = toSegments(text, baseOffset, metrics.charsPerLine);
+  const segments = toSegments(text, baseOffset, metrics);
   if (segments.length === 0) return [];
 
   const columns = metrics.columns ?? 1;
-  const perScreen = metrics.linesPerPage * columns;
   const pages: ReaderPage[] = [];
+
+  if (metrics.lineHeightPx !== undefined && metrics.paragraphSpacingPx !== undefined) {
+    // 像素预算打包：行高逐行累计，段边界（同页内）额外计段间距；
+    // 页尾恰好落在段边界时间距不计入（与渲染层"页内最后一块不加 margin"一致）
+    const lineHeight = metrics.lineHeightPx;
+    const spacing = metrics.paragraphSpacingPx;
+    const capacity = metrics.linesPerPage * lineHeight * columns;
+    const EPSILON = 0.01;
+    let group: ReaderSegment[] = [];
+    let used = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const gapBefore = group.length > 0 && segments[i - 1].endsLine === true ? spacing : 0;
+      if (group.length > 0 && used + gapBefore + lineHeight > capacity + EPSILON) {
+        pages.push({ ordinal: pages.length, startOffset: group[0].startOffset, endOffset: group[group.length - 1].endOffset });
+        group = [];
+        used = 0;
+      }
+      const charged = group.length === 0 ? lineHeight : gapBefore + lineHeight;
+      group.push(seg);
+      used += charged;
+    }
+    if (group.length > 0) {
+      pages.push({ ordinal: pages.length, startOffset: group[0].startOffset, endOffset: group[group.length - 1].endOffset });
+    }
+    return pages;
+  }
+
+  // 整数行打包（旧行为：每页固定 linesPerPage×columns 个视觉段）
+  const perScreen = metrics.linesPerPage * columns;
   let ordinal = 0;
   for (let i = 0; i < segments.length; i += perScreen) {
     const group = segments.slice(i, i + perScreen);

@@ -3,9 +3,10 @@ import type {
   GenerationStore,
   LibraryRepository,
   ReadingStateRepository,
-  SourceFileStore,
+  SettingsRepository,
 } from '@/domain/ports';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
+import type { GenerationService } from '@/services/generation';
 
 
 export interface PlaybackState {
@@ -36,10 +37,16 @@ export interface PlaybackDeps {
   generationStore: GenerationStore;
   libraryQuery: import('@/services/library-query').LibraryQueryService;
   readingStateRepository: ReadingStateRepository;
-  settingsRepository: import('@/domain/ports').SettingsRepository;
+  settingsRepository: SettingsRepository;
+  /** 可选：播放某章后自动预生成下一章（v0.8.0，测试可省略） */
+  generationService?: GenerationService;
 }
 
 export const PLAYBACK_RATES = [0.8, 1.0, 1.2, 1.5, 2.0] as const;
+
+/** 渐弱时长：5 步 × 600ms ≈ 3 秒，睡眠到期先渐弱再暂停 */
+const FADE_STEPS = 5;
+const FADE_STEP_MS = 600;
 
 export function createPlaybackService(deps: PlaybackDeps) {
   let state: PlaybackState = {
@@ -58,12 +65,17 @@ export function createPlaybackService(deps: PlaybackDeps) {
   let lastPersistMs = 0;
   let rate = 1;
   let sleepTimerHandle: number | null = null;
+  /** 渐弱代次：取消/新定时器/新播放使旧渐弱链失效 */
+  let fadeGeneration = 0;
 
   function cancelSleepTimerInternal(): void {
     if (sleepTimerHandle !== null) {
       clearTimeout(sleepTimerHandle);
       sleepTimerHandle = null;
     }
+    // 取消进行中的渐弱并立即恢复音量（下次播放也兜底重置）
+    fadeGeneration += 1;
+    void deps.audioPlayer.setVolume(1).catch(() => undefined);
   }
 
   function setState(patch: Partial<PlaybackState>): void {
@@ -75,6 +87,11 @@ export function createPlaybackService(deps: PlaybackDeps) {
     const item = queue[index];
     await deps.audioPlayer.load(item.filePath);
     if (rate !== 1) await deps.audioPlayer.setRate(rate);
+    try {
+      await deps.audioPlayer.setVolume(1);
+    } catch {
+      // 音量重置失败不影响播放
+    }
     await deps.audioPlayer.play();
     setState({
       status: 'playing',
@@ -120,30 +137,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
     }
   });
 
-  /** 自动连播（RE-2）：queue 完结后取下一章 done 任务续播；开关持久化于 settings */
-  async function autoNextChapter(
-    projectId: string | null,
-    finishedChapterId: string | null,
-  ): Promise<void> {
-    if (!projectId || !finishedChapterId) return;
-    const enabled = await deps.settingsRepository.get('auto-next-chapter');
-    if (enabled === 'false') return;
-    const chapters = await deps.libraryQuery.listChapters(projectId);
-    const currentIndex = chapters.findIndex((c) => c.id === finishedChapterId);
-    const nextChapter = chapters[currentIndex + 1];
-    if (!nextChapter) return;
-    const jobs = await deps.generationStore.listJobsByChapter(projectId, nextChapter.id);
-    const doneJob = jobs.find((job) => job.status === 'done');
-    if (!doneJob) return; // 下一章未生成：停止（不自动触发生成——生成需用户发起）
-    await playChapterById(projectId, nextChapter.id, 0);
-  }
-
-  /** 按章节 id 播放（独立函数：autoNextChapter 与返回对象方法共用） */
-  async function playChapterById(
-    projectId: string,
-    chapterId: string,
-    startSegmentIndex: number,
-  ): Promise<Result<{ segmentCount: number }>> {
+  /** 组建章播放队列：done 任务段按序回定位全文偏移（playChapter 与自动连播共用） */
+  async function buildQueue(projectId: string, chapterId: string): Promise<Result<{ segmentCount: number }>> {
     const jobs = await deps.generationStore.listJobsByChapter(projectId, chapterId);
     const doneJob = jobs.find((job) => job.status === 'done');
     if (!doneJob) return err('invalid', '本章还没有已完成的生成音频，请先点"生成本章"');
@@ -173,6 +168,39 @@ export function createPlaybackService(deps: PlaybackDeps) {
       if (found !== -1) cursor = found + segment.text.length;
     }
     queueProjectId = projectId;
+    return ok({ segmentCount: queue.length });
+  }
+
+  /** 自动连播（RE-2）：queue 完结后取下一章 done 任务续播；开关持久化于 settings */
+  async function autoNextChapter(
+    projectId: string | null,
+    finishedChapterId: string | null,
+  ): Promise<void> {
+    if (!projectId || !finishedChapterId) return;
+    const enabled = await deps.settingsRepository.get('auto-next-chapter');
+    if (enabled === 'false') return;
+    const chapters = await deps.libraryQuery.listChapters(projectId);
+    const currentIndex = chapters.findIndex((c) => c.id === finishedChapterId);
+    const nextChapter = chapters[currentIndex + 1];
+    if (!nextChapter) return;
+    const jobs = await deps.generationStore.listJobsByChapter(projectId, nextChapter.id);
+    const doneJob = jobs.find((job) => job.status === 'done');
+    if (!doneJob) return; // 下一章未生成：停止（不自动触发生成——生成需用户发起）
+    await playChapter(projectId, nextChapter.id, 0);
+  }
+
+  /**
+   * 播放整章：取该章最近一次 done 任务的全部完成段（按序），
+   * 段文本顺序回定位到全文偏移（高亮映射），从 startSegmentIndex 段开始播。
+   * 成功后触发下一章预生成（v0.8.0：连播零等待，始终只领先播放进度一章）。
+   */
+  async function playChapter(
+    projectId: string,
+    chapterId: string,
+    startSegmentIndex = 0,
+  ): Promise<Result<{ segmentCount: number }>> {
+    const built = await buildQueue(projectId, chapterId);
+    if (!built.ok) return built;
     const startIndex = Math.min(Math.max(startSegmentIndex, 0), queue.length - 1);
     setState({
       projectId,
@@ -184,7 +212,30 @@ export function createPlaybackService(deps: PlaybackDeps) {
       queueOffsets: queue.map((item) => item.startOffset),
     });
     await loadAndPlay(startIndex);
+    void deps.generationService?.pregenNextChapter(projectId, chapterId);
     return ok({ segmentCount: queue.length });
+  }
+
+  /** 睡眠到期：音量渐弱后暂停并恢复音量（代次失效防取消竞态） */
+  async function fadeOutAndPause(): Promise<void> {
+    const generation = fadeGeneration;
+    for (let step = FADE_STEPS; step >= 1; step--) {
+      if (generation !== fadeGeneration) return; // 期间取消了
+      try {
+        await deps.audioPlayer.setVolume(step / FADE_STEPS);
+      } catch {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, FADE_STEP_MS));
+    }
+    if (generation !== fadeGeneration) return;
+    try {
+      await deps.audioPlayer.pause();
+      await deps.audioPlayer.setVolume(1);
+    } catch {
+      // 渐弱收尾失败不阻塞状态更新
+    }
+    setState({ status: 'paused' });
   }
 
   return {
@@ -197,53 +248,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       return () => listeners.delete(listener);
     },
 
-    /**
-     * 播放整章：取该章最近一次 done 任务的全部完成段（按序），
-     * 段文本顺序回定位到全文偏移（高亮映射），从 startSegmentIndex 段开始播。
-     */
-    async playChapter(projectId: string, chapterId: string, startSegmentIndex = 0): Promise<Result<{ segmentCount: number }>> {
-      const jobs = await deps.generationStore.listJobsByChapter(projectId, chapterId);
-      const doneJob = jobs.find((job) => job.status === 'done');
-      if (!doneJob) return err('invalid', '本章还没有已完成的生成音频，请先点"生成本章"');
-
-      const segments = (await deps.generationStore.listSegments(doneJob.id)).filter(
-        (segment) => segment.status === 'done' && segment.filePath !== null,
-      );
-      if (segments.length === 0) return err('invalid', '本章没有可用音频段');
-
-      const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
-      if (!slice) return err('not_found', '章节或来源不存在');
-      const { chapter, chapterText } = slice;
-
-      let cursor = 0;
-      queue = [];
-      for (const segment of segments) {
-        const found = chapterText.indexOf(segment.text, cursor);
-        const startOffset = found === -1 ? cursor : chapter.startOffset + found;
-        const endOffset = startOffset + segment.text.length;
-        queue.push({
-          ordinal: segment.ordinal,
-          filePath: segment.filePath!,
-          text: segment.text,
-          startOffset,
-          endOffset,
-        });
-        if (found !== -1) cursor = found + segment.text.length;
-      }
-      queueProjectId = projectId;
-      const startIndex = Math.min(Math.max(startSegmentIndex, 0), queue.length - 1);
-      setState({
-        projectId,
-        chapterId,
-        segmentCount: queue.length,
-        status: 'playing',
-        segmentIndex: startIndex,
-        segmentStartOffset: queue[startIndex].startOffset,
-        queueOffsets: queue.map((item) => item.startOffset),
-      });
-      await loadAndPlay(startIndex);
-      return ok({ segmentCount: queue.length });
-    },
+    playChapter,
 
     async pause(): Promise<void> {
       await deps.audioPlayer.pause();
@@ -298,7 +303,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       }
     },
 
-    /** 睡眠定时器（RE-2）：到期暂停；cancel 清除 */
+    /** 睡眠定时器（RE-2）：到期渐弱后暂停；cancel 清除 */
     async setSleepTimer(minutes: number): Promise<Result<{ deadline: number }>> {
       if (minutes <= 0 || minutes > 240) return err('invalid', '定时时长需为 1-240 分钟');
       cancelSleepTimerInternal();
@@ -306,8 +311,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       const tick = (): void => {
         if (Date.now() >= deadline) {
           sleepTimerHandle = null;
-          void deps.audioPlayer.pause();
-          setState({ status: 'paused' });
+          void fadeOutAndPause();
           return;
         }
         sleepTimerHandle = setTimeout(tick, 5000) as unknown as number;

@@ -11,6 +11,7 @@ import type {
   ProjectRepository,
   ReceiptStore,
   RequestLogRepository,
+  SettingsRepository,
   SourceFileStore,
   TtsGateway,
 } from '@/domain/ports';
@@ -39,6 +40,8 @@ export interface GenerationDeps {
   audioFileStore: AudioFileStore;
   requestLogRepository: RequestLogRepository;
   receiptStore: ReceiptStore;
+  /** 可选：预生成开关读取（缺省视为开启） */
+  settingsRepository?: SettingsRepository;
 }
 
 export interface StartGenerationCommand extends Command {
@@ -112,7 +115,7 @@ export function createGenerationService(deps: GenerationDeps) {
     await deps.generationStore.updateJob(jobId, { status: 'done', error: null });
   }
 
-  return {
+  const api = {
     /**
      * 发起整章生成：前置检查 → input_hash 幂等 → 建任务与段 → 后台跑段循环。
      * 返回即任务已建；进度经 getProgress 轮询。
@@ -195,6 +198,31 @@ export function createGenerationService(deps: GenerationDeps) {
       });
     },
 
+    /**
+     * 预生成下一章（v0.8.0）：播放某章成功后为其下一章自动发起生成，连播零等待。
+     * 由播放侧触发（始终只领先播放进度一章，不自我链式）；开关 settings
+     * `auto-pregen-next` = 'false' 关闭（默认开）；后台增强，失败静默。
+     */
+    async pregenNextChapter(projectId: string, currentChapterId: string): Promise<void> {
+      try {
+        const enabled = await deps.settingsRepository?.get('auto-pregen-next');
+        if (enabled === 'false') return;
+        const chapters = await deps.libraryRepository.listChapters(projectId);
+        const index = chapters.findIndex((c) => c.id === currentChapterId);
+        const next = chapters[index + 1];
+        if (!next) return;
+        const jobs = await deps.generationStore.listJobsByChapter(projectId, next.id);
+        if (jobs.some((j) => j.status === 'done' || j.status === 'running' || j.status === 'pending')) return;
+        await api.startGeneration({
+          commandId: `pregen-${next.id}-${Date.now()}`,
+          projectId,
+          chapterId: next.id,
+        });
+      } catch {
+        // 预生成失败静默：连播侧已有"下一章未生成即停"兜底
+      }
+    },
+
     /** 重试：只请求缺失/失败段（done 段直接跳过）——provider 请求数 = 缺失段数 */
     async retryGeneration(command: { projectId: string; jobId: string }): Promise<Result<{ jobId: string }>> {
       const job = await deps.generationStore.getJob(command.jobId);
@@ -272,6 +300,7 @@ export function createGenerationService(deps: GenerationDeps) {
       return deps.generationStore.markInterruptedJobsFailed();
     },
   };
+  return api;
 }
 
 export type GenerationService = ReturnType<typeof createGenerationService>;

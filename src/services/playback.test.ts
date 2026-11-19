@@ -8,6 +8,7 @@ import {
   FakeAudioFileStore,
   FakeAudioPlayer,
   FakeBindingRepository,
+  FakeSettingsRepository,
   FakeGenerationStore,
   FakeLibraryRepository,
   FakeProjectRepository,
@@ -42,7 +43,7 @@ async function setupWithGeneratedChapter() {
     commandId: 'c-import',
     projectId: 'p1',
     fileName: 'n.txt',
-    bytes: textToBytes(`第一章 起\n${filler.repeat(30)}第二段在这之后。${filler.repeat(10)}第三段收尾。`),
+    bytes: textToBytes(`第一章 起\n${filler.repeat(30)}第二段在这之后。${filler.repeat(10)}第三段收尾。\n第二章 承\n${filler.repeat(6)}第二章正文收束。`),
   });
   await bindings.upsert({ projectId: 'p1', targetType: 'narrator', targetId: null, voiceId: 'zh-CN-XiaoxiaoNeural', providerParamsJson: '{}' });
   const chapters = await library.listChapters('p1');
@@ -67,6 +68,7 @@ async function setupWithGeneratedChapter() {
     audioFileStore: audio,
     requestLogRepository: new FakeRequestLogRepository(),
     receiptStore: receipts,
+    settingsRepository: new FakeSettingsRepository(),
   });
   const started = await generation.startGeneration({ commandId: 'c-gen', projectId: 'p1', chapterId: chapters[0].id });
   if (!started.ok) throw new Error(started.error.message);
@@ -80,8 +82,9 @@ async function setupWithGeneratedChapter() {
     libraryQuery,
     settingsRepository,
     readingStateRepository: readingStates,
+    generationService: generation,
   });
-  return { projects, library, files, generationStore, readingStates, chapters, started, audioPlayer, playback };
+  return { projects, library, files, generationStore, readingStates, chapters, started, audioPlayer, playback, generation };
 }
 
 describe('P3 播放服务', () => {
@@ -111,12 +114,20 @@ describe('P3 播放服务', () => {
     s.audioPlayer.fireEnd();
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(s.playback.getState().segmentIndex).toBe(1);
-    // 最后一段结束后进入 done
+    // 最后一段结束后进入 done；若下一章已被预生成（v0.8.0），自动连播接续下一章
     for (let i = 1; i < total; i++) {
       s.audioPlayer.fireEnd();
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    expect(s.playback.getState().status).toBe('done');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const finalState = s.playback.getState();
+    const nextJobs = await s.generation.listJobsByChapter('p1', s.chapters[1].id);
+    if (nextJobs.some((job) => job.status === 'done')) {
+      expect(finalState.status).toBe('playing');
+      expect(finalState.chapterId).toBe(s.chapters[1].id);
+    } else {
+      expect(finalState.status).toBe('done');
+    }
   });
 
   it('seekToSegment：跨段跳转加载对应文件并更新高亮偏移', async () => {
@@ -159,5 +170,50 @@ describe('P3 播放服务', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('v0.8.0 睡眠渐弱与章节预生成', () => {
+  it('睡眠到期：音量渐弱 5 步后暂停并恢复音量', async () => {
+    const s = await setupWithGeneratedChapter();
+    await s.playback.playChapter('p1', s.chapters[0].id);
+    vi.useFakeTimers();
+    try {
+      await s.playback.setSleepTimer(1);
+      // 轮询 5s 一次，t=60s 到期；渐弱 5 步 × 600ms ≈ 3s 后暂停
+      await vi.advanceTimersByTimeAsync(65_000);
+      expect(s.playback.getState().status).toBe('paused');
+      const vols = s.audioPlayer.volumes;
+      expect(vols.slice(-6)).toEqual([1, 0.8, 0.6, 0.4, 0.2, 1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('取消定时器：渐弱中断、音量立即恢复、不再暂停', async () => {
+    const s = await setupWithGeneratedChapter();
+    await s.playback.playChapter('p1', s.chapters[0].id);
+    vi.useFakeTimers();
+    try {
+      await s.playback.setSleepTimer(1);
+      // 推进到 deadline 后第一步渐弱，停在 600ms 等待中
+      await vi.advanceTimersByTimeAsync(60_500);
+      s.playback.cancelSleepTimer();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(s.playback.getState().status).toBe('playing'); // 未被暂停
+      expect(s.audioPlayer.volumes.every((v) => v === 1)).toBe(true); // 从未降到低音量
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('播放成功触发下一章预生成（连播零等待）', async () => {
+    const s = await setupWithGeneratedChapter();
+    const played = await s.playback.playChapter('p1', s.chapters[0].id);
+    expect(played.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const jobs = await s.generation.listJobsByChapter('p1', s.chapters[1].id);
+    expect(jobs.length).toBe(1);
+    expect(['pending', 'running', 'done']).toContain(jobs[0].status);
   });
 });

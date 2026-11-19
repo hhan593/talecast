@@ -13,7 +13,7 @@ import {
 
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
-import { ReaderView } from '@/components/workbench/reader-view';
+import { ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
 import { useAssistant } from '@/hooks/use-assistant';
 import { useBookSearch } from '@/hooks/use-book-search';
 import { useBookmarks } from '@/hooks/use-bookmarks';
@@ -42,9 +42,15 @@ export default function ProjectWorkbenchScreen() {
   const [readerMode, setReaderMode] = useState<'scroll' | 'paged'>('scroll');
   const [readerFontSize, setReaderFontSize] = useState<'small' | 'standard' | 'large' | 'xlarge'>('standard');
   const [readerLineSpacing, setReaderLineSpacing] = useState<'compact' | 'standard' | 'relaxed'>('standard');
+  const [readerParagraphSpacing, setReaderParagraphSpacing] = useState<'compact' | 'standard' | 'relaxed'>('standard');
+  const [readerIndent, setReaderIndent] = useState(true);
+  const [readerJustify, setReaderJustify] = useState(true);
   const [readerMargin, setReaderMargin] = useState<'narrow' | 'standard' | 'wide'>('standard');
   const [readerTheme, setReaderTheme] = useState<'paper' | 'green' | 'white' | 'night'>('paper');
   const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover' | 'curl'>('slide');
+  const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null);
+  const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'search'>('chapters');
+  const [searchInput, setSearchInput] = useState('');
   const [assistantInput, setAssistantInput] = useState('');
   const [current, setCurrent] = useState<{
     chapter: Chapter;
@@ -87,6 +93,11 @@ export default function ProjectWorkbenchScreen() {
     void services.settings.getSetting('reader-margin').then((v) => {
       if (v === 'narrow' || v === 'standard' || v === 'wide') setReaderMargin(v);
     });
+    void services.settings.getSetting('reader-paragraph-spacing').then((v) => {
+      if (v === 'compact' || v === 'standard' || v === 'relaxed') setReaderParagraphSpacing(v);
+    });
+    void services.settings.getSetting('reader-indent').then((v) => setReaderIndent(v !== 'off'));
+    void services.settings.getSetting('reader-align').then((v) => setReaderJustify(v !== 'off'));
     void services.settings.getSetting('reader-theme').then((v) => {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
@@ -116,6 +127,33 @@ export default function ProjectWorkbenchScreen() {
     [projectId, services, library],
   );
   openChapterRef.current = openChapter;
+
+  // 章节导航（v0.8.0）：上一章/下一章/拖动条跳章；跳章清除搜索高亮
+  const chapters = library.chapters ?? [];
+  const chapterIndex = current ? chapters.findIndex((c) => c.id === current.chapter.id) : -1;
+  const goChapterDelta = useCallback(
+    (delta: number) => {
+      if (chapterIndex < 0) return;
+      const target = chapters[chapterIndex + delta];
+      if (!target) return;
+      setHighlightRange(null);
+      void openChapter(target.id, target.startOffset);
+    },
+    [chapters, chapterIndex, openChapter],
+  );
+  const seekChapter = useCallback(
+    (index: number) => {
+      const target = chapters[index];
+      if (!target) return;
+      setHighlightRange(null);
+      void openChapter(target.id, target.startOffset);
+    },
+    [chapters, openChapter],
+  );
+  const getChapterTitle = useCallback(
+    (index: number) => chapters[index]?.title ?? '',
+    [chapters],
+  );
 
   // 点段跳转 / 正文跟随（docs/plan.md P3：拖动进度/切章后高亮跟随）
   const seekToParagraph = useCallback(
@@ -202,6 +240,9 @@ export default function ProjectWorkbenchScreen() {
         followPlayback={true}
         paragraphs={current.paragraphs}
         lineSpacing={readerLineSpacing}
+        paragraphSpacing={readerParagraphSpacing}
+        indentEnabled={readerIndent}
+        justifyEnabled={readerJustify}
         margin={readerMargin}
         theme={readerTheme}
         pageTurnStyle={pageTurnStyle}
@@ -209,13 +250,25 @@ export default function ProjectWorkbenchScreen() {
         highlightOffset={
           playback.state.chapterId === current.chapter.id ? playback.state.segmentStartOffset : null
         }
+        highlightRange={highlightRange}
         playingThisChapter={playback.state.chapterId === current.chapter.id}
         playbackStatus={playback.state.status}
         playbackRate={playback.state.rate}
         segmentIndex={playback.state.segmentIndex}
         segmentCount={playback.state.segmentCount}
+        chapterIndex={Math.max(chapterIndex, 0)}
+        chapterCount={chapters.length}
+        getChapterTitle={getChapterTitle}
+        hasPrevChapter={chapterIndex > 0}
+        hasNextChapter={chapterIndex >= 0 && chapterIndex < chapters.length - 1}
+        onPrevChapter={() => goChapterDelta(-1)}
+        onNextChapter={() => goChapterDelta(1)}
+        onSeekChapter={seekChapter}
         onViewableItems={(info) => viewableCallbackRef.current?.(info)}
-        onBack={() => setView('chapters')}
+        onBack={() => {
+          setHighlightRange(null);
+          setView('chapters');
+        }}
         onPlayChapter={() => void playback.playChapter(current.chapter.id)}
         onPause={() => void playback.pause()}
         onResume={() => void playback.resume()}
@@ -240,6 +293,22 @@ export default function ProjectWorkbenchScreen() {
           const next = cycle[(cycle.indexOf(readerLineSpacing) + 1) % cycle.length];
           setReaderLineSpacing(next);
           void services.settings.setSetting('reader-line-spacing', next);
+        }}
+        onCycleParagraphSpacing={() => {
+          const cycle: Array<'compact' | 'standard' | 'relaxed'> = ['compact', 'standard', 'relaxed'];
+          const next = cycle[(cycle.indexOf(readerParagraphSpacing) + 1) % cycle.length];
+          setReaderParagraphSpacing(next);
+          void services.settings.setSetting('reader-paragraph-spacing', next);
+        }}
+        onToggleIndent={() => {
+          const next = !readerIndent;
+          setReaderIndent(next);
+          void services.settings.setSetting('reader-indent', next ? 'on' : 'off');
+        }}
+        onToggleJustify={() => {
+          const next = !readerJustify;
+          setReaderJustify(next);
+          void services.settings.setSetting('reader-align', next ? 'on' : 'off');
         }}
         onCycleMargin={() => {
           const cycle: Array<'narrow' | 'standard' | 'wide'> = ['narrow', 'standard', 'wide'];
@@ -425,6 +494,30 @@ export default function ProjectWorkbenchScreen() {
         )}
       </View>
 
+      {/* 目录三分区（v0.8.0）：章节 / 书签列表（含摘录） / 全文搜索 */}
+      <View className="mt-3 flex-row gap-2">
+        {([
+          ['chapters', `章节${chapters.length > 0 ? ` ${chapters.length}` : ''}`],
+          ['bookmarks', `书签${bookmarks.bookmarks.length > 0 ? ` ${bookmarks.bookmarks.length}` : ''}`],
+          ['search', '搜索'],
+        ] as const).map(([key, label]) => (
+          <Pressable
+            key={key}
+            className={`flex-1 items-center rounded-xl py-2 ${
+              catalogView === key ? 'bg-accent' : 'bg-raised dark:bg-card-night'
+            }`}
+            onPress={() => setCatalogView(key)}
+          >
+            <Text
+              className={`text-sm ${catalogView === key ? 'font-semibold text-white' : 'text-ink dark:text-ink-night'}`}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {catalogView === 'chapters' ? (
       <FlatList
         className="mt-3"
         data={library.chapters ?? []}
@@ -489,6 +582,102 @@ export default function ProjectWorkbenchScreen() {
           </View>
         }
       />
+      ) : null}
+
+      {catalogView === 'bookmarks' ? (
+        <FlatList
+          className="mt-3"
+          data={bookmarks.bookmarks}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
+              <Pressable
+                onPress={() => {
+                  setHighlightRange(null);
+                  void openChapter(item.chapterId, item.charOffset);
+                }}
+              >
+                <Text className="text-sm text-ink dark:text-ink-night" numberOfLines={3}>
+                  {item.excerpt}
+                </Text>
+                <Text className="mt-1 text-xs text-faint">
+                  {new Date(item.createdAt).toLocaleString()}
+                </Text>
+              </Pressable>
+              <Pressable
+                className="mt-2 self-start rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
+                onPress={() => void bookmarks.remove(item.id)}
+              >
+                <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
+              </Pressable>
+            </View>
+          )}
+          ItemSeparatorComponent={() => <View className="h-2" />}
+          ListEmptyComponent={
+            <View className="items-center py-16">
+              <Text className="text-center text-sm text-muted dark:text-muted-night">
+                还没有书签。阅读时点工具栏「书签」即可收藏当前段落。
+              </Text>
+            </View>
+          }
+        />
+      ) : null}
+
+      {catalogView === 'search' ? (
+        <View className="mt-3 flex-1">
+          <View className="flex-row gap-2">
+            <TextInput
+              className="flex-1 rounded-xl bg-raised px-3 py-2 text-sm text-ink dark:bg-card-night dark:text-ink-night"
+              placeholder="搜索全文关键词"
+              placeholderTextColor="#8C8272"
+              value={searchInput}
+              onChangeText={setSearchInput}
+              onSubmitEditing={() => void bookSearch.search(searchInput)}
+              returnKeyType="search"
+            />
+            <Pressable
+              className="rounded-xl bg-accent px-4 py-2 active:bg-accent-deep"
+              disabled={bookSearch.busy || searchInput.trim().length === 0}
+              onPress={() => void bookSearch.search(searchInput)}
+            >
+              <Text className="text-sm font-semibold text-white">{bookSearch.busy ? '搜索中' : '搜索'}</Text>
+            </Pressable>
+          </View>
+          {bookSearch.error ? (
+            <Text className="mt-2 rounded-lg bg-danger-soft p-3 text-sm text-danger dark:bg-danger-nightsoft dark:text-danger-night">
+              {bookSearch.error}
+            </Text>
+          ) : null}
+          {bookSearch.results !== null && bookSearch.results.length === 0 ? (
+            <Text className="mt-6 text-center text-sm text-muted dark:text-muted-night">
+              没有找到「{searchInput.trim()}」
+            </Text>
+          ) : null}
+          <FlatList
+            className="mt-3"
+            data={bookSearch.results ?? []}
+            keyExtractor={(item, index) => `${item.chapterId}-${item.charOffset}-${index}`}
+            renderItem={({ item }) => (
+              <Pressable
+                className="rounded-xl bg-card px-4 py-3 dark:bg-card-night"
+                onPress={() => {
+                  const length = searchInput.trim().length;
+                  setHighlightRange({ start: item.charOffset, end: item.charOffset + length });
+                  void openChapter(item.chapterId, item.charOffset);
+                }}
+              >
+                <Text className="text-xs text-muted dark:text-muted-night" numberOfLines={1}>
+                  {item.chapterTitle}
+                </Text>
+                <Text className="mt-1 text-sm text-ink dark:text-ink-night" numberOfLines={2}>
+                  {item.excerpt}
+                </Text>
+              </Pressable>
+            )}
+            ItemSeparatorComponent={() => <View className="h-2" />}
+          />
+        </View>
+      ) : null}
 
       <EditDialog
         visible={dialog !== null}

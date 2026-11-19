@@ -3,6 +3,7 @@ import type { AudioPlayer } from '@/domain/ports';
 export class FakeAudioPlayer implements AudioPlayer {
   public loaded: string[] = [];
   public rate = 1;
+  public volumes: number[] = [];
   public plays = 0;
   public pauses = 0;
   public seeks: number[] = [];
@@ -28,6 +29,10 @@ export class FakeAudioPlayer implements AudioPlayer {
 
   async setRate(rate: number): Promise<void> {
     this.rate = rate;
+  }
+
+  async setVolume(volume: number): Promise<void> {
+    this.volumes.push(volume);
   }
 
   onProgress(callback: (positionMs: number) => void): () => void {

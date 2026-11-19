@@ -116,6 +116,11 @@ export class TrackPlayerAudioService implements AudioPlayer {
     await TrackPlayer.setRate(rate);
   }
 
+  async setVolume(volume: number): Promise<void> {
+    await this.ensureSetup();
+    await TrackPlayer.setVolume(Math.min(Math.max(volume, 0), 1));
+  }
+
   onProgress(callback: (positionMs: number) => void): () => void {
     this.progressCb = callback;
     return () => {

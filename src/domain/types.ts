@@ -69,16 +69,6 @@ export interface BookmarkRecord {
   createdAt: number;
 }
 
-export interface BookmarkRecord {
-  id: string;
-  projectId: ProjectId;
-  chapterId: string;
-  charOffset: number;
-  /** 添加时的上下文摘录（书签列表展示） */
-  excerpt: string;
-  createdAt: number;
-}
-
 export interface VoiceRecord {
   id: string;
   provider: string;
