@@ -141,15 +141,24 @@ export class SqliteGenerationStore implements GenerationStore {
     id: string,
     patch: Partial<Pick<GenerationJobRecord, 'status' | 'progress' | 'error'>>,
   ): Promise<void> {
+    // 单语句部分更新（issue #21）：生成热循环每段只发一条写
+    const sets: string[] = [];
+    const values: (string | number | null)[] = [];
     if (patch.status !== undefined) {
-      this.db.runSync('UPDATE generation_jobs SET status = ?, updated_at = ? WHERE id = ?', patch.status, Date.now(), id);
+      sets.push('status = ?');
+      values.push(patch.status);
     }
     if (patch.progress !== undefined) {
-      this.db.runSync('UPDATE generation_jobs SET progress = ?, updated_at = ? WHERE id = ?', patch.progress, Date.now(), id);
+      sets.push('progress = ?');
+      values.push(patch.progress);
     }
     if (patch.error !== undefined) {
-      this.db.runSync('UPDATE generation_jobs SET error = ?, updated_at = ? WHERE id = ?', patch.error, Date.now(), id);
+      sets.push('error = ?');
+      values.push(patch.error);
     }
+    sets.push('updated_at = ?');
+    values.push(Date.now(), id);
+    this.db.runSync(`UPDATE generation_jobs SET ${sets.join(', ')} WHERE id = ?`, ...values, );
   }
 
   async listSegments(jobId: string): Promise<GenerationSegmentRecord[]> {
@@ -164,15 +173,24 @@ export class SqliteGenerationStore implements GenerationStore {
     id: string,
     patch: Partial<Pick<GenerationSegmentRecord, 'status' | 'filePath' | 'error'>>,
   ): Promise<void> {
+    // 单语句部分更新（issue #21）
+    const sets: string[] = [];
+    const values: (string | number | null)[] = [];
     if (patch.status !== undefined) {
-      this.db.runSync('UPDATE generation_segments SET status = ?, updated_at = ? WHERE id = ?', patch.status, Date.now(), id);
+      sets.push('status = ?');
+      values.push(patch.status);
     }
     if (patch.filePath !== undefined) {
-      this.db.runSync('UPDATE generation_segments SET file_path = ?, updated_at = ? WHERE id = ?', patch.filePath, Date.now(), id);
+      sets.push('file_path = ?');
+      values.push(patch.filePath);
     }
     if (patch.error !== undefined) {
-      this.db.runSync('UPDATE generation_segments SET error = ?, updated_at = ? WHERE id = ?', patch.error, Date.now(), id);
+      sets.push('error = ?');
+      values.push(patch.error);
     }
+    sets.push('updated_at = ?');
+    values.push(Date.now(), id);
+    this.db.runSync(`UPDATE generation_segments SET ${sets.join(', ')} WHERE id = ?`, ...values);
   }
 
   async markInterruptedJobsFailed(): Promise<number> {
