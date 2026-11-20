@@ -138,6 +138,7 @@ const zh = {
   'assistant.invalidScope': '范围无效，请重新选择',
   'assistant.bookScope': '全书概览',
   'assistant.selectionScope': '选中段落',
+  'assistant.chapterScope': '章节',
   // 书源导入分析（issue #61）
   'bookSource.title': '书源导入分析',
   'bookSource.hint': '粘贴 Legado 兼容书源 JSON（单个对象或数组），解析其规则结构；本工具只做解析展示，不发起任何站点请求。',
@@ -454,6 +455,7 @@ const en: Partial<Record<StringKey, string>> = {
   'assistant.invalidScope': 'Invalid scope, please pick again',
   'assistant.bookScope': 'Whole book',
   'assistant.selectionScope': 'Selected passage',
+  'assistant.chapterScope': 'Chapters',
   // Book source import analysis (issue #61)
   'bookSource.title': 'Book source analysis',
   'bookSource.hint': 'Paste a Legado-compatible book-source JSON (object or array) to inspect its rule structure. Parsing only — no site requests are made.',
