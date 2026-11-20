@@ -25,6 +25,7 @@ import {
   type PageTurnStyle,
   type ReaderPage,
 } from '@/domain/reader';
+
 import { sliceStyledText } from '@/domain/annotations';
 import { READER_THEMES, THEME_CYCLE, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
@@ -194,6 +195,8 @@ export interface ReaderViewProps {
   onPageChange(charOffset: number): void;
   /** 顶栏 ···：打开更多菜单抽屉（角色中心/书籍助手/听书，issue #90） */
   onOpenDrawer(): void;
+  /** 底栏「目录」：打开左侧章节抽屉（issue #94，不再用底部面板） */
+  onOpenCatalog(): void;
 }
 
 /** 翻页页渲染窗口：PagerView 不虚拟化，只渲染当前页 ±3 页（长章首屏速度） */
@@ -206,10 +209,10 @@ const LINE_SPACING_KEYS: LineSpacingKey[] = ['compact', 'standard', 'relaxed'];
 const PARAGRAPH_SPACING_KEYS: ParagraphSpacingKey[] = ['compact', 'standard', 'relaxed'];
 const MARGIN_KEYS: MarginKey[] = ['narrow', 'standard', 'wide'];
 const FONT_FAMILY_KEYS: FontFamilyKey[] = ['serif', 'sans', 'system'];
-const PAGE_TURN_KEYS: PageTurnStyle[] = ['slide', 'cover', 'curl', 'none'];
+const PAGE_TURN_KEYS: PageTurnStyle[] = ['slide', 'cover', 'curl', 'vertical', 'none'];
 
-/** 底部升起的面板（同一时刻只开一个） */
-type Sheet = 'none' | 'catalog' | 'bookmarks' | 'settings' | 'listen';
+/** 底部升起的面板（同一时刻只开一个；目录改走左侧抽屉，issue #94） */
+type Sheet = 'none' | 'bookmarks' | 'settings' | 'listen';
 /** 设置面板内的二级展开行 */
 type ExtraRow = 'none' | 'spacing' | 'more';
 
@@ -354,8 +357,11 @@ export function ReaderView(props: ReaderViewProps) {
   }, [pages, contentSize, coverScrollX]);
 
   const pageWidth = contentSize?.w ?? 0;
-  /** 平移与瞬切共用 PagerView：瞬切只是不带动画的 setPage */
-  const pagerMode = props.pageTurnStyle === 'slide' || props.pageTurnStyle === 'none';
+  /** 平移/上下/瞬切共用 PagerView：vertical 纵向翻页（issue #94），瞬切只是不带动画的 setPage */
+  const pagerMode =
+    props.pageTurnStyle === 'slide' ||
+    props.pageTurnStyle === 'vertical' ||
+    props.pageTurnStyle === 'none';
 
   // 字体族：CJK 方块字假设下同字号不改变分页 metrics
   const bodyFontClass =
@@ -823,7 +829,9 @@ export function ReaderView(props: ReaderViewProps) {
                     ? t('reader.turnCoverLong')
                     : key === 'curl'
                       ? t('reader.turnCurlLong')
-                      : t('reader.turnNone'),
+                      : key === 'vertical'
+                        ? t('reader.turnVerticalLong')
+                        : t('reader.turnNone'),
             })),
             // 滚动模式下没有翻页动画可言，不给任何一项高亮，避免「选了覆盖却在滚动」的错位观感
             props.mode === 'paged' ? props.pageTurnStyle : null,
@@ -993,43 +1001,7 @@ export function ReaderView(props: ReaderViewProps) {
   };
 
   // ---------------------------------------------------------------- 其他面板
-
-  const renderCatalogSheet = () => (
-    <View className="px-3 pb-3 pt-2.5">
-      <Text className={`mb-2 text-[11px] ${theme.muted}`}>
-        {t('reader.catalog')} · {props.chapterIndex + 1}/{props.chapterCount}
-      </Text>
-      <FlatList
-        data={Array.from({ length: props.chapterCount }, (_, i) => i)}
-        keyExtractor={(i) => String(i)}
-        style={{ maxHeight: Math.round(windowH * 0.5) }}
-        renderItem={({ item: i }) => {
-          const active = i === props.chapterIndex;
-          return (
-            <Pressable
-              accessibilityRole="button"
-              className={`flex-row items-center rounded-lg px-3 py-2 ${active ? theme.action : ''}`}
-              onPress={() => {
-                hapticLight();
-                props.onSeekChapter(i);
-                closeSheet();
-              }}
-            >
-              <Text className={`mr-3 w-7 text-[11px] ${active ? theme.actionText : theme.muted}`}>
-                {i + 1}
-              </Text>
-              <Text
-                className={`flex-1 text-xs ${active ? theme.actionText : theme.text}`}
-                numberOfLines={1}
-              >
-                {props.getChapterTitle(i)}
-              </Text>
-            </Pressable>
-          );
-        }}
-      />
-    </View>
-  );
+  // 目录改走左侧抽屉（issue #94）：由父级渲染，此处不再有 catalog 面板
 
   const renderBookmarksSheet = () => (
     <View className="px-3 pb-3 pt-2.5">
@@ -1179,8 +1151,6 @@ export function ReaderView(props: ReaderViewProps) {
     switch (sheet) {
       case 'settings':
         return renderSettingsSheet();
-      case 'catalog':
-        return renderCatalogSheet();
       case 'bookmarks':
         return renderBookmarksSheet();
       case 'listen':
@@ -1295,6 +1265,7 @@ export function ReaderView(props: ReaderViewProps) {
               style={{ flex: 1 }}
               initialPage={0}
               overdrag={false}
+              orientation={props.pageTurnStyle === 'vertical' ? 'vertical' : 'horizontal'}
               onPageSelected={(e) => {
                 currentPageRef.current = e.nativeEvent.position;
                 setActivePage(e.nativeEvent.position);
@@ -1589,8 +1560,7 @@ export function ReaderView(props: ReaderViewProps) {
             {renderEntry({
               icon: 'list',
               label: t('reader.catalog'),
-              active: sheet === 'catalog',
-              onPress: () => openSheet('catalog'),
+              onPress: () => props.onOpenCatalog(),
             })}
             {renderEntry({
               icon: 'bookmarks-outline',
@@ -1618,22 +1588,15 @@ export function ReaderView(props: ReaderViewProps) {
         </Animated.View>
       ) : null}
 
-      {/* 底部升起的面板：覆盖翻页行，四入口保持可见 */}
+      {/* 底部升起的面板（issue #94 去分层）：与底栏入口同色平面衔接，无圆角/阴影/拖拽条 */}
       {sheet !== 'none' ? (
         <View
-          className={`absolute inset-x-0 rounded-t-2xl border-t ${theme.surface} ${theme.border}`}
+          className={`absolute inset-x-0 border-t ${theme.surface} ${theme.border}`}
           style={{
             bottom: entriesHeight + insets.bottom,
             maxHeight: Math.round(windowH * 0.62),
-            ...styles.sheetShadow,
           }}
         >
-          <View className="items-center pt-1.5">
-            <View
-              className="h-1 w-9 rounded-full"
-              style={{ backgroundColor: theme.mutedHex, opacity: 0.35 }}
-            />
-          </View>
           {renderSheetBody()}
         </View>
       ) : null}
@@ -1681,12 +1644,5 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
-  },
-  sheetShadow: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -2 },
-    elevation: 10,
   },
 });

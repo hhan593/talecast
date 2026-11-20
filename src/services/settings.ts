@@ -45,10 +45,12 @@ export function createSettingsService(deps: SettingsDeps) {
       return deps.requestLogRepository.counts();
     },
 
-    /** 翻页样式偏好（slide 平移 / cover 覆盖 / curl 卷页近似 / none 无动画） */
+    /** 翻页样式偏好（slide 平移 / cover 覆盖 / curl 卷页近似 / vertical 上下 / none 无动画） */
     async getPageTurnStyle(): Promise<PageTurnStyle> {
       const value = await deps.settingsRepository.get('page-turn-style');
-      return value === 'cover' || value === 'curl' || value === 'none' ? value : 'slide';
+      return value === 'cover' || value === 'curl' || value === 'vertical' || value === 'none'
+        ? value
+        : 'slide';
     },
 
     async setPageTurnStyle(style: PageTurnStyle): Promise<void> {

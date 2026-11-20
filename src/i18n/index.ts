@@ -237,6 +237,7 @@ const zh = {
   'reader.turnSlideLong': '平移',
   'reader.turnCoverLong': '覆盖',
   'reader.turnCurlLong': '仿真',
+  'reader.turnVerticalLong': '上下',
   'reader.modeLabel': '模式',
   'reader.less': '收起',
   // 角色中心
@@ -552,6 +553,7 @@ const en: Partial<Record<StringKey, string>> = {
   'reader.turnSlideLong': 'Slide',
   'reader.turnCoverLong': 'Cover',
   'reader.turnCurlLong': 'Curl',
+  'reader.turnVerticalLong': 'Vertical',
   'reader.modeLabel': 'Mode',
   'reader.less': 'Less',
   'characters.narrator': 'Narrator',
