@@ -327,6 +327,17 @@ export default function BookshelfScreen() {
           <Ionicons name="settings-outline" size={18} color={menuIconColor} />
           <Text className="text-sm text-ink dark:text-ink-night">{t('settings.title')}</Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          className="mt-2 flex-row items-center gap-3 rounded-xl bg-raised px-4 py-3 dark:bg-raised-night"
+          onPress={() => {
+            setMenuOpen(false);
+            router.push('/book-source');
+          }}
+        >
+          <Ionicons name="cloud-download-outline" size={18} color={menuIconColor} />
+          <Text className="text-sm text-ink dark:text-ink-night">{t('bookSource.title')}</Text>
+        </Pressable>
       </SideDrawer>
     </View>
   );
