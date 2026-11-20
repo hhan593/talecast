@@ -1,6 +1,7 @@
 import { assertJobStartable, buildSegmentPlan, buildVoiceSegmentPlan, checkChapterGenerationSize, computeJobInputHash, computeSegmentTextHash, parseProsodyJson } from '@/domain/jobs';
 import { NARRATOR_VOICE_KEY, applyAttributionOverrides, buildDialogueCandidates, buildVoicePlanFingerprint, planVoiceSpans } from '@/domain/dialogue';
 import { EDGE_AUDIO_FORMAT, EDGE_TTS_PROVIDER } from '@/domain/contracts';
+import { DEFAULT_NARRATOR_VOICE_ID } from '@/domain/edge-voices';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { segmentForTts } from '@/domain/segmenter';
 import { sha256Text } from '@/domain/hash';
@@ -244,6 +245,22 @@ export function createGenerationService(deps: GenerationDeps) {
     await deps.generationStore.updateJob(jobId, { status: 'done', error: null });
   }
 
+  /**
+   * 首次使用的兜底：没有旁白绑定时自动绑定默认中文音色。
+   * 目的：只听旁白不需要先做 LLM 角色抽取或手工配置；默认值可在角色中心随时更换。
+   */
+  async function resolveNarratorBinding(projectId: string): Promise<BindingRecord> {
+    const existing = await deps.bindingRepository.getForTarget(projectId, 'narrator', null);
+    if (existing) return existing;
+    return deps.bindingRepository.upsert({
+      projectId,
+      targetType: 'narrator',
+      targetId: null,
+      voiceId: DEFAULT_NARRATOR_VOICE_ID,
+      providerParamsJson: '{}',
+    });
+  }
+
   const api = {
     /**
      * 发起整章生成：前置检查 → input_hash 幂等 → 建任务与段 → 后台跑段循环。
@@ -260,21 +277,21 @@ export function createGenerationService(deps: GenerationDeps) {
           return err('invalid', `本章 ${chapterText.length} 字超出首版单章 3 万字上限，请拆章后生成`);
         }
 
-        const binding = await deps.bindingRepository.getForTarget(command.projectId, 'narrator', null);
+        const binding = await resolveNarratorBinding(command.projectId);
         const guardError = assertJobStartable({
           chapterExists: true,
-          hasVoiceBinding: binding !== null,
+          hasVoiceBinding: true,
           activeJobExists: (await deps.generationStore.getActiveJobByChapter(command.projectId, command.chapterId)) !== null,
         });
         if (guardError) return err('busy' as const, guardError);
 
-        const voiceId = binding!.voiceId;
-        const providerParamsJson = binding!.providerParamsJson || '{}';
-        const { plan, voicePlanJson } = await planChapterSegments(command.projectId, command.chapterId, chapterText, binding!);
+        const voiceId = binding.voiceId;
+        const providerParamsJson = binding.providerParamsJson || '{}';
+        const { plan, voicePlanJson } = await planChapterSegments(command.projectId, command.chapterId, chapterText, binding);
 
         const input = {
           chapterTextSha256: sha256Text(chapterText),
-          bindingRevision: binding!.revision,
+          bindingRevision: binding.revision,
           voiceId,
           provider: PROVIDER,
           providerParamsJson,
@@ -389,8 +406,7 @@ export function createGenerationService(deps: GenerationDeps) {
     async previewSegment(command: { projectId: string; chapterId: string }): Promise<Result<{ filePath: string; textHash: string; cached: boolean }>> {
       const loaded = await loadChapterText(command.projectId, command.chapterId);
       if (!loaded) return err('not_found', '章节或来源不存在');
-      const binding = await deps.bindingRepository.getForTarget(command.projectId, 'narrator', null);
-      if (!binding) return err('invalid', '请先在角色中心给旁白绑定音色，再试听');
+      const binding = await resolveNarratorBinding(command.projectId);
       const chapterText = loaded.chapterText;
       if (chapterText.length === 0) return err('invalid', '本章内容为空');
       // 试听与生成共用同一计划（v0.9.0）：段哈希一致 → 试听文件生成时零请求转正

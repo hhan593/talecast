@@ -206,13 +206,15 @@ describe('P2 生成任务：段级幂等与重试', () => {
     expect(previewed!.filePath).toBe(preview.value.filePath);
   });
 
-  it('未绑定音色时生成给出明确错误', async () => {
+  it('未绑定音色时自动使用默认旁白音色（无需先配置）', async () => {
     const s = await setupWithImport();
     const chapters = await s.library.listChapters('p1');
     const result = await s.generation.startGeneration({ commandId: 'c-gen-x', projectId: 'p1', chapterId: chapters[0].id });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.message).toContain('绑定音色');
+    expect(result.ok).toBe(true);
+    // 自动写入的绑定可被角色中心读取与更换
+    const binding = await s.bindingsService.listBindings('p1');
+    const narrator = binding.find((item) => item.targetType === 'narrator');
+    expect(narrator?.voiceId).toBe('zh-CN-XiaoxiaoNeural');
   });
 
   it('应用重启恢复：运行中任务标记失败且保留已完成段', async () => {
