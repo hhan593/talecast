@@ -1,3 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   FlatList,
@@ -6,27 +9,32 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
-import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useWindowDimensions } from 'react-native';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
-import { pageForOffset, paginateText, type ReaderPage } from '@/domain/reader';
+import { pageForOffset, paginateText, type PageTurnStyle, type ReaderPage } from '@/domain/reader';
 import { sliceStyledText } from '@/domain/annotations';
-import { READER_THEMES, type ReaderThemeKey } from '@/domain/reader-theme';
+import { READER_THEMES, THEME_CYCLE, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
 import { useI18n } from '@/hooks/use-i18n';
+import type { StringKey } from '@/i18n';
 
 /**
- * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2 + reading-experience-plan RE-1）：
- * 双模式——滚动/翻页；主题四套（纸感/护眼/纯白/暖黑）；排版（字号/行距/段距/边距/缩进/对齐）；
- * 悬浮菜单动画显隐（正文全屏分页，显隐不再引起重排）；章节导航（上一章/下一章/拖动条）；
- * 搜索命中高亮；听读跟随；翻页手势点击区（左右翻页，页尾自动接下一章）。
+ * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2 + reading-experience-plan RE-1）。
+ *
+ * v0.19.0 面板重构（issue #64）：从「工具条悬浮 + 正文避让」改为三段式
+ * 　顶部单行工具条（流内）／正文（flex-1）／底部常驻翻页行 + 四入口（流内），
+ * 设置面板从底部升起覆盖翻页行、四入口保持可见；听书改为右侧悬浮球，不占排版空间。
+ * 底栏进流而非悬浮，是这次的关键取舍：悬浮条一显隐就会改变正文可用高度，
+ * 翻页模式下要重新分页（文字整体跳动）；进流后高度稳定，切工具条不再重排。
+ *
+ * 仍然保留的能力：双模式（滚动/翻页）、四套主题、排版（字号/行距/段距/边距/缩进/对齐/
+ * 字体族）、翻页动画（平移/覆盖/仿真/瞬切）、搜索命中与划线高亮、听读跟随、
+ * 点击分区翻页、页尾自动接下一章、自动滚屏、音量键翻页。
  * 纯展示组件：状态与回调经 props 注入（components 不 import services/adapters）。
  */
 
@@ -40,11 +48,21 @@ export type MarginKey = keyof typeof MARGINS;
 /** 段间距（像素）：翻页分页按像素预算预留，滚动模式为段落纵向内边距 */
 export const PARAGRAPH_SPACINGS = { compact: 4, standard: 12, relaxed: 20 } as const;
 export type ParagraphSpacingKey = keyof typeof PARAGRAPH_SPACINGS;
+export type FontFamilyKey = 'serif' | 'sans' | 'system';
 
 /** 搜索命中区间（全文绝对偏移，半开区间 [start, end)） */
 export interface HighlightRange {
   start: number;
   end: number;
+}
+
+/** 书签（v0.19.0）：阅读器只做展示与回调，数据由父级 hooks 提供 */
+export interface ReaderBookmark {
+  id: string;
+  chapterId: string;
+  charOffset: number;
+  excerpt: string;
+  chapterTitle: string;
 }
 
 /** 轻触感反馈（Web 无震感硬件，静默跳过） */
@@ -59,9 +77,8 @@ export interface ReaderViewProps {
   chapterBaseOffset: number;
   mode: ReaderMode;
   fontSize: FontSizeKey;
-  /** 翻页样式：slide 平移 / cover 覆盖 / curl 卷页近似 */
-  pageTurnStyle: 'slide' | 'cover' | 'curl';
-  onCyclePageTurnStyle(): void;
+  /** 翻页样式：平移 / 覆盖 / 仿真 / 瞬切 */
+  pageTurnStyle: PageTurnStyle;
   lineSpacing: LineSpacingKey;
   paragraphSpacing: ParagraphSpacingKey;
   margin: MarginKey;
@@ -70,6 +87,10 @@ export interface ReaderViewProps {
   /** 两端对齐 */
   justifyEnabled: boolean;
   theme: ReaderThemeKey;
+  /** 阅读亮度（0.35–1，渲染为黑色遮罩；不申请系统亮度权限） */
+  brightness: number;
+  /** 护眼（琥珀色低透明度遮罩，独立于主题） */
+  eyeCare: boolean;
   /** 边听边读跟随（paged 模式：播放偏移变化自动翻页） */
   followPlayback: boolean;
   /** 朗读段偏移（播放高亮，段落级） */
@@ -84,7 +105,7 @@ export interface ReaderViewProps {
   /** 恢复阅读位置的初始偏移（paged 模式按页首回位） */
   initialOffset: number;
   paragraphs: Paragraph[];
-  /** 章节导航（v0.8.0）：当前章索引/总数/拖动跳章 */
+  /** 章节导航：当前章索引/总数/拖动跳章 */
   chapterIndex: number;
   chapterCount: number;
   getChapterTitle(index: number): string;
@@ -98,59 +119,81 @@ export interface ReaderViewProps {
   onPause(): void;
   onResume(): void;
   onCycleRate(): void;
-  onCycleFontSize(): void;
-  onCycleLineSpacing(): void;
-  onCycleParagraphSpacing(): void;
-  onCycleMargin(): void;
-  onCycleTheme(): void;
+  /** 排版：直接选中（v0.19.0 取代原来的「循环到下一个」——点哪个就是哪个） */
+  onSelectFontSize(key: FontSizeKey): void;
+  onSelectLineSpacing(key: LineSpacingKey): void;
+  onSelectParagraphSpacing(key: ParagraphSpacingKey): void;
+  onSelectMargin(key: MarginKey): void;
+  onSelectFontFamily(key: FontFamilyKey): void;
+  onSelectTheme(key: ReaderThemeKey): void;
+  onSelectPageTurnStyle(style: PageTurnStyle): void;
+  onBrightnessChange(value: number): void;
+  onToggleEyeCare(): void;
   onToggleMode(): void;
   onToggleIndent(): void;
   onToggleJustify(): void;
   onAddBookmark(): void;
-  /** 自动滚屏（v0.10.0）：offsetRef 由父级 hook 推进，本组件驱动 FlatList；null=关闭 */
+  /** 书签列表（v0.19.0）：底栏「书签」入口升起面板 */
+  bookmarks: ReaderBookmark[];
+  onOpenBookmark(bookmark: ReaderBookmark): void;
+  onDeleteBookmark(bookmarkId: string): void;
+  /** 自动滚屏：offsetRef 由父级 hook 推进，本组件驱动 FlatList；null=关闭 */
   autoScrollOffsetRef: { current: number } | null;
   autoScrollSpeedLabel: string;
   onCycleAutoScroll(): void;
-  /** 播放段级滑条（v0.10.0）：拖动跨段跳转 */
+  /** 播放段级滑条：拖动跨段跳转 */
   onSeekSegment(index: number): void;
-  /** 滚动模式点击正文：滚屏运行时暂停/恢复（v0.10.0） */
+  /** 滚动模式点击正文：滚屏运行时暂停/恢复 */
   onScrollTap(): void;
-  /** 字体族（v0.11.0）：衬线/黑体/系统 */
-  fontFamily: 'serif' | 'sans' | 'system';
-  onCycleFontFamily(): void;
-  /** 本章剩余时长预估（v0.11.0，父级按阅读/听读口径计算） */
+  /** 字体族：衬线/黑体/系统 */
+  fontFamily: FontFamilyKey;
+  /** 本章剩余时长预估（父级按阅读/听读口径计算） */
   chapterEta: string | null;
-  /** 睡眠定时（v0.11.0）：菜单按钮循环 */
+  /** 睡眠定时：菜单按钮循环 */
   sleepLabel: string;
   onCycleSleep(): void;
-  /** 音量键翻页事件（v0.11.0，父级监听后下发；仅 Android） */
+  /** 音量键翻页事件（父级监听后下发；仅 Android） */
   volumeEvent: { seq: number; direction: 'up' | 'down' } | null;
-  /** 翻页音效（v0.11.0） */
+  /** 翻页音效 */
   pageSoundEnabled: boolean;
-  /** 翻页音效播放回调（v0.15.0，hooks 注入——组件不直连 expo-audio） */
+  /** 翻页音效播放回调（hooks 注入——组件不直连 expo-audio） */
   playPageSound(): void;
-  /** 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏 */
+  /** 沉浸全屏：滚动模式下工具条 3 秒无操作自动收起 */
   immersive: boolean;
-  /** 划线区间（v0.12.0，书级偏移） */
+  /** 划线区间（书级偏移） */
   annotations: Array<{ start: number; end: number }>;
-  /** 词级卡拉OK当前词（v0.13.0，书级偏移；null=关闭） */
+  /** 词级卡拉OK当前词（书级偏移；null=关闭） */
   wordHighlight: { start: number; end: number } | null;
   /**
-   * 长按文本块（v0.12.0）：RN Text 无字符级选区回调，采用段落级长按划线。
+   * 长按文本块：RN Text 无字符级选区回调，采用段落级长按划线。
    * range = 长按内容 的书级偏移；null = 清除操作条。
    */
   longPressRange: { start: number; end: number } | null;
   onLongPressText(range: { start: number; end: number } | null): void;
-  /** 长按操作（v0.12.0）：划线/笔记/复制 */
+  /** 长按操作：划线/笔记/复制 */
   onAnnotate(kind: 'underline' | 'note' | 'copy'): void;
-  /** 滚动模式：可视段落变化（阅读位置持久化，scroll 模式） */
+  /** 滚动模式：可视段落变化（阅读位置持久化） */
   onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
-  /** 翻页模式：页选择变化（阅读位置持久化，paged 模式） */
+  /** 翻页模式：页选择变化（阅读位置持久化） */
   onPageChange(charOffset: number): void;
 }
 
 /** 翻页页渲染窗口：PagerView 不虚拟化，只渲染当前页 ±3 页（长章首屏速度） */
 const RENDER_WINDOW = 3;
+/** 亮度滑杆的下限：再暗也不至于看不见字 */
+const MIN_BRIGHTNESS = 0.35;
+
+const FONT_SIZE_KEYS: FontSizeKey[] = ['small', 'standard', 'large', 'xlarge'];
+const LINE_SPACING_KEYS: LineSpacingKey[] = ['compact', 'standard', 'relaxed'];
+const PARAGRAPH_SPACING_KEYS: ParagraphSpacingKey[] = ['compact', 'standard', 'relaxed'];
+const MARGIN_KEYS: MarginKey[] = ['narrow', 'standard', 'wide'];
+const FONT_FAMILY_KEYS: FontFamilyKey[] = ['serif', 'sans', 'system'];
+const PAGE_TURN_KEYS: PageTurnStyle[] = ['slide', 'cover', 'curl', 'none'];
+
+/** 底部升起的面板（同一时刻只开一个） */
+type Sheet = 'none' | 'catalog' | 'bookmarks' | 'settings' | 'listen';
+/** 设置面板内的二级展开行 */
+type ExtraRow = 'none' | 'spacing' | 'more';
 
 export function ReaderView(props: ReaderViewProps) {
   // t 绑定 React state，避免模块级 locale 与界面语言不同步
@@ -160,7 +203,9 @@ export function ReaderView(props: ReaderViewProps) {
   const marginPx = MARGINS[props.margin];
   const paragraphSpacingPx = PARAGRAPH_SPACINGS[props.paragraphSpacing];
   const theme = READER_THEMES[props.theme];
-  const { width: windowW } = useWindowDimensions();
+  const { width: windowW, height: windowH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
   const [contentSize, setContentSize] = useState<{ w: number; h: number } | null>(null);
   const pagerRef = useRef<PagerView | null>(null);
   const currentPageRef = useRef(0);
@@ -175,7 +220,58 @@ export function ReaderView(props: ReaderViewProps) {
   >(null);
   viewableCbRef.current = (info) => props.onViewableItems(info);
 
-  // 自动滚屏驱动（v0.10.0）：hook 每帧推进 offsetRef，本组件按增量滚动 FlatList
+  /** 上一套浅色主题：底栏「夜间」一键在浅色 ↔ 暖黑之间来回 */
+  const lastLightThemeRef = useRef<ReaderThemeKey>(
+    props.theme === 'night' ? 'paper' : props.theme,
+  );
+  if (props.theme !== 'night') lastLightThemeRef.current = props.theme;
+
+  // 底部面板与工具条显隐
+  const [sheet, setSheet] = useState<Sheet>('none');
+  const [extraRow, setExtraRow] = useState<ExtraRow>('none');
+  const [controlsVisible, setControlsVisible] = useState(true);
+  /** 底栏两段实测高度：面板挂在四入口之上、长按操作条挂在底栏之上 */
+  const [footerHeight, setFooterHeight] = useState(0);
+  const [entriesHeight, setEntriesHeight] = useState(64);
+
+  /**
+   * 工具条显隐只由点击决定，不做「3 秒自动收起」。
+   * 工具条已经进流（不是悬浮层），收起并不能让正文多显示内容以外的信息，
+   * 反而会在用户正要去点按钮时把它藏起来——v0.18.x 的实测反馈就是「点开后又没了」。
+   */
+  const showControls = () => setControlsVisible(true);
+
+  const openSheet = (next: Sheet) => {
+    hapticLight();
+    setSheet((prev) => (prev === next ? 'none' : next));
+    setControlsVisible(true);
+    setExtraRow('none');
+  };
+
+  const closeSheet = () => {
+    setSheet('none');
+    setExtraRow('none');
+  };
+
+  // 工具条开合动画（渐隐 + 轻微位移）
+  const menuAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(menuAnim, {
+      toValue: controlsVisible ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [controlsVisible, menuAnim]);
+  const topBarStyle = {
+    opacity: menuAnim,
+    transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
+  } as const;
+  const footerStyle = {
+    opacity: menuAnim,
+    transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+  } as const;
+
+  // 自动滚屏驱动：hook 每帧推进 offsetRef，本组件按增量滚动 FlatList
   useEffect(() => {
     if (props.mode !== 'scroll' || props.autoScrollOffsetRef === null) return;
     const timer = setInterval(() => {
@@ -189,69 +285,6 @@ export function ReaderView(props: ReaderViewProps) {
     }, 32);
     return () => clearInterval(timer);
   }, [props.mode, props.autoScrollOffsetRef]);
-
-  // 设置面板（UI 重构）：目录/进度/排版/听书四 tab；面板展开时暂停自动隐藏
-  type PanelTab = 'none' | 'catalog' | 'progress' | 'typeset' | 'listen';
-  const [panelTab, setPanelTab] = useState<PanelTab>('none');
-
-  // 安全区（v0.18.1）：顶部工具条需让开状态栏，底部进度行需让开手势条，
-  // 否则状态栏图标被工具条底色盖成白底白字、进度文字被 Home 指示条切断
-  const insets = useSafeAreaInsets();
-  // 顶部工具条实测高度：正文内边距跟随它，保证工具条可见时首行不被遮住
-  const [topBarHeight, setTopBarHeight] = useState(56);
-
-  // 沉浸模式：工具栏 3 秒无操作自动隐藏，任意点击重置（RE-1）
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleHide = () => {
-    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    if (panelTab === 'none') {
-      controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
-    }
-  };
-  const pokeControls = () => {
-    setControlsVisible(true);
-    scheduleHide();
-  };
-  const togglePanel = (tab: PanelTab) => {
-    const next: PanelTab = panelTab === tab ? 'none' : tab;
-    setPanelTab(next);
-    setControlsVisible(true);
-    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    if (next === 'none') controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
-  };
-  useEffect(() => {
-    return () => {
-      if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    };
-  }, []);
-
-  // 菜单开合动画（v0.8.0）：渐隐 + 位移；正文全屏悬浮其上，显隐不改变分页
-  const menuAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.timing(menuAnim, {
-      toValue: controlsVisible ? 1 : 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [controlsVisible, menuAnim]);
-  const menuPointer = controlsVisible ? ('auto' as const) : ('none' as const);
-  const menuTopStyle = {
-    opacity: menuAnim,
-    transform: [
-      {
-        translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }),
-      },
-    ],
-  } as const;
-  const menuBottomStyle = {
-    opacity: menuAnim,
-    transform: [
-      {
-        translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
-      },
-    ],
-  } as const;
 
   // 分页 metrics：CJK 方块字假设；排版（边距/行距/段距/缩进）全部进 metrics（RE-1 §2）
   const metrics = useMemo(() => {
@@ -295,14 +328,14 @@ export function ReaderView(props: ReaderViewProps) {
   }, [pages, contentSize, coverScrollX]);
 
   const pageWidth = contentSize?.w ?? 0;
+  /** 平移与瞬切共用 PagerView：瞬切只是不带动画的 setPage */
+  const pagerMode = props.pageTurnStyle === 'slide' || props.pageTurnStyle === 'none';
 
-  // 字体族（v0.11.0）：CJK 方块字假设下同字号不改变分页 metrics
+  // 字体族：CJK 方块字假设下同字号不改变分页 metrics
   const bodyFontClass =
     props.fontFamily === 'sans' ? 'font-sans' : props.fontFamily === 'system' ? '' : 'font-serif';
 
-  // 翻页音效（v0.15.0）：播放回调经 hooks 注入（issue #38：组件不直连 expo-audio）
-
-  // 音量键翻页（v0.11.0）：父级监听系统音量后下发事件，这里只管翻页
+  // 音量键翻页：父级监听系统音量后下发事件，这里只管翻页
   const volumeSeqRef = useRef(0);
   useEffect(() => {
     const event = props.volumeEvent;
@@ -320,8 +353,8 @@ export function ReaderView(props: ReaderViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.volumeEvent?.seq, props.mode, pages.length, props.pageTurnStyle]);
 
-  // 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏；卸载恢复
-  // 状态栏图标明暗跟随阅读主题（v0.18.1）：纸感/护眼/纯白是浅底，必须是深色图标，
+  // 沉浸全屏：菜单隐藏时同步隐藏状态栏；卸载恢复
+  // 状态栏图标明暗跟随阅读主题：纸感/护眼/纯白是浅底，必须是深色图标，
   // 否则系统按应用级深色主题给白图标，压在浅底工具条上几乎看不见
   useEffect(() => {
     const night = props.theme === 'night';
@@ -333,12 +366,13 @@ export function ReaderView(props: ReaderViewProps) {
     };
   }, [props.immersive, controlsVisible, props.theme]);
 
-  /** 按页索引跳转（slide → PagerView；cover/curl → 滚动定位） */
+  /** 按页索引跳转（平移/瞬切 → PagerView；覆盖/仿真 → 滚动定位） */
   const goToPage = (index: number): void => {
     const clamped = Math.min(Math.max(index, 0), Math.max(pages.length - 1, 0));
     if (clamped !== currentPageRef.current) props.playPageSound();
-    if (props.pageTurnStyle === 'slide') {
-      pagerRef.current?.setPage(clamped);
+    if (pagerMode) {
+      if (props.pageTurnStyle === 'none') pagerRef.current?.setPageWithoutAnimation(clamped);
+      else pagerRef.current?.setPage(clamped);
     } else {
       coverScrollRef.current?.scrollToOffset({ offset: clamped * pageWidth, animated: false });
     }
@@ -356,7 +390,7 @@ export function ReaderView(props: ReaderViewProps) {
   const currentOffsetRef = useRef(props.initialOffset > 0 ? props.initialOffset : props.chapterBaseOffset);
   const chapterBaseRef = useRef(props.chapterBaseOffset);
 
-  // 页定位：章节切换 → 恢复/起始偏移；同章排版变化 → 当前所在页首
+  // 页定位：章节切换 → 恢复/起始偏移；同章排版变化（含工具条显隐导致的高度变化）→ 当前页首
   useEffect(() => {
     if (props.mode !== 'paged' || pages.length === 0) return;
     const chapterChanged = chapterBaseRef.current !== props.chapterBaseOffset;
@@ -369,7 +403,7 @@ export function ReaderView(props: ReaderViewProps) {
     if (chapterChanged) currentOffsetRef.current = offset;
     goToPage(pageForOffset(pages, offset));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.chapterBaseOffset, pages.length, props.mode, props.pageTurnStyle]);
+  }, [props.chapterBaseOffset, pages.length, props.mode, props.pageTurnStyle, contentSize?.h]);
 
   const coverPageFromScroll = (event: unknown): number => {
     const x = (event as { nativeEvent: { contentOffset: { x: number } } }).nativeEvent.contentOffset.x;
@@ -377,10 +411,10 @@ export function ReaderView(props: ReaderViewProps) {
     return Math.round(x / w);
   };
 
-  // 点击分区：左 1/3 上一页（页首接上一章），右 1/3 下一页（页尾接下一章），中 1/3 显隐菜单
+  // 点击分区：左 1/3 上一页（页首接上一章），右 1/3 下一页（页尾接下一章），中 1/3 显隐工具条
   const handleTap = (event: { nativeEvent: { pageX: number } }) => {
     if (props.mode !== 'paged') {
-      pokeControls();
+      showControls();
       return;
     }
     const x = event.nativeEvent.pageX;
@@ -395,28 +429,32 @@ export function ReaderView(props: ReaderViewProps) {
       else if (props.hasNextChapter) props.onNextChapter();
     } else if (controlsVisible) {
       setControlsVisible(false);
+      setSheet('none');
     } else {
-      pokeControls();
+      showControls();
     }
   };
 
   /**
-   * 正文文本块的点击（v0.18.1）：文本块本身是 Pressable（长按划线需要），
-   * 它会吃掉触摸、外层 TouchableWithoutFeedback 收不到 onPress，
-   * 结果就是"点正文没反应、只能点 Aa"。这里把同一次点击转交给分区逻辑。
+   * 正文文本块的点击：文本块本身是 Pressable（长按划线需要），
+   * 它会吃掉触摸、外层收不到 onPress，这里把同一次点击转交给分区逻辑。
    */
   const handleTextTap = (event: { nativeEvent: { pageX: number } }) => {
     if (props.mode === 'scroll') {
       // 滚动模式没有分区翻页，整屏点击即显隐；自动阅读中仍按旧语义暂停/继续
       props.onScrollTap();
-      if (controlsVisible) setControlsVisible(false);
-      else pokeControls();
+      if (controlsVisible) {
+        setControlsVisible(false);
+        setSheet('none');
+      } else {
+        showControls();
+      }
       return;
     }
     handleTap(event);
   };
 
-  // 高亮渲染（v0.12.0）：搜索命中 + 划线区间合并切片（字符级，重叠合并）
+  // 高亮渲染：搜索命中 + 划线区间合并切片（字符级，重叠合并）
   const highlightSpans = (text: string, absoluteStart: number): ReactNode => {
     const ranges: Array<{ start: number; end: number }> = [];
     const searchRange = props.highlightRange;
@@ -524,29 +562,591 @@ export function ReaderView(props: ReaderViewProps) {
   const playingHere = props.playingThisChapter && props.playbackStatus === 'playing';
   const pausedHere = props.playingThisChapter && props.playbackStatus === 'paused';
 
-  /** 设置面板的一行：显示档位选项，当前值高亮；点击调现有 cycle 回调（行为不变，仅为可视化） */
-  const renderTypeRow = <K extends string>(
-    label: string,
-    current: K,
-    options: Record<K, string>,
-    onCycle: () => void,
+  // ---------------------------------------------------------------- 片段构造
+
+  /** 分段选择器：点哪个就是哪个（不再「循环到下一个」） */
+  const renderSegmented = <K extends string>(
+    options: Array<{ key: K; label: string }>,
+    value: K,
+    onSelect: (key: K) => void,
   ) => (
-    <View className="mb-2 flex-row items-center justify-between">
-      <Text className={`w-16 text-xs ${theme.muted}`}>{label}</Text>
-      <View className="flex-row flex-wrap justify-end gap-1.5">
-        {(Object.keys(options) as K[]).map((key) => (
+    <View className={`flex-1 flex-row rounded-xl ${theme.bg} p-0.5`}>
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
           <Pressable
-            key={key}
+            key={option.key}
             accessibilityRole="button"
-            className={`rounded-lg px-2.5 py-1 ${current === key ? theme.action : theme.bg}`}
-            onPress={() => { pokeControls(); onCycle(); }}
+            accessibilityState={{ selected: active }}
+            className={`flex-1 items-center justify-center rounded-lg py-1.5 ${active ? theme.action : ''}`}
+            onPress={() => {
+              hapticLight();
+              onSelect(option.key);
+            }}
           >
-            <Text className={`text-xs ${current === key ? theme.actionText : theme.text}`}>{options[key]}</Text>
+            <Text className={`text-[11px] ${active ? theme.actionText : theme.text}`}>{option.label}</Text>
           </Pressable>
-        ))}
-      </View>
+        );
+      })}
     </View>
   );
+
+  /** 带标签的整行（左侧标签，右侧分段） */
+  const renderSegRow = <K extends string>(
+    label: string,
+    options: Array<{ key: K; label: string }>,
+    value: K,
+    onSelect: (key: K) => void,
+  ) => (
+    <View className="mb-1.5 flex-row items-center gap-2">
+      <Text className={`w-12 text-[11px] ${theme.muted}`}>{label}</Text>
+      {renderSegmented(options, value, onSelect)}
+    </View>
+  );
+
+  /** 数字步进：A- / A+ */
+  const stepFontSize = (delta: number) => {
+    const index = FONT_SIZE_KEYS.indexOf(props.fontSize);
+    const next = FONT_SIZE_KEYS[Math.min(Math.max(index + delta, 0), FONT_SIZE_KEYS.length - 1)];
+    if (next === props.fontSize) return;
+    hapticLight();
+    props.onSelectFontSize(next);
+  };
+
+  const fontStepButton = (label: string, delta: number) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className={`h-9 w-9 items-center justify-center rounded-xl ${theme.bg}`}
+      onPress={() => stepFontSize(delta)}
+    >
+      <Text className={`text-[13px] font-semibold ${theme.text}`}>{label}</Text>
+    </Pressable>
+  );
+
+  // ---------------------------------------------------------------- 设置面板
+
+  const renderSettingsSheet = () => {
+    const sizeLabels: Record<FontSizeKey, StringKey> = {
+      small: 'reader.sizeSmall',
+      standard: 'reader.sizeStandard',
+      large: 'reader.sizeLarge',
+      xlarge: 'reader.sizeXLarge',
+    };
+    const spacingLabels: Record<'compact' | 'standard' | 'relaxed', StringKey> = {
+      compact: 'reader.tight',
+      standard: 'reader.medium',
+      relaxed: 'reader.loose',
+    };
+    const marginLabels: Record<MarginKey, StringKey> = {
+      narrow: 'reader.tight',
+      standard: 'reader.medium',
+      wide: 'reader.loose',
+    };
+    const themeLabels: Record<ReaderThemeKey, StringKey> = {
+      paper: 'reader.themePaper',
+      green: 'reader.themeGreen',
+      white: 'reader.themeWhite',
+      night: 'reader.themeNight',
+    };
+
+    return (
+      <View className="px-3 pb-3 pt-2.5">
+        {/* 第一行：亮度 + 护眼 */}
+        <View className="mb-2 flex-row items-center gap-2">
+          <View className={`flex-1 flex-row items-center gap-2 rounded-xl px-3 ${theme.bg}`}>
+            <Ionicons name="sunny-outline" size={15} color={theme.mutedHex} />
+            <ReaderSlider
+              value={Math.round(props.brightness * 100)}
+              max={100}
+              trackColor={theme.mutedHex}
+              fillColor={theme.textHex}
+              thumbColor={theme.actionHex}
+              onPreview={(v) => {
+                const next = Math.max(MIN_BRIGHTNESS, v / 100);
+                props.onBrightnessChange(next);
+                showControls();
+              }}
+              onCommit={(v) => props.onBrightnessChange(Math.max(MIN_BRIGHTNESS, v / 100))}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: props.eyeCare }}
+            className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2.5 ${props.eyeCare ? theme.action : theme.bg}`}
+            onPress={() => {
+              hapticLight();
+              props.onToggleEyeCare();
+              showControls();
+            }}
+          >
+            <Text className={`text-[11px] ${props.eyeCare ? theme.actionText : theme.text}`}>
+              {t('reader.eyeCare')}
+            </Text>
+            <View
+              className={`h-4 w-7 justify-center rounded-full px-0.5 ${
+                props.eyeCare ? 'bg-white/40' : 'bg-black/10'
+              }`}
+            >
+              <View className={`h-3 w-3 rounded-full bg-white ${props.eyeCare ? 'self-end' : 'self-start'}`} />
+            </View>
+          </Pressable>
+        </View>
+
+        {/* 第二行：字号 A- / 档位 / A+ */}
+        <View className="mb-2 flex-row items-center gap-2">
+          {fontStepButton('A-', -1)}
+          {renderSegmented(
+            FONT_SIZE_KEYS.map((key) => ({ key, label: t(sizeLabels[key]) })),
+            props.fontSize,
+            props.onSelectFontSize,
+          )}
+          {fontStepButton('A+', 1)}
+        </View>
+
+        {/* 第三行：背景四色点 */}
+        <View className="mb-2 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-3">
+            {THEME_CYCLE.map((key) => {
+              const tokens = READER_THEMES[key];
+              const active = props.theme === key;
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(themeLabels[key])}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => {
+                    hapticLight();
+                    props.onSelectTheme(key);
+                    showControls();
+                  }}
+                  className="items-center justify-center rounded-full"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    backgroundColor: tokens.bgHex,
+                    borderWidth: active ? 2 : StyleSheet.hairlineWidth,
+                    borderColor: active ? tokens.actionHex : tokens.mutedHex,
+                  }}
+                >
+                  {active ? <Ionicons name="checkmark" size={13} color={tokens.textHex} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text className={`text-[11px] ${theme.muted}`}>{t('reader.background')}</Text>
+        </View>
+
+        {/* 第四行：翻页动画 + 间距 */}
+        <View className="mb-2 flex-row items-center gap-2">
+          {renderSegmented(
+            PAGE_TURN_KEYS.map((key) => ({
+              key,
+              label:
+                key === 'slide'
+                  ? t('reader.turnSlideLong')
+                  : key === 'cover'
+                    ? t('reader.turnCoverLong')
+                    : key === 'curl'
+                      ? t('reader.turnCurlLong')
+                      : t('reader.turnNone'),
+            })),
+            props.pageTurnStyle,
+            (key) => {
+              props.onSelectPageTurnStyle(key);
+              // 滚动模式下选了翻页动画，说明想看翻页效果，顺手切模式
+              if (props.mode === 'scroll') props.onToggleMode();
+            },
+          )}
+          <Pressable
+            accessibilityRole="button"
+            className={`flex-row items-center gap-0.5 rounded-xl px-2.5 py-2 ${extraRow === 'spacing' ? theme.action : theme.bg}`}
+            onPress={() => {
+              hapticLight();
+              setExtraRow(extraRow === 'spacing' ? 'none' : 'spacing');
+            }}
+          >
+            <Text className={`text-[11px] ${extraRow === 'spacing' ? theme.actionText : theme.text}`}>
+              {t('reader.spacing')}
+            </Text>
+            <Ionicons
+              name={extraRow === 'spacing' ? 'chevron-down' : 'chevron-forward'}
+              size={12}
+              color={extraRow === 'spacing' ? theme.actionHex : theme.mutedHex}
+            />
+          </Pressable>
+        </View>
+
+        {extraRow === 'spacing' ? (
+          <View className="mb-2 rounded-xl px-1 py-1.5">
+            {renderSegRow(
+              t('reader.lineHeight'),
+              LINE_SPACING_KEYS.map((key) => ({ key, label: t(spacingLabels[key]) })),
+              props.lineSpacing,
+              props.onSelectLineSpacing,
+            )}
+            {renderSegRow(
+              t('reader.paragraphSpacing', { value: '' }).trim(),
+              PARAGRAPH_SPACING_KEYS.map((key) => ({ key, label: t(spacingLabels[key]) })),
+              props.paragraphSpacing,
+              props.onSelectParagraphSpacing,
+            )}
+            {renderSegRow(
+              t('reader.margin'),
+              MARGIN_KEYS.map((key) => ({ key, label: t(marginLabels[key]) })),
+              props.margin,
+              props.onSelectMargin,
+            )}
+          </View>
+        ) : null}
+
+        {/* 第五行：自动阅读 + 更多设置项 */}
+        <View className="flex-row items-center justify-between">
+          {props.mode === 'scroll' ? (
+            <Pressable
+              accessibilityRole="button"
+              className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2 ${
+                props.autoScrollOffsetRef !== null ? theme.action : theme.bg
+              }`}
+              onPress={() => {
+                hapticLight();
+                props.onCycleAutoScroll();
+                showControls();
+              }}
+            >
+              <Text
+                className={`text-[11px] ${
+                  props.autoScrollOffsetRef !== null ? theme.actionText : theme.text
+                }`}
+              >
+                {t('reader.autoRead')}
+              </Text>
+              <Text
+                className={`text-[10px] ${
+                  props.autoScrollOffsetRef !== null ? theme.actionText : theme.muted
+                }`}
+              >
+                {props.autoScrollSpeedLabel}
+              </Text>
+            </Pressable>
+          ) : (
+            <View className={`rounded-xl px-3 py-2 ${theme.bg}`}>
+              <Text className={`text-[11px] ${theme.text}`}>{t('reader.modePaged')}</Text>
+            </View>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            className={`rounded-xl px-3 py-2 ${extraRow === 'more' ? theme.action : theme.bg}`}
+            onPress={() => {
+              hapticLight();
+              setExtraRow(extraRow === 'more' ? 'none' : 'more');
+            }}
+          >
+            <Text className={`text-[11px] ${extraRow === 'more' ? theme.actionText : theme.text}`}>
+              {extraRow === 'more' ? t('reader.less') : t('reader.moreSettings')}
+            </Text>
+          </Pressable>
+        </View>
+
+        {extraRow === 'more' ? (
+          <View className="mt-2 gap-1.5">
+            {renderSegRow(
+              t('reader.fontFamilyLabel'),
+              FONT_FAMILY_KEYS.map((key) => ({
+                key,
+                label:
+                  key === 'serif'
+                    ? t('reader.fontSerif')
+                    : key === 'sans'
+                      ? t('reader.fontSans')
+                      : t('reader.fontSystem'),
+              })),
+              props.fontFamily,
+              props.onSelectFontFamily,
+            )}
+            {renderSegRow(
+              t('reader.modeLabel'),
+              [
+                { key: 'scroll' as const, label: t('reader.modeScroll') },
+                { key: 'paged' as const, label: t('reader.modePaged') },
+              ],
+              props.mode,
+              (key) => {
+                if (key !== props.mode) props.onToggleMode();
+              },
+            )}
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                accessibilityRole="button"
+                className={`flex-1 items-center rounded-xl py-2 ${props.indentEnabled ? theme.action : theme.bg}`}
+                onPress={() => {
+                  hapticLight();
+                  props.onToggleIndent();
+                }}
+              >
+                <Text className={`text-[11px] ${props.indentEnabled ? theme.actionText : theme.text}`}>
+                  {`${t('reader.indent')} ${props.indentEnabled ? t('common.on') : t('common.off')}`}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                className={`flex-1 items-center rounded-xl py-2 ${props.justifyEnabled ? theme.action : theme.bg}`}
+                onPress={() => {
+                  hapticLight();
+                  props.onToggleJustify();
+                }}
+              >
+                <Text className={`text-[11px] ${props.justifyEnabled ? theme.actionText : theme.text}`}>
+                  {`${t('reader.justify')} ${props.justifyEnabled ? t('common.on') : t('common.off')}`}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                className={`flex-1 items-center rounded-xl py-2 ${theme.bg}`}
+                onPress={() => {
+                  hapticLight();
+                  setSheet('listen');
+                }}
+              >
+                <Text className={`text-[11px] ${theme.text}`}>{t('reader.panelListen')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  // ---------------------------------------------------------------- 其他面板
+
+  const renderCatalogSheet = () => (
+    <View className="px-3 pb-3 pt-2.5">
+      <Text className={`mb-2 text-[11px] ${theme.muted}`}>
+        {t('reader.catalog')} · {props.chapterIndex + 1}/{props.chapterCount}
+      </Text>
+      <FlatList
+        data={Array.from({ length: props.chapterCount }, (_, i) => i)}
+        keyExtractor={(i) => String(i)}
+        style={{ maxHeight: Math.round(windowH * 0.5) }}
+        renderItem={({ item: i }) => {
+          const active = i === props.chapterIndex;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              className={`flex-row items-center rounded-lg px-3 py-2 ${active ? theme.action : ''}`}
+              onPress={() => {
+                hapticLight();
+                props.onSeekChapter(i);
+                closeSheet();
+              }}
+            >
+              <Text className={`mr-3 w-7 text-[11px] ${active ? theme.actionText : theme.muted}`}>
+                {i + 1}
+              </Text>
+              <Text
+                className={`flex-1 text-xs ${active ? theme.actionText : theme.text}`}
+                numberOfLines={1}
+              >
+                {props.getChapterTitle(i)}
+              </Text>
+            </Pressable>
+          );
+        }}
+      />
+    </View>
+  );
+
+  const renderBookmarksSheet = () => (
+    <View className="px-3 pb-3 pt-2.5">
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text className={`text-[11px] ${theme.muted}`}>
+          {t('reader.bookmark')} · {props.bookmarks.length}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          className={`rounded-xl px-3 py-1.5 ${theme.action}`}
+          onPress={() => {
+            hapticLight();
+            props.onAddBookmark();
+          }}
+        >
+          <Text className={`text-[11px] ${theme.actionText}`}>{t('reader.addBookmark')}</Text>
+        </Pressable>
+      </View>
+      {props.bookmarks.length === 0 ? (
+        <Text className={`py-6 text-center text-[11px] ${theme.muted}`}>
+          {t('reader.bookmarkEmpty')}
+        </Text>
+      ) : (
+        <FlatList
+          data={props.bookmarks}
+          keyExtractor={(item) => item.id}
+          style={{ maxHeight: Math.round(windowH * 0.45) }}
+          renderItem={({ item }) => (
+            <View className={`mb-1 flex-row items-center gap-2 rounded-lg ${theme.bg} px-2 py-1.5`}>
+              <Pressable
+                accessibilityRole="button"
+                className="flex-1"
+                onPress={() => {
+                  hapticLight();
+                  props.onOpenBookmark(item);
+                  closeSheet();
+                }}
+              >
+                <Text className={`text-xs ${theme.text}`} numberOfLines={1}>
+                  {item.chapterTitle}
+                </Text>
+                <Text className={`text-[10px] ${theme.muted}`} numberOfLines={1}>
+                  {item.excerpt}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.delete')}
+                className="px-1.5 py-1"
+                onPress={() => {
+                  hapticLight();
+                  props.onDeleteBookmark(item.id);
+                }}
+              >
+                <Ionicons name="trash-outline" size={15} color={theme.mutedHex} />
+              </Pressable>
+            </View>
+          )}
+        />
+      )}
+    </View>
+  );
+
+  const renderListenSheet = () => (
+    <View className="px-3 pb-3 pt-2.5">
+      <View className="mb-2 flex-row items-center gap-2">
+        {playingHere ? (
+          <Pressable
+            accessibilityRole="button"
+            className={`flex-row items-center gap-1.5 rounded-xl px-4 py-2 ${theme.action}`}
+            onPress={() => props.onPause()}
+          >
+            <Ionicons name="pause" size={14} color={theme.actionHex} />
+            <Text className={`text-[11px] ${theme.actionText}`}>{t('reader.pause')}</Text>
+          </Pressable>
+        ) : pausedHere ? (
+          <Pressable
+            accessibilityRole="button"
+            className={`flex-row items-center gap-1.5 rounded-xl px-4 py-2 ${theme.action}`}
+            onPress={() => props.onResume()}
+          >
+            <Ionicons name="play" size={14} color={theme.actionHex} />
+            <Text className={`text-[11px] ${theme.actionText}`}>{t('reader.resume')}</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            className={`flex-row items-center gap-1.5 rounded-xl px-4 py-2 ${theme.action}`}
+            onPress={() => props.onPlayChapter()}
+          >
+            <Ionicons name="play" size={14} color={theme.actionHex} />
+            <Text className={`text-[11px] ${theme.actionText}`}>{t('reader.playChapter')}</Text>
+          </Pressable>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          className={`rounded-xl px-3 py-2 ${theme.bg}`}
+          onPress={() => props.onCycleRate()}
+        >
+          <Text className={`text-[11px] ${theme.text}`}>{props.playbackRate}×</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          className={`rounded-xl px-3 py-2 ${theme.bg}`}
+          onPress={() => {
+            hapticLight();
+            props.onCycleSleep();
+          }}
+        >
+          <Text
+            className={`text-[11px] ${
+              props.sleepLabel !== t('reader.sleepOff') ? theme.accent : theme.text
+            }`}
+          >
+            {props.sleepLabel}
+          </Text>
+        </Pressable>
+      </View>
+      {props.playingThisChapter && props.segmentCount > 0 ? (
+        <View className="flex-row items-center gap-2">
+          <Text className={`text-[10px] ${theme.muted}`}>{t('reader.play')}</Text>
+          <ReaderSlider
+            value={props.segmentIndex}
+            max={Math.max(props.segmentCount - 1, 0)}
+            trackColor={theme.mutedHex}
+            fillColor={theme.textHex}
+            thumbColor={theme.actionHex}
+            onPreview={() => undefined}
+            onCommit={(index) => {
+              if (index !== props.segmentIndex) {
+                hapticLight();
+                props.onSeekSegment(index);
+              }
+            }}
+          />
+          <Text className={`text-[10px] ${theme.muted}`}>
+            {t('reader.segmentBadge', { index: props.segmentIndex + 1, total: props.segmentCount })}
+          </Text>
+        </View>
+      ) : (
+        <Text className={`text-[11px] ${theme.muted}`}>{t('reader.segmentHint')}</Text>
+      )}
+    </View>
+  );
+
+  const renderSheetBody = () => {
+    switch (sheet) {
+      case 'settings':
+        return renderSettingsSheet();
+      case 'catalog':
+        return renderCatalogSheet();
+      case 'bookmarks':
+        return renderBookmarksSheet();
+      case 'listen':
+        return renderListenSheet();
+      default:
+        return null;
+    }
+  };
+
+  // ---------------------------------------------------------------- 底栏
+
+  const renderEntry = (params: {
+    icon: 'list' | 'bookmarks-outline' | 'moon' | 'settings-outline';
+    label: string;
+    active?: boolean;
+    onPress: () => void;
+  }) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: params.active === true }}
+      className="flex-1 items-center gap-0.5 py-1"
+      onPress={params.onPress}
+    >
+      <Ionicons
+        name={params.icon === 'list' ? 'list-outline' : params.icon}
+        size={20}
+        color={params.active ? theme.actionHex : theme.textHex}
+        style={params.active ? undefined : styles.entryIconIdle}
+      />
+      <Text
+        className={`text-[10px] ${params.active ? theme.accent : theme.muted}`}
+        numberOfLines={1}
+      >
+        {params.label}
+      </Text>
+    </Pressable>
+  );
+
+  const nightActive = props.theme === 'night';
 
   const pageNumRow = (page: ReaderPage) => (
     <Text className={`mt-4 text-center text-[10px] ${theme.muted}`}>
@@ -556,230 +1156,253 @@ export function ReaderView(props: ReaderViewProps) {
 
   return (
     <View className={`flex-1 ${theme.bg}`}>
-      {/* 正文全屏区：菜单悬浮其上，显隐不再引起正文重排（v0.8.0） */}
+      {/* 顶部工具条（单行，流内）：返回 / 章节名 / 加书签 / 更多；设置项一律不进这里 */}
+      {controlsVisible ? (
+        <Animated.View
+          style={topBarStyle}
+          className={`border-b ${theme.surface} ${theme.border}`}
+        >
+          <View
+            className="flex-row items-center px-1"
+            style={{ paddingTop: insets.top + 4, paddingBottom: 4 }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('common.back')}
+              className="h-9 w-9 items-center justify-center"
+              onPress={() => {
+                hapticLight();
+                props.onBack();
+              }}
+            >
+              <Ionicons name="chevron-back" size={22} color={theme.textHex} />
+            </Pressable>
+            <Text className={`flex-1 text-center text-xs ${theme.muted}`} numberOfLines={1}>
+              {props.chapterTitle}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('reader.addBookmark')}
+              className="h-9 w-9 items-center justify-center"
+              onPress={() => {
+                hapticLight();
+                props.onAddBookmark();
+              }}
+            >
+              <Ionicons name="bookmark-outline" size={19} color={theme.textHex} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('reader.more')}
+              className="h-9 w-9 items-center justify-center"
+              onPress={() => openSheet('settings')}
+            >
+              <Ionicons name="ellipsis-horizontal" size={20} color={theme.textHex} />
+            </Pressable>
+          </View>
+        </Animated.View>
+      ) : null}
+
+      {/* 正文区：工具条与底栏都在流内，正文高度稳定，显隐不重新分页 */}
       <View
         className="flex-1"
-        style={{ paddingTop: topBarHeight }}
-        onLayout={(e) => {
-          // layout.height 是含内边距的外框高度；分页只能用真正的正文高度，
-          // 否则每页会多算 topBarHeight 对应的行数，页末行被裁掉
+        style={{ paddingTop: 8 }}
+        onLayout={(e) =>
+          // layout.height 含这段内边距，分页要用真正的正文高度，否则每页会多排一行把末行顶出屏幕
           setContentSize({
             w: e.nativeEvent.layout.width,
-            h: e.nativeEvent.layout.height - topBarHeight,
-          });
-        }}
+            h: e.nativeEvent.layout.height - 8,
+          })
+        }
       >
-        {props.mode === 'paged' && contentSize && metrics ? (
-          <TouchableWithoutFeedback
-            onPress={(e) => {
-              handleTap(e);
-            }}
-          >
-            <View className="flex-1" style={{ paddingHorizontal: marginPx }}>
-              <PagerView
-                ref={pagerRef}
-                style={{ flex: 1 }}
-                initialPage={0}
-                overdrag={false}
-                onPageSelected={(e) => {
-                  currentPageRef.current = e.nativeEvent.position;
-                  setActivePage(e.nativeEvent.position);
-                  const page = pages[e.nativeEvent.position];
-                  if (page) {
-                    currentOffsetRef.current = page.startOffset;
-                    props.onPageChange(page.startOffset);
-                  }
-                }}
-              >
-                {pages.map((page) =>
-                  Math.abs(page.ordinal - activePage) <= RENDER_WINDOW ? (
-                    <Pressable key={page.ordinal} className="flex-1" onPress={handleTextTap}>
-                      {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
-                      {pageNumRow(page)}
-                    </Pressable>
-                  ) : (
-                    <View key={page.ordinal} className="flex-1" />
-                  ),
-                )}
-              </PagerView>
-            </View>
-          </TouchableWithoutFeedback>
+        {props.mode === 'paged' && contentSize && metrics && pagerMode ? (
+          <View className="flex-1" style={{ paddingHorizontal: marginPx }}>
+            <PagerView
+              ref={pagerRef}
+              style={{ flex: 1 }}
+              initialPage={0}
+              overdrag={false}
+              onPageSelected={(e) => {
+                currentPageRef.current = e.nativeEvent.position;
+                setActivePage(e.nativeEvent.position);
+                const page = pages[e.nativeEvent.position];
+                if (page) {
+                  currentOffsetRef.current = page.startOffset;
+                  props.onPageChange(page.startOffset);
+                }
+              }}
+            >
+              {pages.map((page) =>
+                Math.abs(page.ordinal - activePage) <= RENDER_WINDOW ? (
+                  <Pressable key={page.ordinal} className="flex-1" onPress={handleTextTap}>
+                    {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
+                    {pageNumRow(page)}
+                  </Pressable>
+                ) : (
+                  <View key={page.ordinal} className="flex-1" />
+                ),
+              )}
+            </PagerView>
+          </View>
         ) : null}
         {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'curl' ? (
-          <TouchableWithoutFeedback onPress={handleTap}>
-            <View className="flex-1">
-              <Animated.FlatList
-                ref={coverScrollRef}
-                style={{ flex: 1 }}
-                data={pages}
-                keyExtractor={(item) => String(item.ordinal)}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                initialNumToRender={4}
-                maxToRenderPerBatch={4}
-                windowSize={5}
-                onScroll={Animated.event(
-                  [{ nativeEvent: { contentOffset: { x: coverScrollX } } }],
-                  {
-                    useNativeDriver: true,
-                    listener: (event) => {
-                      const idx = coverPageFromScroll(event);
-                      currentPageRef.current = idx;
-                      const page = pages[idx];
-                      if (page) currentOffsetRef.current = page.startOffset;
+          <View className="flex-1">
+            <Animated.FlatList
+              ref={coverScrollRef}
+              style={{ flex: 1 }}
+              data={pages}
+              keyExtractor={(item) => String(item.ordinal)}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: coverScrollX } } }], {
+                useNativeDriver: true,
+                listener: (event) => {
+                  const idx = coverPageFromScroll(event);
+                  currentPageRef.current = idx;
+                  const page = pages[idx];
+                  if (page) currentOffsetRef.current = page.startOffset;
+                },
+              })}
+              renderItem={({ item: page }) => (
+                <Animated.View
+                  className={theme.bg}
+                  style={[
+                    { width: contentSize.w, height: contentSize.h },
+                    coverTransforms[page.ordinal],
+                    {
+                      // 卷页近似：3D 翻页（rotationY + 透视），真 Skia 着色器卷页为后续增强
+                      transform: [
+                        { perspective: 800 },
+                        {
+                          rotateY: coverScrollX.interpolate({
+                            inputRange: [
+                              (page.ordinal - 1) * contentSize.w,
+                              page.ordinal * contentSize.w,
+                              (page.ordinal + 1) * contentSize.w,
+                            ],
+                            outputRange: ['90deg', '0deg', '-90deg'],
+                            extrapolate: 'clamp',
+                          }),
+                        },
+                      ],
+                      backfaceVisibility: 'hidden',
                     },
-                  },
-                )}
-                renderItem={({ item: page }) => (
-                  <Animated.View
-                    className={theme.bg}
-                    style={[
-                      { width: contentSize.w, height: contentSize.h },
-                      coverTransforms[page.ordinal],
-                      {
-                        // 卷页近似：3D 翻页（rotationY + 透视），真 Skia 着色器卷页为 v0.4.x 增强
-                        transform: [
-                          { perspective: 800 },
-                          {
-                            rotateY: coverScrollX.interpolate({
-                              inputRange: [
-                                (page.ordinal - 1) * contentSize.w,
-                                page.ordinal * contentSize.w,
-                                (page.ordinal + 1) * contentSize.w,
-                              ],
-                              outputRange: ['90deg', '0deg', '-90deg'],
-                              extrapolate: 'clamp',
-                            }),
-                          },
-                        ],
-                        backfaceVisibility: 'hidden',
-                      },
-                    ]}
-                  >
-                    <Pressable className="flex-1" onPress={handleTextTap}>
-                      {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
-                      {pageNumRow(page)}
-                    </Pressable>
-                  </Animated.View>
-                )}
-              />
-            </View>
-          </TouchableWithoutFeedback>
+                  ]}
+                >
+                  <Pressable className="flex-1" onPress={handleTextTap}>
+                    {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
+                    {pageNumRow(page)}
+                  </Pressable>
+                </Animated.View>
+              )}
+            />
+          </View>
         ) : null}
         {props.mode === 'paged' && contentSize && metrics && props.pageTurnStyle === 'cover' ? (
-          <TouchableWithoutFeedback onPress={handleTap}>
-            <View className="flex-1">
-              <Animated.FlatList
-                ref={coverScrollRef}
-                style={{ flex: 1 }}
-                data={pages}
-                keyExtractor={(item) => String(item.ordinal)}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                initialNumToRender={4}
-                maxToRenderPerBatch={4}
-                windowSize={5}
-                onScroll={Animated.event(
-                  [{ nativeEvent: { contentOffset: { x: coverScrollX } } }],
-                  {
-                    useNativeDriver: true,
-                    listener: (event) => {
-                      const idx = coverPageFromScroll(event);
-                      currentPageRef.current = idx;
-                      const page = pages[idx];
-                      if (page) currentOffsetRef.current = page.startOffset;
-                    },
-                  },
-                )}
-                renderItem={({ item: page }) => (
-                  <Animated.View
-                    className={theme.bg}
-                    style={[
-                      { width: contentSize.w, height: contentSize.h },
-                      coverTransforms[page.ordinal],
-                    ]}
-                  >
-                    <Pressable className="flex-1" onPress={handleTextTap}>
-                      {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
-                      {pageNumRow(page)}
-                    </Pressable>
-                  </Animated.View>
-                )}
-              />
-            </View>
-          </TouchableWithoutFeedback>
+          <View className="flex-1">
+            <Animated.FlatList
+              ref={coverScrollRef}
+              style={{ flex: 1 }}
+              data={pages}
+              keyExtractor={(item) => String(item.ordinal)}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: coverScrollX } } }], {
+                useNativeDriver: true,
+                listener: (event) => {
+                  const idx = coverPageFromScroll(event);
+                  currentPageRef.current = idx;
+                  const page = pages[idx];
+                  if (page) currentOffsetRef.current = page.startOffset;
+                },
+              })}
+              renderItem={({ item: page }) => (
+                <Animated.View
+                  className={theme.bg}
+                  style={[
+                    { width: contentSize.w, height: contentSize.h },
+                    coverTransforms[page.ordinal],
+                  ]}
+                >
+                  <Pressable className="flex-1" onPress={handleTextTap}>
+                    {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
+                    {pageNumRow(page)}
+                  </Pressable>
+                </Animated.View>
+              )}
+            />
+          </View>
         ) : null}
         {props.mode === 'scroll' ? (
-          <TouchableWithoutFeedback
-            onPress={() => {
-              pokeControls();
-              props.onScrollTap();
+          <FlatList
+            ref={scrollListRef}
+            className="flex-1"
+            style={{ paddingHorizontal: marginPx }}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            onScroll={(event) => {
+              scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
             }}
-          >
-            <FlatList
-              ref={scrollListRef}
-              className="flex-1"
-              style={{ paddingHorizontal: marginPx }}
-              // 底部工具条悬浮在正文上：留出尾部空白，避免末行被工具条永久遮住
-              contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
-              onScroll={(event) => {
-                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-              }}
-              scrollEventThrottle={32}
-              data={props.paragraphs}
-              keyExtractor={(item, index) => `${item.startOffset}-${index}`}
-              ListFooterComponent={
-                // 段落块只覆盖自身高度，正文之下的空白点不动（ScrollView 吃掉触摸）。
-                // 用一段透明 footer 占位，让"点空白显隐工具条"在章节末尾也成立。
-                <Pressable style={{ height: 320 }} onPress={handleTextTap} />
-              }
-              onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
-              renderItem={({ item }) => {
-                const isHighlighted =
-                  props.highlightOffset !== null &&
-                  item.startOffset <= props.highlightOffset &&
-                  props.highlightOffset < item.endOffset;
-                return (
-                  <Pressable
-                    onPress={handleTextTap}
-                    onLongPress={() => {
-                      hapticLight();
-                      props.onLongPressText({
-                        start: item.startOffset,
-                        end: item.startOffset + item.text.length,
-                      });
+            scrollEventThrottle={32}
+            data={props.paragraphs}
+            keyExtractor={(item, index) => `${item.startOffset}-${index}`}
+            ListFooterComponent={
+              // 段落块只覆盖自身高度，正文之下的空白点不动（ScrollView 吃掉触摸）。
+              // 用一段透明 footer 占位，让"点空白显隐工具条"在章节末尾也成立。
+              <Pressable style={{ height: 320 }} onPress={handleTextTap} />
+            }
+            onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
+            renderItem={({ item }) => {
+              const isHighlighted =
+                props.highlightOffset !== null &&
+                item.startOffset <= props.highlightOffset &&
+                props.highlightOffset < item.endOffset;
+              return (
+                <Pressable
+                  onPress={handleTextTap}
+                  onLongPress={() => {
+                    hapticLight();
+                    props.onLongPressText({
+                      start: item.startOffset,
+                      end: item.startOffset + item.text.length,
+                    });
+                  }}
+                  delayLongPress={350}
+                >
+                  <Text
+                    className={`${bodyFontClass} ${theme.text} ${
+                      isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
+                    }`}
+                    style={{
+                      fontSize,
+                      lineHeight: fontSize * lineSpacing,
+                      paddingVertical: paragraphSpacingPx / 2,
+                      textAlign: props.justifyEnabled ? 'justify' : 'left',
                     }}
-                    delayLongPress={350}
                   >
-                    <Text
-                      className={`${bodyFontClass} ${theme.text} ${
-                        isHighlighted ? `rounded-lg ${theme.highlightBg}` : ''
-                      }`}
-                      style={{
-                        fontSize,
-                        lineHeight: fontSize * lineSpacing,
-                        paddingVertical: paragraphSpacingPx / 2,
-                        textAlign: props.justifyEnabled ? 'justify' : 'left',
-                      }}
-                    >
-                      {props.indentEnabled ? '\u3000\u3000' : ''}
-                      {highlightSpans(item.text, item.startOffset)}
-                    </Text>
-                  </Pressable>
-                );
-              }}
-            />
-          </TouchableWithoutFeedback>
+                    {props.indentEnabled ? '\u3000\u3000' : ''}
+                    {highlightSpans(item.text, item.startOffset)}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
         ) : null}
       </View>
 
-      {/* 长按操作条（v0.12.0）：长按文本块后悬浮显示 */}
+      {/* 长按操作条：挂在底栏之上，避免被四入口挡住 */}
       {props.longPressRange ? (
         <View
           pointerEvents="auto"
-          className={`absolute inset-x-0 bottom-28 mx-4 flex-row items-center gap-2 rounded-xl border p-2 ${theme.surface} ${theme.border}`}
+          className={`absolute inset-x-0 mx-4 flex-row items-center gap-2 rounded-xl border p-2 ${theme.surface} ${theme.border}`}
+          style={{ bottom: footerHeight + 8 }}
         >
           <Text className={`flex-1 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
             {t('reader.selectedChars', { count: props.longPressRange.end - props.longPressRange.start })}
@@ -808,273 +1431,152 @@ export function ReaderView(props: ReaderViewProps) {
         </View>
       ) : null}
 
-      {/* 顶部悬浮菜单（UI 重构）：只保留导航 / 章节名 / 书签 / Aa 入口；排版项收进底部面板 */}
-      <Animated.View
-        pointerEvents={menuPointer}
-        onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}
-        className={`absolute inset-x-0 top-0 rounded-b-2xl border-b ${theme.surface} ${theme.border}`}
-        style={menuTopStyle}
-      >
-        <View className="px-4 pb-3" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center justify-between">
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-3 py-1.5`}
+      {/* 听书悬浮球：不占排版空间，点按播放/暂停，长按展开听书面板 */}
+      {sheet === 'none' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('reader.listenHint')}
+          className={`absolute h-12 w-12 items-center justify-center rounded-full border ${theme.surface} ${theme.border}`}
+          style={[styles.listenBall, playingHere ? { borderColor: theme.actionHex } : null]}
+          onPress={() => {
+            hapticLight();
+            if (playingHere) props.onPause();
+            else if (pausedHere) props.onResume();
+            else props.onPlayChapter();
+          }}
+          onLongPress={() => openSheet('listen')}
+          delayLongPress={400}
+        >
+          <Ionicons
+            name={playingHere ? 'headset' : 'headset-outline'}
+            size={21}
+            color={playingHere ? theme.actionHex : theme.textHex}
+          />
+        </Pressable>
+      ) : null}
+
+      {/* 底部：翻页行 + 四入口（常驻，进流） */}
+      {controlsVisible ? (
+        <Animated.View
+          style={[footerStyle, { paddingBottom: insets.bottom }]}
+          className={`border-t ${theme.surface} ${theme.border}`}
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+        >
+          <View className="flex-row items-center gap-2 px-3 pt-1">
+            <Pressable
+              accessibilityRole="button"
+              disabled={!props.hasPrevChapter}
+              style={!props.hasPrevChapter ? styles.navDisabled : null}
               onPress={() => {
                 hapticLight();
-                props.onBack();
+                props.onPrevChapter();
               }}
             >
-              <Text className={`text-sm ${theme.text}`}>{t('reader.backToCatalog')}</Text>
+              <Text className={`text-[11px] ${theme.text}`}>{t('reader.prevChapter')}</Text>
             </Pressable>
-            <Text
-              className={`${bodyFontClass} mx-3 flex-1 text-center text-sm font-semibold ${theme.text}`}
-              numberOfLines={1}
-            >
-              {props.chapterTitle}
-            </Text>
-            <View className="flex-row items-center gap-2">
-              <Pressable accessibilityRole="button"
-                className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-                onPress={() => {
-                  pokeControls();
-                  props.onAddBookmark();
-                }}
-              >
-                <Text className={`text-xs ${theme.text}`}>{t('reader.bookmark')}</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button"
-                accessibilityLabel={t('reader.typeset')}
-                className={`rounded-lg ${panelTab === 'typeset' ? theme.action : theme.bg} px-2.5 py-1.5`}
-                onPress={() => {
-                  hapticLight();
-                  togglePanel('typeset');
-                }}
-              >
-                <Text className={`text-xs font-semibold ${panelTab === 'typeset' ? theme.actionText : theme.text}`}>Aa</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* 底部悬浮菜单（UI 重构）：四 tab 设置面板 + 章节导航 */}
-      <Animated.View
-        pointerEvents={menuPointer}
-        className={`absolute inset-x-0 bottom-0 rounded-t-2xl border-t ${theme.surface} ${theme.border}`}
-        style={[menuBottomStyle, { paddingBottom: insets.bottom }]}
-      >
-        {panelTab !== 'none' ? (
-          <View className={`border-b px-4 pb-3 pt-3 ${theme.border}`}>
-            <View className="mb-3 flex-row items-center gap-2">
-              {([
-                ['catalog', 'reader.panelCatalog'],
-                ['progress', 'reader.panelProgress'],
-                ['typeset', 'reader.panelTypeset'],
-                ['listen', 'reader.panelListen'],
-              ] as const).map(([key, labelKey]) => (
-                <Pressable
-                  key={key}
-                  accessibilityRole="tab"
-                  className={`rounded-full px-3 py-1.5 ${panelTab === key ? theme.action : theme.bg}`}
-                  onPress={() => {
-                    hapticLight();
-                    setPanelTab(key);
-                  }}
-                >
-                  <Text className={`text-xs ${panelTab === key ? theme.actionText : theme.text}`}>{t(labelKey)}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {panelTab === 'typeset' ? (
-              <View>
-                <View className="mb-2 flex-row items-center justify-between">
-                  <Text className={`text-xs ${theme.muted}`}>{t('reader.fontSize', { size: '' })}</Text>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable accessibilityRole="button" onPress={() => { pokeControls(); props.onCycleFontSize(); }}>
-                      <Text className={`text-lg ${theme.text}`}>−</Text>
-                    </Pressable>
-                    <Text className={`w-10 text-center text-sm font-semibold ${theme.text}`}>{Math.round(fontSize)}</Text>
-                    <Pressable accessibilityRole="button" onPress={() => { pokeControls(); props.onCycleFontSize(); }}>
-                      <Text className={`text-lg ${theme.text}`}>＋</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                {renderTypeRow(t('reader.lineHeight'), props.lineSpacing, {
-                  compact: t('reader.tight'), standard: t('reader.medium'), relaxed: t('reader.loose'),
-                }, props.onCycleLineSpacing)}
-                {renderTypeRow(t('reader.paragraphSpacing', { value: '' }).trim(), props.paragraphSpacing, {
-                  compact: t('reader.tight'), standard: t('reader.medium'), relaxed: t('reader.loose'),
-                }, props.onCycleParagraphSpacing)}
-                {renderTypeRow(t('reader.theme'), props.theme, {
-                  paper: t('reader.themePaper'), green: t('reader.themeGreen'),
-                  white: t('reader.themeWhite'), night: t('reader.themeNight'),
-                }, props.onCycleTheme)}
-                {renderTypeRow(t('reader.fontFamilyLabel'), props.fontFamily, {
-                  serif: t('reader.fontSerif'), sans: t('reader.fontSans'), system: t('reader.fontSystem'),
-                }, props.onCycleFontFamily)}
-                <View className="mt-2 flex-row flex-wrap gap-2">
-                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${props.indentEnabled ? theme.action : theme.bg}`} onPress={() => { pokeControls(); props.onToggleIndent(); }}>
-                    <Text className={`text-xs ${props.indentEnabled ? theme.actionText : theme.text}`}>{t('reader.indent')} {props.indentEnabled ? t('common.on') : t('common.off')}</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${props.justifyEnabled ? theme.action : theme.bg}`} onPress={() => { pokeControls(); props.onToggleJustify(); }}>
-                    <Text className={`text-xs ${props.justifyEnabled ? theme.actionText : theme.text}`}>{t('reader.justify')} {props.justifyEnabled ? t('common.on') : t('common.off')}</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onCycleMargin(); }}>
-                    <Text className={`text-xs ${theme.text}`}>{t('reader.margin')} · {props.margin === 'narrow' ? t('reader.tight') : props.margin === 'wide' ? t('reader.loose') : t('reader.medium')}</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onToggleMode(); }}>
-                    <Text className={`text-xs ${theme.text}`}>{props.mode === 'paged' ? t('reader.modePaged') : t('reader.modeScroll')}</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onCyclePageTurnStyle(); }}>
-                    <Text className={`text-xs ${theme.text}`}>{t('reader.pageTurn', { value: props.pageTurnStyle === 'slide' ? t('reader.turnSlide') : props.pageTurnStyle === 'cover' ? t('reader.turnCover') : t('reader.turnCurl') })}</Text>
-                  </Pressable>
-                  {props.mode === 'scroll' ? (
-                    <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { hapticLight(); props.onCycleAutoScroll(); }}>
-                      <Text className={`text-xs ${theme.text}`}>{t('reader.autoScroll', { value: props.autoScrollSpeedLabel })}</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
-            {panelTab === 'listen' ? (
-              <View>
-                <View className="flex-row items-center gap-3">
-                  {playingHere ? (
-                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onPause(); }}>
-                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.pause')}</Text>
-                    </Pressable>
-                  ) : pausedHere ? (
-                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onResume(); }}>
-                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.resume')}</Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onPlayChapter(); }}>
-                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.playChapter')}</Text>
-                    </Pressable>
-                  )}
-                  <Pressable accessibilityRole="button" className={`rounded-lg ${theme.bg} px-3 py-2`} onPress={() => { pokeControls(); props.onCycleRate(); }}>
-                    <Text className={`text-xs ${theme.text}`}>{props.playbackRate}×</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`rounded-lg ${theme.bg} px-3 py-2`} onPress={() => { hapticLight(); props.onCycleSleep(); }}>
-                    <Text className={`text-xs ${props.sleepLabel !== t('reader.sleepOff') ? theme.accent : theme.text}`}>{props.sleepLabel}</Text>
-                  </Pressable>
-                </View>
-                <Text className={`mt-3 text-xs ${theme.muted}`}>
-                  {props.playingThisChapter && props.segmentCount > 0
-                    ? t('reader.segmentOf', { index: props.segmentIndex + 1, total: props.segmentCount })
-                    : t('reader.segmentHint')}
-                </Text>
-              </View>
-            ) : null}
-
-            {panelTab === 'catalog' ? (
-              <FlatList
-                data={Array.from({ length: props.chapterCount }, (_, i) => i)}
-                keyExtractor={(i) => String(i)}
-                style={{ maxHeight: 220 }}
-                renderItem={({ item: i }) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    className={`flex-row items-center rounded-lg px-3 py-2 ${i === props.chapterIndex ? theme.action : ''}`}
-                    onPress={() => {
-                      hapticLight();
-                      props.onSeekChapter(i);
-                      setPanelTab('none');
-                    }}
-                  >
-                    <Text className={`mr-3 text-xs ${i === props.chapterIndex ? theme.actionText : theme.muted}`}>{i + 1}</Text>
-                    <Text className={`flex-1 text-xs ${i === props.chapterIndex ? theme.actionText : theme.text}`} numberOfLines={1}>{props.getChapterTitle(i)}</Text>
-                  </Pressable>
-                )}
-              />
-            ) : null}
-
-            {panelTab === 'progress' ? (
-              <View>
-                <Text className={`mb-3 text-sm ${theme.text}`}>{progressLabel}</Text>
-                <View className="gap-2">
-                  <Pressable accessibilityRole="button" className={`flex-row items-center justify-between rounded-lg ${theme.bg} px-3 py-2`} disabled={!props.hasPrevChapter} style={!props.hasPrevChapter ? styles.navDisabled : null} onPress={() => { hapticLight(); props.onPrevChapter(); setPanelTab('none'); }}>
-                    <Text className={`text-xs ${theme.text}`}>{t('reader.prevChapter')}</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" className={`flex-row items-center justify-between rounded-lg ${theme.bg} px-3 py-2`} disabled={!props.hasNextChapter} style={!props.hasNextChapter ? styles.navDisabled : null} onPress={() => { hapticLight(); props.onNextChapter(); setPanelTab('none'); }}>
-                    <Text className={`text-xs ${theme.text}`}>{t('reader.nextChapter')}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View className="flex-row items-center gap-3 px-4 pb-4 pt-2">
-          <Pressable accessibilityRole="button"
-            className={`rounded-lg ${theme.bg} px-2 py-1.5`}
-            disabled={!props.hasPrevChapter}
-            style={!props.hasPrevChapter ? styles.navDisabled : null}
-            onPress={() => {
-              hapticLight();
-              props.onPrevChapter();
-            }}
-          >
-            <Text className={`text-xs ${theme.text}`}>{t('reader.prevChapter')}</Text>
-          </Pressable>
-          <ReaderSlider
-            value={props.chapterIndex}
-            max={Math.max(props.chapterCount - 1, 0)}
-            trackColor={theme.textHex}
-            fillColor={theme.textHex}
-            thumbColor={theme.actionHex}
-            onPreview={(index) => {
-              pokeControls();
-              setSeekPreview(index);
-            }}
-            onCommit={(index) => {
-              setSeekPreview(null);
-              if (index !== props.chapterIndex) {
-                hapticLight();
-                props.onSeekChapter(index);
-              }
-            }}
-          />
-          <Pressable accessibilityRole="button"
-            className={`rounded-lg ${theme.bg} px-2 py-1.5`}
-            disabled={!props.hasNextChapter}
-            style={!props.hasNextChapter ? styles.navDisabled : null}
-            onPress={() => {
-              hapticLight();
-              props.onNextChapter();
-            }}
-          >
-            <Text className={`text-xs ${theme.text}`}>{t('reader.nextChapter')}</Text>
-          </Pressable>
-        </View>
-        {props.playingThisChapter && props.segmentCount > 0 ? (
-          <View className="flex-row items-center gap-3 px-4 pb-1">
-            <Text className={`text-[10px] ${theme.muted}`}>{t('reader.play')}</Text>
             <ReaderSlider
-              value={props.segmentIndex}
-              max={Math.max(props.segmentCount - 1, 0)}
-              trackColor={theme.textHex}
+              value={props.chapterIndex}
+              max={Math.max(props.chapterCount - 1, 0)}
+              trackColor={theme.mutedHex}
               fillColor={theme.textHex}
               thumbColor={theme.actionHex}
-              onPreview={() => pokeControls()}
+              onPreview={(index) => {
+                showControls();
+                setSeekPreview(index);
+              }}
               onCommit={(index) => {
-                if (index !== props.segmentIndex) {
+                setSeekPreview(null);
+                if (index !== props.chapterIndex) {
                   hapticLight();
-                  props.onSeekSegment(index);
+                  props.onSeekChapter(index);
                 }
               }}
             />
-            <Text className={`text-[10px] ${theme.muted}`}>
-              {t('reader.segmentBadge', { index: props.segmentIndex + 1, total: props.segmentCount })}
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!props.hasNextChapter}
+              style={!props.hasNextChapter ? styles.navDisabled : null}
+              onPress={() => {
+                hapticLight();
+                props.onNextChapter();
+              }}
+            >
+              <Text className={`text-[11px] ${theme.text}`}>{t('reader.nextChapter')}</Text>
+            </Pressable>
           </View>
-        ) : null}
-        <Text className={`pb-2 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
-          {props.chapterEta ? `${progressLabel} · ${props.chapterEta}` : progressLabel}
-        </Text>
-      </Animated.View>
+          <Text className={`pb-0.5 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
+            {props.chapterEta ? `${progressLabel} · ${props.chapterEta}` : progressLabel}
+          </Text>
+
+          <View
+            className="flex-row items-center px-1 pb-1"
+            onLayout={(e) => setEntriesHeight(e.nativeEvent.layout.height)}
+          >
+            {renderEntry({
+              icon: 'list',
+              label: t('reader.catalog'),
+              active: sheet === 'catalog',
+              onPress: () => openSheet('catalog'),
+            })}
+            {renderEntry({
+              icon: 'bookmarks-outline',
+              label: t('reader.bookmark'),
+              active: sheet === 'bookmarks',
+              onPress: () => openSheet('bookmarks'),
+            })}
+            {renderEntry({
+              icon: 'moon',
+              label: t('reader.night'),
+              active: nightActive,
+              onPress: () => {
+                hapticLight();
+                props.onSelectTheme(nightActive ? lastLightThemeRef.current : 'night');
+                showControls();
+              },
+            })}
+            {renderEntry({
+              icon: 'settings-outline',
+              label: t('reader.settingsTitle'),
+              active: sheet === 'settings',
+              onPress: () => openSheet('settings'),
+            })}
+          </View>
+        </Animated.View>
+      ) : null}
+
+      {/* 底部升起的面板：覆盖翻页行，四入口保持可见 */}
+      {sheet !== 'none' ? (
+        <View
+          className={`absolute inset-x-0 rounded-t-2xl border-t ${theme.surface} ${theme.border}`}
+          style={{
+            bottom: entriesHeight + insets.bottom,
+            maxHeight: Math.round(windowH * 0.62),
+            ...styles.sheetShadow,
+          }}
+        >
+          <View className="items-center pt-1.5">
+            <View
+              className="h-1 w-9 rounded-full"
+              style={{ backgroundColor: theme.mutedHex, opacity: 0.35 }}
+            />
+          </View>
+          {renderSheetBody()}
+        </View>
+      ) : null}
+
+      {/* 亮度遮罩（黑）与护眼遮罩（琥珀）：不申请系统亮度权限，只压在本页上 */}
+      <View
+        pointerEvents="none"
+        className="absolute inset-0"
+        style={{ backgroundColor: '#000000', opacity: 1 - props.brightness }}
+      />
+      {props.eyeCare ? (
+        <View
+          pointerEvents="none"
+          className="absolute inset-0"
+          style={{ backgroundColor: '#FFB863', opacity: 0.12 }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1082,5 +1584,25 @@ export function ReaderView(props: ReaderViewProps) {
 const styles = StyleSheet.create({
   navDisabled: {
     opacity: 0.4,
+  },
+  entryIconIdle: {
+    opacity: 0.72,
+  },
+  listenBall: {
+    right: 6,
+    top: '42%',
+    // 悬浮球压在正文之上，给一点投影让它在任何底色上都立得住
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  sheetShadow: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 10,
   },
 });

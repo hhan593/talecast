@@ -1,4 +1,5 @@
 import { LLM_API_KEY, LLM_ENDPOINT_KEY, LLM_MODEL_KEY } from '@/domain/contracts';
+import type { PageTurnStyle } from '@/domain/reader';
 import type { KeyStore, RequestLogRepository, SettingsRepository } from '@/domain/ports';
 
 /**
@@ -44,13 +45,13 @@ export function createSettingsService(deps: SettingsDeps) {
       return deps.requestLogRepository.counts();
     },
 
-    /** 翻页样式偏好（slide 平移 / cover 覆盖 / curl 卷页近似） */
-    async getPageTurnStyle(): Promise<'slide' | 'cover' | 'curl'> {
+    /** 翻页样式偏好（slide 平移 / cover 覆盖 / curl 卷页近似 / none 无动画） */
+    async getPageTurnStyle(): Promise<PageTurnStyle> {
       const value = await deps.settingsRepository.get('page-turn-style');
-      return value === 'cover' || value === 'curl' ? value : 'slide';
+      return value === 'cover' || value === 'curl' || value === 'none' ? value : 'slide';
     },
 
-    async setPageTurnStyle(style: 'slide' | 'cover' | 'curl'): Promise<void> {
+    async setPageTurnStyle(style: PageTurnStyle): Promise<void> {
       return deps.settingsRepository.set('page-turn-style', style);
     },
 

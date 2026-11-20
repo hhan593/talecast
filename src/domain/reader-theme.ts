@@ -9,6 +9,10 @@ export type ReaderThemeKey = 'paper' | 'green' | 'white' | 'night';
 export interface ReaderThemeTokens {
   /** 阅读页背景 */
   bg: string;
+  /** 阅读页背景原始色值（背景色点、遮罩层等内联样式用） */
+  bgHex: string;
+  /** 次要文本原始色值（图标着色用，类名无法表达） */
+  mutedHex: string;
   /** 卡片/工具栏底 */
   surface: string;
   /** 正文与标题 */
@@ -37,6 +41,8 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
   paper: {
     label: '纸感',
     bg: 'bg-[#F6F1E7]',
+    bgHex: '#F6F1E7',
+    mutedHex: '#8C8272',
     surface: 'bg-[#FDFBF5]',
     text: 'text-[#2C2822]',
     muted: 'text-[#8C8272]',
@@ -52,6 +58,8 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
   green: {
     label: '护眼',
     bg: 'bg-[#C7E3CE]',
+    bgHex: '#C7E3CE',
+    mutedHex: '#5E7263',
     surface: 'bg-[#DDEFD4]',
     text: 'text-[#28372B]',
     muted: 'text-[#5E7263]',
@@ -67,6 +75,8 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
   white: {
     label: '纯白',
     bg: 'bg-white',
+    bgHex: '#FFFFFF',
+    mutedHex: '#6B7280',
     surface: 'bg-[#F4F5F7]',
     text: 'text-[#111827]',
     muted: 'text-[#6B7280]',
@@ -82,6 +92,8 @@ export const READER_THEMES: Record<ReaderThemeKey, ReaderThemeTokens & { label: 
   night: {
     label: '暖黑',
     bg: 'bg-[#0D0F14]',
+    bgHex: '#0D0F14',
+    mutedHex: '#7E8598',
     surface: 'bg-[#161A22]',
     text: 'text-[#EAE7E0]',
     muted: 'text-[#7E8598]',

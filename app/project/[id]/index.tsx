@@ -17,7 +17,7 @@ import {
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
 import { EncodingDialog } from '@/components/encoding-dialog';
-import { MARGINS, ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
+import { MARGINS, ReaderView, type HighlightRange, type ReaderBookmark } from '@/components/workbench/reader-view';
 import { useAnnotations } from '@/hooks/use-annotations';
 import { useAssistant } from '@/hooks/use-assistant';
 import { useBookSearch } from '@/hooks/use-book-search';
@@ -30,6 +30,7 @@ import { usePlayback } from '@/hooks/use-playback';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
 import { useI18n } from '@/hooks/use-i18n';
+import type { PageTurnStyle } from '@/domain/reader';
 import { type Paragraph } from '@/domain/source';
 import type { Chapter } from '@/domain/types';
 
@@ -58,7 +59,9 @@ export default function ProjectWorkbenchScreen() {
   const [readerJustify, setReaderJustify] = useState(true);
   const [readerMargin, setReaderMargin] = useState<'narrow' | 'standard' | 'wide'>('standard');
   const [readerTheme, setReaderTheme] = useState<'paper' | 'green' | 'white' | 'night'>('paper');
-  const [pageTurnStyle, setPageTurnStyle] = useState<'slide' | 'cover' | 'curl'>('slide');
+  const [pageTurnStyle, setPageTurnStyle] = useState<PageTurnStyle>('slide');
+  const [readerBrightness, setReaderBrightness] = useState(1);
+  const [readerEyeCare, setReaderEyeCare] = useState(false);
   const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null);
   const [catalogView, setCatalogView] = useState<'chapters' | 'bookmarks' | 'notes' | 'search'>('chapters');
   const [searchInput, setSearchInput] = useState('');
@@ -90,6 +93,14 @@ export default function ProjectWorkbenchScreen() {
   >(null);
   const lastSaveRef = useRef(0);
   const orientation = services.screenOrientation;
+
+  // 亮度偏好（v0.19.0）：滑杆拖动时逐帧改状态，停手 500ms 再落库，避免每帧写 settings
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void services.settings.setSetting('reader-brightness', readerBrightness.toFixed(2));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [readerBrightness, services]);
 
   // 阅读屏开放横屏（manual-reading-plan §4.4）；离开恢复竖屏
   useEffect(() => {
@@ -199,6 +210,11 @@ export default function ProjectWorkbenchScreen() {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
     void services.settings.getPageTurnStyle().then(setPageTurnStyle);
+    void services.settings.getSetting('reader-brightness').then((v) => {
+      const parsed = v === null ? NaN : Number.parseFloat(v);
+      if (Number.isFinite(parsed)) setReaderBrightness(Math.min(1, Math.max(0.35, parsed)));
+    });
+    void services.settings.getSetting('reader-eye-care').then((v) => setReaderEyeCare(v === 'on'));
     void services.reading.restorePosition(projectId, library.chapters).then((position) => {
       if (!position || position.charOffset === 0) return; // 无历史位置/在开头 → 停留目录
       void openChapterRef.current(position.chapterId, position.charOffset);
@@ -260,6 +276,19 @@ export default function ProjectWorkbenchScreen() {
     () => annotations.annotations.map((a) => ({ start: a.startOffset, end: a.endOffset })),
     [annotations.annotations],
   );
+  /** 书签列表（v0.19.0 阅读器底栏入口）：补上章节标题，供阅读器直接展示 */
+  const readerBookmarks = useMemo<ReaderBookmark[]>(
+    () =>
+      bookmarks.bookmarks.map((bookmark) => ({
+        id: bookmark.id,
+        chapterId: bookmark.chapterId,
+        charOffset: bookmark.charOffset,
+        excerpt: bookmark.excerpt,
+        chapterTitle: chapters.find((chapter) => chapter.id === bookmark.chapterId)?.title ?? '',
+      })),
+    [bookmarks.bookmarks, chapters],
+  );
+
   const handleAnnotate = useCallback(
     (kind: 'underline' | 'note' | 'copy') => {
       if (!current || !longPressRange) return;
@@ -419,6 +448,8 @@ export default function ProjectWorkbenchScreen() {
         justifyEnabled={readerJustify}
         margin={readerMargin}
         theme={readerTheme}
+        brightness={readerBrightness}
+        eyeCare={readerEyeCare}
         pageTurnStyle={pageTurnStyle}
         initialOffset={pendingOffset}
         highlightOffset={
@@ -451,28 +482,17 @@ export default function ProjectWorkbenchScreen() {
           const next = rates[(rates.indexOf(playback.state.rate) + 1) % rates.length];
           void playback.setRate(next);
         }}
-        onCycleFontSize={() => {
-          const cycle: Array<'small' | 'standard' | 'large' | 'xlarge'> = [
-            'small',
-            'standard',
-            'large',
-            'xlarge',
-          ];
-          const next = cycle[(cycle.indexOf(readerFontSize) + 1) % cycle.length];
-          setReaderFontSize(next);
-          void services.reading.saveReaderPrefs(projectId, readerMode, next);
+        onSelectFontSize={(key) => {
+          setReaderFontSize(key);
+          void services.reading.saveReaderPrefs(projectId, readerMode, key);
         }}
-        onCycleLineSpacing={() => {
-          const cycle: Array<'compact' | 'standard' | 'relaxed'> = ['compact', 'standard', 'relaxed'];
-          const next = cycle[(cycle.indexOf(readerLineSpacing) + 1) % cycle.length];
-          setReaderLineSpacing(next);
-          void services.settings.setSetting('reader-line-spacing', next);
+        onSelectLineSpacing={(key) => {
+          setReaderLineSpacing(key);
+          void services.settings.setSetting('reader-line-spacing', key);
         }}
-        onCycleParagraphSpacing={() => {
-          const cycle: Array<'compact' | 'standard' | 'relaxed'> = ['compact', 'standard', 'relaxed'];
-          const next = cycle[(cycle.indexOf(readerParagraphSpacing) + 1) % cycle.length];
-          setReaderParagraphSpacing(next);
-          void services.settings.setSetting('reader-paragraph-spacing', next);
+        onSelectParagraphSpacing={(key) => {
+          setReaderParagraphSpacing(key);
+          void services.settings.setSetting('reader-paragraph-spacing', key);
         }}
         onToggleIndent={() => {
           const next = !readerIndent;
@@ -484,28 +504,28 @@ export default function ProjectWorkbenchScreen() {
           setReaderJustify(next);
           void services.settings.setSetting('reader-align', next ? 'on' : 'off');
         }}
-        onCycleMargin={() => {
-          const cycle: Array<'narrow' | 'standard' | 'wide'> = ['narrow', 'standard', 'wide'];
-          const next = cycle[(cycle.indexOf(readerMargin) + 1) % cycle.length];
-          setReaderMargin(next);
-          void services.settings.setSetting('reader-margin', next);
+        onSelectMargin={(key) => {
+          setReaderMargin(key);
+          void services.settings.setSetting('reader-margin', key);
         }}
-        onCycleTheme={() => {
-          const cycle: Array<'paper' | 'green' | 'white' | 'night'> = ['paper', 'green', 'white', 'night'];
-          const next = cycle[(cycle.indexOf(readerTheme) + 1) % cycle.length];
-          setReaderTheme(next);
-          void services.settings.setSetting('reader-theme', next);
+        onSelectTheme={(key) => {
+          setReaderTheme(key);
+          void services.settings.setSetting('reader-theme', key);
+        }}
+        onBrightnessChange={(value) => setReaderBrightness(Math.min(1, Math.max(0.35, value)))}
+        onToggleEyeCare={() => {
+          const next = !readerEyeCare;
+          setReaderEyeCare(next);
+          void services.settings.setSetting('reader-eye-care', next ? 'on' : 'off');
         }}
         onToggleMode={() => {
           const next = readerMode === 'paged' ? 'scroll' : 'paged';
           setReaderMode(next);
           void services.reading.saveReaderPrefs(projectId, next, readerFontSize);
         }}
-        onCyclePageTurnStyle={() => {
-          const cycle: Array<'slide' | 'cover' | 'curl'> = ['slide', 'cover', 'curl'];
-          const next = cycle[(cycle.indexOf(pageTurnStyle) + 1) % cycle.length];
-          setPageTurnStyle(next);
-          void services.settings.setPageTurnStyle(next);
+        onSelectPageTurnStyle={(style) => {
+          setPageTurnStyle(style);
+          void services.settings.setPageTurnStyle(style);
         }}
         onPageChange={(charOffset) => {
           setLastPageOffset(charOffset);
@@ -538,11 +558,9 @@ export default function ProjectWorkbenchScreen() {
         onLongPressText={setLongPressRange}
         onAnnotate={handleAnnotate}
         fontFamily={readerFontFamily}
-        onCycleFontFamily={() => {
-          const cycle: Array<'serif' | 'sans' | 'system'> = ['serif', 'sans', 'system'];
-          const next = cycle[(cycle.indexOf(readerFontFamily) + 1) % cycle.length];
-          setReaderFontFamily(next);
-          void services.settings.setSetting('reader-font-family', next);
+        onSelectFontFamily={(key) => {
+          setReaderFontFamily(key);
+          void services.settings.setSetting('reader-font-family', key);
         }}
         chapterEta={chapterEta}
         sleepLabel={sleepLabel}
@@ -556,6 +574,12 @@ export default function ProjectWorkbenchScreen() {
           const excerpt = current.chapterText.slice(offset, offset + 20);
           void bookmarks.add(current.chapter.id, offset, excerpt);
         }}
+        bookmarks={readerBookmarks}
+        onOpenBookmark={(bookmark) => {
+          setHighlightRange(null);
+          void openChapter(bookmark.chapterId, bookmark.charOffset);
+        }}
+        onDeleteBookmark={(bookmarkId) => void bookmarks.remove(bookmarkId)}
       />
     );
   }

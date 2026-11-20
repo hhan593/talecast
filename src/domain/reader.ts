@@ -35,6 +35,12 @@ export interface ReaderPage {
   endOffset: number;
 }
 
+/**
+ * 翻页动画（v0.19.0）：slide 平移 / cover 覆盖 / curl 卷页近似 / none 无动画瞬切。
+ * none 复用 PagerView 的 setPageWithoutAnimation，不新增渲染路径。
+ */
+export type PageTurnStyle = 'slide' | 'cover' | 'curl' | 'none';
+
 export interface ReaderSegment {
   /** 段首在全文中的字符偏移 */
   startOffset: number;

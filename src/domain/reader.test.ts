@@ -13,7 +13,7 @@ describe('reader theme', () => {
 
   it('四套主题 token 完整（bg/surface/text/muted/border/action/actionText/highlightBg/accent）', () => {
     for (const [key, tokens] of Object.entries(READER_THEMES)) {
-      for (const prop of ['bg', 'surface', 'text', 'muted', 'border', 'action', 'actionText', 'highlightBg', 'accent']) {
+      for (const prop of ['bg', 'bgHex', 'surface', 'text', 'muted', 'mutedHex', 'border', 'action', 'actionText', 'highlightBg', 'accent']) {
         expect(tokens[prop as keyof typeof tokens]).toBeDefined();
       }
       void key;
