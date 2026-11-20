@@ -34,12 +34,20 @@ jobs:
           node -e '
             const fs = require("fs");
             const ver = process.argv[1];
+            // android.versionCode 必须随版本递增，否则新 APK 装不上旧版本（系统按数值判新旧）
+            const [major, minor, patch] = ver.split("-")[0].split("+")[0].split(".").map(Number);
+            const versionCode = major * 10000 + minor * 100 + patch;
             for (const path of ["package.json", "app.json"]) {
               const json = JSON.parse(fs.readFileSync(path, "utf8"));
-              if (path === "app.json") json.expo.version = ver;
-              else json.version = ver;
+              if (path === "app.json") {
+                json.expo.version = ver;
+                json.expo.android = { ...(json.expo.android || {}), versionCode };
+              } else {
+                json.version = ver;
+              }
               fs.writeFileSync(path, JSON.stringify(json, null, 2) + "\n");
             }
+            console.log(`version=${ver} versionCode=${versionCode}`);
           ' "$VER"
           echo "injected version $VER into package.json and app.json"
 
