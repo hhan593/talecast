@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useWindowDimensions } from 'react-native';
 
@@ -193,6 +194,12 @@ export function ReaderView(props: ReaderViewProps) {
   type PanelTab = 'none' | 'catalog' | 'progress' | 'typeset' | 'listen';
   const [panelTab, setPanelTab] = useState<PanelTab>('none');
 
+  // 安全区（v0.18.1）：顶部工具条需让开状态栏，底部进度行需让开手势条，
+  // 否则状态栏图标被工具条底色盖成白底白字、进度文字被 Home 指示条切断
+  const insets = useSafeAreaInsets();
+  // 顶部工具条实测高度：正文内边距跟随它，保证工具条可见时首行不被遮住
+  const [topBarHeight, setTopBarHeight] = useState(56);
+
   // 沉浸模式：工具栏 3 秒无操作自动隐藏，任意点击重置（RE-1）
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -314,10 +321,17 @@ export function ReaderView(props: ReaderViewProps) {
   }, [props.volumeEvent?.seq, props.mode, pages.length, props.pageTurnStyle]);
 
   // 沉浸全屏（v0.11.0）：菜单隐藏时同步隐藏状态栏；卸载恢复
+  // 状态栏图标明暗跟随阅读主题（v0.18.1）：纸感/护眼/纯白是浅底，必须是深色图标，
+  // 否则系统按应用级深色主题给白图标，压在浅底工具条上几乎看不见
   useEffect(() => {
+    const night = props.theme === 'night';
     StatusBar.setHidden(props.immersive && !controlsVisible, 'fade');
-    return () => StatusBar.setHidden(false, 'fade');
-  }, [props.immersive, controlsVisible]);
+    StatusBar.setBarStyle(night ? 'light-content' : 'dark-content', true);
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+      StatusBar.setBarStyle('default', true);
+    };
+  }, [props.immersive, controlsVisible, props.theme]);
 
   /** 按页索引跳转（slide → PagerView；cover/curl → 滚动定位） */
   const goToPage = (index: number): void => {
@@ -384,6 +398,20 @@ export function ReaderView(props: ReaderViewProps) {
     } else {
       pokeControls();
     }
+  };
+
+  /**
+   * 正文文本块的点击（v0.18.1）：文本块本身是 Pressable（长按划线需要），
+   * 它会吃掉触摸、外层 TouchableWithoutFeedback 收不到 onPress，
+   * 结果就是"点正文没反应、只能点 Aa"。这里把同一次点击转交给分区逻辑。
+   */
+  const handleTextTap = (event: { nativeEvent: { pageX: number } }) => {
+    if (props.mode === 'scroll') {
+      pokeControls();
+      props.onScrollTap();
+      return;
+    }
+    handleTap(event);
   };
 
   // 高亮渲染（v0.12.0）：搜索命中 + 划线区间合并切片（字符级，重叠合并）
@@ -459,6 +487,7 @@ export function ReaderView(props: ReaderViewProps) {
     return (
       <Pressable
         key={chunk.key}
+        onPress={handleTextTap}
         onLongPress={() => {
           hapticLight();
           props.onLongPressText({ start: chunkAbsoluteStart, end: chunkAbsoluteStart + chunk.text.length });
@@ -527,10 +556,16 @@ export function ReaderView(props: ReaderViewProps) {
     <View className={`flex-1 ${theme.bg}`}>
       {/* 正文全屏区：菜单悬浮其上，显隐不再引起正文重排（v0.8.0） */}
       <View
-        className="flex-1 pt-14"
-        onLayout={(e) =>
-          setContentSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
-        }
+        className="flex-1"
+        style={{ paddingTop: topBarHeight }}
+        onLayout={(e) => {
+          // layout.height 是含内边距的外框高度；分页只能用真正的正文高度，
+          // 否则每页会多算 topBarHeight 对应的行数，页末行被裁掉
+          setContentSize({
+            w: e.nativeEvent.layout.width,
+            h: e.nativeEvent.layout.height - topBarHeight,
+          });
+        }}
       >
         {props.mode === 'paged' && contentSize && metrics ? (
           <TouchableWithoutFeedback
@@ -681,6 +716,8 @@ export function ReaderView(props: ReaderViewProps) {
               ref={scrollListRef}
               className="flex-1"
               style={{ paddingHorizontal: marginPx }}
+              // 底部工具条悬浮在正文上：留出尾部空白，避免末行被工具条永久遮住
+              contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
               onScroll={(event) => {
                 scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
               }}
@@ -695,6 +732,7 @@ export function ReaderView(props: ReaderViewProps) {
                   props.highlightOffset < item.endOffset;
                 return (
                   <Pressable
+                    onPress={handleTextTap}
                     onLongPress={() => {
                       hapticLight();
                       props.onLongPressText({
@@ -762,10 +800,11 @@ export function ReaderView(props: ReaderViewProps) {
       {/* 顶部悬浮菜单（UI 重构）：只保留导航 / 章节名 / 书签 / Aa 入口；排版项收进底部面板 */}
       <Animated.View
         pointerEvents={menuPointer}
+        onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}
         className={`absolute inset-x-0 top-0 rounded-b-2xl border-b ${theme.surface} ${theme.border}`}
         style={menuTopStyle}
       >
-        <View className="px-4 pb-3 pt-14">
+        <View className="px-4 pb-3" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center justify-between">
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-3 py-1.5`}
@@ -811,7 +850,7 @@ export function ReaderView(props: ReaderViewProps) {
       <Animated.View
         pointerEvents={menuPointer}
         className={`absolute inset-x-0 bottom-0 rounded-t-2xl border-t ${theme.surface} ${theme.border}`}
-        style={menuBottomStyle}
+        style={[menuBottomStyle, { paddingBottom: insets.bottom }]}
       >
         {panelTab !== 'none' ? (
           <View className={`border-b px-4 pb-3 pt-3 ${theme.border}`}>
