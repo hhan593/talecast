@@ -47,6 +47,7 @@ export default function SettingsScreen() {
   const [immersive, setImmersive] = useState(true);
   const [pageSound, setPageSound] = useState(false);
   const [wordKaraoke, setWordKaraoke] = useState(false);
+  const [allowRotation, setAllowRotation] = useState(false);
   const [appLanguage, setAppLanguage] = useState<'system' | 'zh' | 'en'>('system');
   const [crashEntries, setCrashEntries] = useState<Array<{ at: number; source: string; message: string }> | null>(null);
   const [endpoint, setEndpoint] = useState('');
@@ -69,6 +70,7 @@ export default function SettingsScreen() {
     setImmersive((await services.settings.getSetting('reader-immersive')) !== 'off');
     setPageSound((await services.settings.getSetting('reader-page-sound')) === 'on');
     setWordKaraoke((await services.settings.getSetting('word-karaoke')) === 'on');
+    setAllowRotation((await services.settings.getSetting('reader-allow-rotation')) === 'on');
     const lang = await services.settings.getSetting('app-language');
     setAppLanguage(lang === 'zh' || lang === 'en' ? lang : 'system');
     void services.crashLog.recent().then(setCrashEntries);
@@ -178,6 +180,7 @@ export default function SettingsScreen() {
             ['reader-immersive', t('settings.readingImmersive'), immersive, setImmersive],
             ['reader-page-sound', t('settings.readingPageSound'), pageSound, setPageSound],
             ['word-karaoke', t('settings.readingKaraoke'), wordKaraoke, setWordKaraoke],
+            ['reader-allow-rotation', t('settings.readingRotation'), allowRotation, setAllowRotation],
           ] as const).map(([key, label, value, setter]) => toggleRow(key, label, value, setter))}
         </View>
         <Text className="mt-2 text-xs text-faint">{t('settings.readingHint')}</Text>

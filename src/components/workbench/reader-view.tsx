@@ -35,10 +35,13 @@ import type { StringKey } from '@/i18n';
  * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2 + reading-experience-plan RE-1）。
  *
  * v0.19.0 面板重构（issue #64）：从「工具条悬浮 + 正文避让」改为三段式
- * 　顶部单行工具条（流内）／正文（flex-1）／底部常驻翻页行 + 四入口（流内），
- * 设置面板从底部升起覆盖翻页行、四入口保持可见；听书改为右侧悬浮球，不占排版空间。
- * 底栏进流而非悬浮，是这次的关键取舍：悬浮条一显隐就会改变正文可用高度，
- * 翻页模式下要重新分页（文字整体跳动）；进流后高度稳定，切工具条不再重排。
+ * 　顶部单行工具条／正文／底部翻页行 + 四入口，设置面板从底部升起，
+ * 听书改右侧悬浮球，不占排版空间。
+ *
+ * v0.20.1 交互重做（issue #90，v0.20.0 实机反馈）：顶栏/底栏改回悬浮层
+ * （显隐不改变正文高度，翻页不重排），点屏唤出、3 秒无操作自动收起；
+ * 面板打开期间点正文任意处 = 关面板收工具条，不翻页；顶栏 ··· 改开
+ * 更多菜单抽屉（角色中心/书籍助手/听书），设置面板入口保留在底栏「设置」。
  *
  * 滚动模式收尾（issue #64）：正文 FlatList → ScrollView + flexGrow 尾部占位，
  * 短章的尾部空白整块可点（此前超 320dp 点不到）；位置持久化从 FlatList 可视区
@@ -189,6 +192,8 @@ export interface ReaderViewProps {
   onVisibleCharOffset(charOffset: number): void;
   /** 翻页模式：页选择变化（阅读位置持久化） */
   onPageChange(charOffset: number): void;
+  /** 顶栏 ···：打开更多菜单抽屉（角色中心/书籍助手/听书，issue #90） */
+  onOpenDrawer(): void;
 }
 
 /** 翻页页渲染窗口：PagerView 不虚拟化，只渲染当前页 ±3 页（长章首屏速度） */
@@ -251,11 +256,16 @@ export function ReaderView(props: ReaderViewProps) {
   const [entriesHeight, setEntriesHeight] = useState(64);
 
   /**
-   * 工具条显隐只由点击决定，不做「3 秒自动收起」。
-   * 工具条已经进流（不是悬浮层），收起并不能让正文多显示内容以外的信息，
-   * 反而会在用户正要去点按钮时把它藏起来——v0.18.x 的实测反馈就是「点开后又没了」。
+   * 工具条悬浮（issue #90）：点屏唤出、3 秒无操作自动收起；
+   * 面板打开期间保持显示（用户正在操作），关闭面板后重新计时。
+   * 悬浮层不占排版空间——显隐不再触发翻页模式重新分页。
    */
   const showControls = () => setControlsVisible(true);
+  useEffect(() => {
+    if (!controlsVisible || sheet !== 'none') return;
+    const timer = setTimeout(() => setControlsVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, [controlsVisible, sheet]);
 
   const openSheet = (next: Sheet) => {
     hapticLight();
@@ -493,8 +503,14 @@ export function ReaderView(props: ReaderViewProps) {
   /**
    * 正文文本块的点击：文本块本身是 Pressable（长按划线需要），
    * 它会吃掉触摸、外层收不到 onPress，这里把同一次点击转交给分区逻辑。
+   * 面板优先（issue #90）：面板开着时点正文任意处 = 关面板 + 收起工具条，不翻页。
    */
   const handleTextTap = (event: { nativeEvent: { pageX: number } }) => {
+    if (sheet !== 'none') {
+      closeSheet();
+      setControlsVisible(false);
+      return;
+    }
     if (props.mode === 'scroll') {
       // 滚动模式没有分区翻页，整屏点击即显隐；自动阅读中仍按旧语义暂停/继续
       props.onScrollTap();
@@ -1213,11 +1229,11 @@ export function ReaderView(props: ReaderViewProps) {
 
   return (
     <View className={`flex-1 ${theme.bg}`}>
-      {/* 顶部工具条（单行，流内）：返回 / 章节名 / 加书签 / 更多；设置项一律不进这里 */}
+      {/* 顶部工具条（单行，悬浮层 issue #90）：返回 / 章节名 / 加书签 / 更多；设置项一律不进这里 */}
       {controlsVisible ? (
         <Animated.View
-          style={topBarStyle}
-          className={`border-b ${theme.surface} ${theme.border}`}
+          style={[topBarStyle, styles.topBarOverlay]}
+          className={`absolute inset-x-0 top-0 border-b ${theme.surface} ${theme.border}`}
         >
           <View
             className="flex-row items-center px-1"
@@ -1252,7 +1268,7 @@ export function ReaderView(props: ReaderViewProps) {
               accessibilityRole="button"
               accessibilityLabel={t('reader.more')}
               className="h-9 w-9 items-center justify-center"
-              onPress={() => openSheet('settings')}
+              onPress={() => props.onOpenDrawer()}
             >
               <Ionicons name="ellipsis-horizontal" size={20} color={theme.textHex} />
             </Pressable>
@@ -1513,11 +1529,11 @@ export function ReaderView(props: ReaderViewProps) {
         </Pressable>
       ) : null}
 
-      {/* 底部：翻页行 + 四入口（常驻，进流） */}
+      {/* 底部：翻页行 + 四入口（悬浮层 issue #90，点屏唤出 / 3 秒自动收起） */}
       {controlsVisible ? (
         <Animated.View
-          style={[footerStyle, { paddingBottom: insets.bottom }]}
-          className={`border-t ${theme.surface} ${theme.border}`}
+          style={[footerStyle, styles.footerOverlay, { paddingBottom: insets.bottom }]}
+          className={`absolute inset-x-0 bottom-0 border-t ${theme.surface} ${theme.border}`}
           onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
         >
           <View className="flex-row items-center gap-2 px-3 pt-1">
@@ -1645,6 +1661,13 @@ const styles = StyleSheet.create({
   },
   entryIconIdle: {
     opacity: 0.72,
+  },
+  // 悬浮工具条（issue #90）：盖在正文之上，显隐不改变正文排版高度
+  topBarOverlay: {
+    zIndex: 20,
+  },
+  footerOverlay: {
+    zIndex: 20,
   },
   scrollTail: {
     flex: 1,

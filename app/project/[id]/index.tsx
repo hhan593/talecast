@@ -76,9 +76,13 @@ export default function ProjectWorkbenchScreen() {
   const [pageSound, setPageSound] = useState(false);
   const [volumeEvent, setVolumeEvent] = useState<{ seq: number; direction: 'up' | 'down' } | null>(null);
   const [wordKaraoke, setWordKaraoke] = useState(false);
+  // 横屏门控（issue #88）：默认锁定竖屏，用户在设置里开启后阅读屏才跟随旋转
+  const [allowRotation, setAllowRotation] = useState(false);
   const [assistantInput, setAssistantInput] = useState('');
   // 右侧抽屉（issue #65）：角色中心/助手/听书/制作入口统一收纳，顶栏只留「···」
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 阅读器右侧抽屉（issue #90）：··· 改开更多菜单，角色中心/助手从阅读器可达
+  const [readerDrawerOpen, setReaderDrawerOpen] = useState(false);
   const [current, setCurrent] = useState<{
     chapter: Chapter;
     chapterText: string;
@@ -106,14 +110,15 @@ export default function ProjectWorkbenchScreen() {
     return () => clearTimeout(timer);
   }, [readerBrightness, services]);
 
-  // 阅读屏开放横屏（manual-reading-plan §4.4）；离开恢复竖屏
+  // 阅读屏横屏（issue #88 门控）：设置开启才跟随旋转，默认锁竖屏；离开恢复竖屏
   useEffect(() => {
     if (view !== 'reader') return;
-    void orientation.allowAll();
+    if (allowRotation) void orientation.allowAll();
+    else void orientation.lockPortrait();
     return () => {
       void orientation.lockPortrait();
     };
-  }, [view, orientation]);
+  }, [view, allowRotation, orientation]);
 
   // 自动滚屏（v0.10.0）：滚动模式 + 速度档驱动；离开阅读/切模式/关闭即停
   const playPageSound = usePageSound(pageSound);
@@ -210,6 +215,7 @@ export default function ProjectWorkbenchScreen() {
     void services.settings.getSetting('volume-key-turn').then((v) => setVolumeKeyTurn(v === 'on'));
     void services.settings.getSetting('reader-page-sound').then((v) => setPageSound(v === 'on'));
     void services.settings.getSetting('word-karaoke').then((v) => setWordKaraoke(v === 'on'));
+    void services.settings.getSetting('reader-allow-rotation').then((v) => setAllowRotation(v === 'on'));
     void services.settings.getSetting('reader-theme').then((v) => {
       if (v === 'paper' || v === 'green' || v === 'white' || v === 'night') setReaderTheme(v);
     });
@@ -273,6 +279,16 @@ export default function ProjectWorkbenchScreen() {
   const getChapterTitle = useCallback(
     (index: number) => chapters[index]?.title ?? '',
     [chapters],
+  );
+
+  // 听书发起（悬浮球/两处抽屉共用）：失败弹窗透出原因，不再静默（issue #89）
+  const playWithAlert = useCallback(
+    (chapterId: string) => {
+      void playback.playChapter(chapterId).then((result) => {
+        if (!result.ok) Alert.alert(t('reader.playChapter'), result.error.message);
+      });
+    },
+    [playback, t],
   );
 
   // 重新分章（issue #65 收进右侧抽屉）：提案生成后跳审阅
@@ -490,7 +506,13 @@ export default function ProjectWorkbenchScreen() {
   );
 
   if (view === 'reader' && current) {
+    // 本章听书状态（issue #90：阅读器 ··· 抽屉条目用）
+    const listeningHere =
+      playback.state.chapterId === current.chapter.id && playback.state.status === 'playing';
+    const pausedHere =
+      playback.state.chapterId === current.chapter.id && playback.state.status === 'paused';
     return (
+      <View className="flex-1">
       <ReaderView
         chapterTitle={current.chapter.title}
         chapterText={current.chapterText}
@@ -531,7 +553,6 @@ export default function ProjectWorkbenchScreen() {
           setHighlightRange(null);
           setView('chapters');
         }}
-        onPlayChapter={() => void playback.playChapter(current.chapter.id)}
         onPause={() => void playback.pause()}
         onResume={() => void playback.resume()}
         onCycleRate={() => {
@@ -637,7 +658,40 @@ export default function ProjectWorkbenchScreen() {
           void openChapter(bookmark.chapterId, bookmark.charOffset);
         }}
         onDeleteBookmark={(bookmarkId) => void bookmarks.remove(bookmarkId)}
+        onOpenDrawer={() => setReaderDrawerOpen(true)}
+        onPlayChapter={() => playWithAlert(current.chapter.id)}
       />
+      {/* 阅读器右侧抽屉（issue #90）：··· = 更多菜单；设置面板入口仍在底栏「设置」 */}
+      <SideDrawer side="right" open={readerDrawerOpen} onClose={() => setReaderDrawerOpen(false)}>
+        {drawerEntry({
+          icon: 'headset-outline',
+          label: listeningHere ? t('reader.pause') : t('workbench.listenBook'),
+          active: listeningHere || pausedHere,
+          onPress: () => {
+            setReaderDrawerOpen(false);
+            if (listeningHere) void playback.pause();
+            else if (pausedHere) void playback.resume();
+            else playWithAlert(current.chapter.id);
+          },
+        })}
+        {drawerEntry({
+          icon: 'people-outline',
+          label: t('workbench.characters'),
+          onPress: () => {
+            setReaderDrawerOpen(false);
+            router.push({ pathname: '/project/[id]/characters', params: { id: projectId } });
+          },
+        })}
+        {drawerEntry({
+          icon: 'chatbubble-ellipses-outline',
+          label: t('workbench.assistant'),
+          onPress: () => {
+            setReaderDrawerOpen(false);
+            setView('assistant');
+          },
+        })}
+      </SideDrawer>
+      </View>
     );
   }
 
@@ -1032,7 +1086,7 @@ export default function ProjectWorkbenchScreen() {
             setDrawerOpen(false);
             if (playingThisBook) void playback.pause();
             else if (pausedThisBook) void playback.resume();
-            else if (chapters.length > 0) void playback.playChapter(chapters[0].id);
+            else if (chapters.length > 0) playWithAlert(chapters[0].id);
           },
         })}
         {drawerEntry({
