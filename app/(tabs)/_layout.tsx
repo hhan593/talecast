@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
+import { useI18n } from '@/hooks/use-i18n';
+
 export default function TabsLayout() {
+  const { t, locale } = useI18n();
   return (
     <Tabs
+      // expo-router 的 tabs 选项在挂载时缓存，语言切换需整体重挂才能更新标签
+      key={locale}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#6366f1',
@@ -17,7 +22,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '书架',
+          title: t('tabs.shelf'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               name="book-outline"
@@ -30,7 +35,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: '设置',
+          title: t('tabs.settings'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               name="settings-outline"

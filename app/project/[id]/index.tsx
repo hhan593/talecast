@@ -274,12 +274,12 @@ export default function ProjectWorkbenchScreen() {
           .then((result) => {
             // 失败保留选区并提示（issue #33）：静默关闭会让用户误以为已保存
             if (result.ok) setLongPressRange(null);
-            else Alert.alert('划线失败', result.error.message);
+            else Alert.alert(t('workbench.underlineFailed'), result.error.message);
           });
         return;
       }
       // 笔记：对话框输入后写入
-      setDialog({ kind: 'note-annotation', title: '写笔记', range: longPressRange, initial: '' });
+      setDialog({ kind: 'note-annotation', title: t('workbench.writeNoteTitle'), range: longPressRange, initial: '' });
     },
     [annotations, current, longPressRange],
   );
@@ -289,16 +289,16 @@ export default function ProjectWorkbenchScreen() {
   const [sleepModeKey, setSleepModeKey] = useState<(typeof sleepModes)[number]>('off');
   const sleepLabel =
     sleepModeKey === 'off'
-      ? '定时关'
+      ? t('reader.sleepOff')
       : sleepModeKey === 'm15'
-        ? '15 分'
+        ? t('reader.sleepMinutes', { minutes: 15 })
         : sleepModeKey === 'm30'
-          ? '30 分'
+          ? t('reader.sleepMinutes', { minutes: 30 })
           : sleepModeKey === 'm60'
-            ? '60 分'
+            ? t('reader.sleepMinutes', { minutes: 60 })
             : sleepModeKey === 'chapter'
-              ? '本章完停'
-              : '本段完停';
+              ? t('reader.sleepChapter')
+              : t('reader.sleepSegment');
   const cycleSleep = useCallback(async () => {
     const next = sleepModes[(sleepModes.indexOf(sleepModeKey) + 1) % sleepModes.length];
     setSleepModeKey(next);
@@ -324,7 +324,7 @@ export default function ProjectWorkbenchScreen() {
     const minutes = listening
       ? remaining / (4.2 * playback.state.rate * 60)
       : remaining / 500;
-    return `约 ${Math.max(1, Math.ceil(minutes))} 分钟`;
+    return t('workbench.remainingMinutes', { minutes: Math.max(1, Math.ceil(minutes)) });
   }, [current, currentOffset, playback.state.chapterId, playback.state.status, playback.state.rate]);
 
   // 点段跳转 / 正文跟随（docs/plan.md P3：拖动进度/切章后高亮跟随）
@@ -394,9 +394,9 @@ export default function ProjectWorkbenchScreen() {
   if (notFound || !project) {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-paper dark:bg-paper-night">
-        <Text className="text-base text-ink dark:text-ink-night">这本书不存在或已被删除</Text>
+        <Text className="text-base text-ink dark:text-ink-night">{t('workbench.missingBook')}</Text>
         <Pressable accessibilityRole="button" className="rounded-xl bg-accent px-4 py-2" onPress={() => router.back()}>
-          <Text className="font-semibold text-white">返回书架</Text>
+          <Text className="font-semibold text-white">{t('workbench.backToShelf')}</Text>
         </Pressable>
       </View>
     );
@@ -515,7 +515,13 @@ export default function ProjectWorkbenchScreen() {
         }}
         autoScrollOffsetRef={autoScrollSpeed !== 'off' ? autoScroll.offsetRef : null}
         autoScrollSpeedLabel={
-          autoScrollSpeed === 'off' ? '关' : autoScrollSpeed === 'slow' ? '慢' : autoScrollSpeed === 'standard' ? '中' : '快'
+          autoScrollSpeed === 'off'
+            ? t('common.off')
+            : autoScrollSpeed === 'slow'
+              ? t('characters.rateSlow')
+              : autoScrollSpeed === 'standard'
+                ? t('reader.medium')
+                : t('characters.rateFast')
         }
         onCycleAutoScroll={() => {
           setAutoScrollPaused(false);
@@ -593,7 +599,7 @@ export default function ProjectWorkbenchScreen() {
       </Text>
       <Text className="mt-1 text-xs text-muted dark:text-muted-night">
         revision {project.revision}
-        {library.source ? ` · 来源《${library.source.filename}》` : ''}
+        {library.source ? t('workbench.sourceSuffix', { name: library.source.filename }) : ''}
       </Text>
 
       {library.error ? (
@@ -621,12 +627,12 @@ export default function ProjectWorkbenchScreen() {
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
           <View className="flex-row items-center justify-between">
             <Text className="font-semibold text-ink dark:text-ink-night">
-              生成任务 ·{' '}
+              {t('workbench.jobTitle')} ·{' '}
               {generation.progress.status === 'done'
-                ? '已完成'
+                ? t('workbench.jobDone')
                 : generation.progress.status === 'failed'
-                  ? '失败（已完成段已保留）'
-                  : `生成中 ${generation.progress.progress}/${generation.progress.totalSegments}`}
+                  ? t('workbench.jobFailed')
+                  : t('workbench.jobRunning', { progress: generation.progress.progress, total: generation.progress.totalSegments })}
             </Text>
             {generation.progress.status === 'failed' ? (
               <Pressable accessibilityRole="button"
@@ -634,7 +640,7 @@ export default function ProjectWorkbenchScreen() {
                 disabled={generation.busy}
                 onPress={() => void generation.retry(generation.progress!.jobId)}
               >
-                <Text className="text-xs font-semibold text-white">重试缺失段</Text>
+                <Text className="text-xs font-semibold text-white">{t('workbench.retryMissing')}</Text>
               </Pressable>
             ) : null}
             {generation.progress.status === 'done' ? (
@@ -643,7 +649,7 @@ export default function ProjectWorkbenchScreen() {
                 disabled={generation.busy}
                 onPress={() => void generation.exportChapter(generation.progress!.jobId)}
               >
-                <Text className="text-xs text-ink dark:text-ink-night">导出分享 MP3</Text>
+                <Text className="text-xs text-ink dark:text-ink-night">{t('workbench.exportMp3')}</Text>
               </Pressable>
             ) : null}
             {generation.progress.status === 'running' || generation.progress.status === 'pending' ? (
@@ -651,7 +657,7 @@ export default function ProjectWorkbenchScreen() {
                 className="rounded-lg bg-raised px-3 py-1.5 dark:bg-card-night"
                 onPress={() => void generation.cancel(generation.progress!.jobId)}
               >
-                <Text className="text-xs text-ink dark:text-ink-night">取消</Text>
+                <Text className="text-xs text-ink dark:text-ink-night">{t('common.cancel')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -662,7 +668,7 @@ export default function ProjectWorkbenchScreen() {
             />
           </View>
           <Text className="mt-2 text-xs text-muted dark:text-muted-night" numberOfLines={3}>
-            {generation.progress.error ?? `${generation.progress.progress}/${generation.progress.totalSegments} 段完成`}
+            {generation.progress.error ?? t('workbench.jobProgress', { progress: generation.progress.progress, total: generation.progress.totalSegments })}
           </Text>
         </View>
       ) : null}
@@ -697,10 +703,10 @@ export default function ProjectWorkbenchScreen() {
             <Pressable accessibilityRole="button"
               className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
               onPress={() =>
-                Alert.alert('能力边界', '采用/撤销历史候选请重新发起"重新分章"并在审阅中操作。')
+                Alert.alert(t('workbench.capability'), t('workbench.capabilityHint'))
               }
             >
-              <Text className="text-sm text-ink dark:text-ink-night">候选历史</Text>
+              <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.proposalHistory')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-xl px-3 py-2.5 ${dialogueVoices ? 'bg-accent-soft dark:bg-accent-nightsoft' : 'bg-raised dark:bg-card-night'}`}
@@ -713,7 +719,7 @@ export default function ProjectWorkbenchScreen() {
               <Text
                 className={`text-sm ${dialogueVoices ? 'text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
               >
-                {t('workbench.dialogueVoices')}{dialogueVoices ? '开' : '关'}
+                {t('workbench.dialogueVoices')} · {dialogueVoices ? t('common.on') : t('common.off')}
               </Text>
             </Pressable>
           </>
@@ -757,44 +763,44 @@ export default function ProjectWorkbenchScreen() {
                 {index + 1}. {item.title}
               </Text>
               <Text className="mt-1 text-xs text-faint">
-                偏移 {item.startOffset}–{item.endOffset}
+                {t('workbench.offset', { start: item.startOffset, end: item.endOffset })}
               </Text>
             </Pressable>
             {library.source ? (
               <View className="mt-2 flex-row flex-wrap gap-2">
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: '修改标题', initial: item.title })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">改名</Text>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: t('workbench.renameTitle'), initial: item.title })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.rename')}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: '从此处拆分（字符偏移）', initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">拆分</Text>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: t('workbench.splitTitle'), initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.split')}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: '移动章尾边界（字符偏移）', initial: String(item.endOffset) })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">边界</Text>
+                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: t('workbench.boundaryTitle'), initial: String(item.endOffset) })}>
+                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.boundary')}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button"
                   className="rounded-md bg-accent-soft px-2 py-1 dark:bg-accent-nightsoft"
                   disabled={generation.busy}
                   onPress={() => void generation.preview(item.id)}
                 >
-                  <Text className="text-xs text-accent dark:text-accent-night">试听首段</Text>
+                  <Text className="text-xs text-accent dark:text-accent-night">{t('workbench.previewFirst')}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button"
                   className="rounded-md bg-accent px-2 py-1"
                   disabled={generation.busy}
                   onPress={() => void generation.start(item.id)}
                 >
-                  <Text className="text-xs font-semibold text-white">生成本章</Text>
+                  <Text className="text-xs font-semibold text-white">{t('workbench.generateChapter')}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button"
                   className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                   onPress={() =>
-                    Alert.alert('删除本章', `《${item.title}》正文将并入相邻章节，来源不变。确认删除？`, [
-                      { text: '取消', style: 'cancel' },
-                      { text: '删除', style: 'destructive', onPress: () => void library.remove(item.id) },
+                    Alert.alert(t('workbench.deleteChapter'), t('workbench.deleteChapterConfirm', { title: item.title }), [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      { text: t('common.delete'), style: 'destructive', onPress: () => void library.remove(item.id) },
                     ])
                   }
                 >
-                  <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
+                  <Text className="text-xs text-danger dark:text-danger-night">{t('common.delete')}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -835,7 +841,7 @@ export default function ProjectWorkbenchScreen() {
                 className="mt-2 self-start rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                 onPress={() => void bookmarks.remove(item.id)}
               >
-                <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
+                <Text className="text-xs text-danger dark:text-danger-night">{t('common.delete')}</Text>
               </Pressable>
             </View>
           )}
@@ -862,7 +868,7 @@ export default function ProjectWorkbenchScreen() {
                   .then((result) => {
                     if (!result.ok) return;
                     void services.shareTextFile(
-                      `${(project?.title ?? '笔记').slice(0, 20)}-划线笔记.md`,
+                      `${(project?.title ?? t('workbench.notesFallback')).slice(0, 20)}-notes.md`,
                       result.value.markdown,
                       'text/markdown',
                     );
@@ -880,15 +886,15 @@ export default function ProjectWorkbenchScreen() {
               return (
                 <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
                   <Text className="text-sm text-ink dark:text-ink-night" numberOfLines={3}>
-                    {chapter ? chapter.title : '章节'}
+                    {chapter ? chapter.title : t('workbench.chapterFallback')}
                   </Text>
                   {item.note.length > 0 ? (
                     <Text className="mt-1 text-xs text-muted dark:text-muted-night" numberOfLines={4}>
-                      笔记：{item.note}
+                      {t('workbench.noteLine', { text: item.note })}
                     </Text>
                   ) : (
                     <Text className="mt-1 text-xs text-faint" numberOfLines={2}>
-                      划线 · {item.endOffset - item.startOffset} 字
+                      {t('workbench.underlineLine', { count: item.endOffset - item.startOffset })}
                     </Text>
                   )}
                   <View className="mt-2 flex-row gap-2">
@@ -900,21 +906,21 @@ export default function ProjectWorkbenchScreen() {
                         void openChapter(item.chapterId, item.startOffset);
                       }}
                     >
-                      <Text className="text-xs text-muted dark:text-ink-night">跳转</Text>
+                      <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.jump')}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       className="rounded-md bg-raised px-2 py-1 dark:bg-card-night"
-                      onPress={() => setDialog({ kind: 'edit-note', title: '改笔记', annotationId: item.id, initial: item.note })}
+                      onPress={() => setDialog({ kind: 'edit-note', title: t('workbench.editNoteTitle'), annotationId: item.id, initial: item.note })}
                     >
-                      <Text className="text-xs text-muted dark:text-ink-night">{item.note.length > 0 ? '改笔记' : '写笔记'}</Text>
+                      <Text className="text-xs text-muted dark:text-ink-night">{item.note.length > 0 ? t('workbench.editNote') : t('workbench.writeNote')}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
                       onPress={() => void annotations.remove(item.id)}
                     >
-                      <Text className="text-xs text-danger dark:text-danger-night">删除</Text>
+                      <Text className="text-xs text-danger dark:text-danger-night">{t('common.delete')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -959,7 +965,7 @@ export default function ProjectWorkbenchScreen() {
           ) : null}
           {bookSearch.results !== null && bookSearch.results.length === 0 ? (
             <Text className="mt-6 text-center text-sm text-muted dark:text-muted-night">
-              没有找到「{searchInput.trim()}」
+              {t('workbench.searchEmpty', { query: searchInput.trim() })}
             </Text>
           ) : null}
           <FlatList
@@ -1012,17 +1018,17 @@ export default function ProjectWorkbenchScreen() {
               .add(current!.chapter.id, dialog.range.start, dialog.range.end, value)
               .then((result) => {
                 if (result.ok) setLongPressRange(null);
-                else Alert.alert('保存笔记失败', result.error.message);
+                else Alert.alert(t('workbench.noteSaveFailed'), result.error.message);
               });
           } else if (dialog.kind === 'edit-note') {
             void annotations.setNote(dialog.annotationId, value);
           } else if (dialog.kind === 'split') {
             const offset = Number.parseInt(value, 10);
-            if (!Number.isFinite(offset)) library.setError('切分点必须是数字偏移量');
+            if (!Number.isFinite(offset)) library.setError(t('workbench.invalidSplit'));
             else void library.splitAt(dialog.chapterId, offset);
           } else if (dialog.kind === 'boundary') {
             const offset = Number.parseInt(value, 10);
-            if (!Number.isFinite(offset)) library.setError('边界必须是数字偏移量');
+            if (!Number.isFinite(offset)) library.setError(t('workbench.invalidBoundary'));
             else void library.moveBoundary(dialog.chapterId, offset);
           }
         }}

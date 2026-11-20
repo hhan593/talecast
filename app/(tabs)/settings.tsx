@@ -3,6 +3,8 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { Alert } from 'react-native';
 import { useServices } from '@/container';
+import Constants from 'expo-constants';
+
 import { useI18n } from '@/hooks/use-i18n';
 
 /** 与 services/stats.ReadingStats 同构（架构守卫：app 不 import services，类型本地投影） */
@@ -57,13 +59,13 @@ export default function SettingsScreen() {
   const save = useCallback(() => {
     void (async () => {
       if (endpoint.trim().length === 0 || model.trim().length === 0) {
-        setNotice('端点与模型名不能为空');
+        setNotice(t('settings.endpointRequired'));
         return;
       }
       await services.settings.saveLlmConfig({ endpoint, model, apiKey });
       setApiKey(''); // 不回显密钥
       await reload();
-      setNotice('已保存。密钥只存系统安全存储，不写入数据库与日志。');
+      setNotice(t('settings.saved'));
     })();
   }, [endpoint, model, apiKey, reload, services]);
 
@@ -77,14 +79,14 @@ export default function SettingsScreen() {
       <View className="mt-6 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.llmSection')}</Text>
         <Text className="mt-1 text-xs text-muted dark:text-muted-night">
-          用于角色抽取与书籍助手。原文会发送给该服务商（docs/plan.md 风险表）。
+          {t('settings.llmHint')}
         </Text>
         {loading ? (
           <ActivityIndicator className="mt-4" />
         ) : (
           <View className="mt-3 gap-3">
             <View>
-              <Text className="mb-1 text-xs text-muted">端点 Base URL</Text>
+              <Text className="mb-1 text-xs text-muted">{t('settings.endpoint')}</Text>
               <TextInput
                 className="rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
                 value={endpoint}
@@ -95,19 +97,19 @@ export default function SettingsScreen() {
               />
             </View>
             <View>
-              <Text className="mb-1 text-xs text-muted">模型名</Text>
+              <Text className="mb-1 text-xs text-muted">{t('settings.model')}</Text>
               <TextInput
                 className="rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
                 value={model}
                 onChangeText={setModel}
-                placeholder="例如 qwen-max / glm-4 等"
+                placeholder={t('settings.modelPlaceholder')}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
             <View>
               <Text className="mb-1 text-xs text-muted">
-                API Key（{hasApiKey ? '已设置；留空则不修改' : '未设置'}）
+                {t('settings.apiKey')}（{hasApiKey ? t('settings.apiKeySet') : t('settings.apiKeyUnset')}）
               </Text>
               <TextInput
                 className="rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
@@ -119,7 +121,7 @@ export default function SettingsScreen() {
               />
             </View>
             <Pressable accessibilityRole="button" className="items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep" onPress={save}>
-              <Text className="font-semibold text-white">保存服务连接</Text>
+              <Text className="font-semibold text-white">{t('settings.save')}</Text>
             </Pressable>
             {notice ? <Text className="text-xs text-muted dark:text-muted-night">{notice}</Text> : null}
           </View>
@@ -129,7 +131,7 @@ export default function SettingsScreen() {
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.ttsSection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-          Edge TTS（免费、无需密钥）。音色库请在书籍内 角色中心 → 刷新音色库 拉取。
+          {t('settings.ttsHint')}
         </Text>
       </View>
 
@@ -137,11 +139,11 @@ export default function SettingsScreen() {
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
           <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.usageSection')}</Text>
           <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-            · 语音合成（Edge）：成功 {usage.ttsOk} 次 / 失败 {usage.ttsFailed} 次{'\n'}
-            · 文本模型：成功 {usage.llmOk} 次 / 失败 {usage.llmFailed} 次
+            {t('settings.usageTts', { ok: usage.ttsOk, failed: usage.ttsFailed })}{'\n'}
+            {t('settings.usageLlm', { ok: usage.llmOk, failed: usage.llmFailed })}
           </Text>
           <Pressable accessibilityRole="button" className="mt-2 self-start" onPress={() => void reload()}>
-            <Text className="text-xs text-accent">刷新</Text>
+            <Text className="text-xs text-accent">{t('settings.refresh')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -175,10 +177,10 @@ export default function SettingsScreen() {
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.readingSection')}</Text>
         <View className="mt-3 gap-2">
           {([
-            ['volume-key-turn', '音量键翻页（Android，阅读器内）', volumeKeyTurn, setVolumeKeyTurn],
-            ['reader-immersive', '沉浸全屏（菜单隐藏时收起状态栏）', immersive, setImmersive],
-            ['reader-page-sound', '翻页音效', pageSound, setPageSound],
-            ['word-karaoke', '词级卡拉OK跟随（听读逐词高亮）', wordKaraoke, setWordKaraoke],
+            ['volume-key-turn', t('settings.readingVolumeKey'), volumeKeyTurn, setVolumeKeyTurn],
+            ['reader-immersive', t('settings.readingImmersive'), immersive, setImmersive],
+            ['reader-page-sound', t('settings.readingPageSound'), pageSound, setPageSound],
+            ['word-karaoke', t('settings.readingKaraoke'), wordKaraoke, setWordKaraoke],
           ] as const).map(([key, label, value, setter]) => (
             <Pressable
               key={key}
@@ -193,23 +195,23 @@ export default function SettingsScreen() {
             >
               <Text className="flex-1 text-sm text-ink dark:text-ink-night">{label}</Text>
               <Text className={`text-xs font-semibold ${value ? 'text-accent' : 'text-faint'}`}>
-                {value ? '开' : '关'}
+                {value ? t('common.on') : t('common.off')}
               </Text>
             </Pressable>
           ))}
         </View>
-        <Text className="mt-2 text-xs text-faint">音量键翻页仅 Android 且阅读器翻页模式内生效。</Text>
+        <Text className="mt-2 text-xs text-faint">{t('settings.readingHint')}</Text>
       </View>
 
       {stats ? (
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
           <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.statsSection')}</Text>
           <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-            · 今日阅读 {Math.round(stats.todayMs / 60000)} 分钟 · {stats.todayChars} 字{'\n'}
-            · 累计阅读 {Math.round(stats.totalMs / 60000)} 分钟
+            {t('settings.statsToday', { minutes: Math.round(stats.todayMs / 60000), chars: stats.todayChars })}{'\n'}
+            {t('settings.statsTotal', { minutes: Math.round(stats.totalMs / 60000) })}
           </Text>
           <Pressable accessibilityRole="button" className="mt-2 self-start" onPress={() => void reload()}>
-            <Text className="text-xs text-accent">刷新</Text>
+            <Text className="text-xs text-accent">{t('settings.refresh')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -217,7 +219,7 @@ export default function SettingsScreen() {
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.backupSection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-          导出书架+偏好+书签为 JSON 分享保存；导入恢复设置项（书籍正文需重新导入原文件）。
+          {t('settings.backupHint')}
         </Text>
         <View className="mt-3 flex-row gap-2">
           <Pressable accessibilityRole="button"
@@ -239,16 +241,16 @@ export default function SettingsScreen() {
             className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
             disabled={backupBusy}
             onPress={() => {
-              Alert.alert('导入备份', '将覆盖当前替换净化规则、阅读偏好等设置项（LLM 密钥不受影响）。继续？', [
-                { text: '取消', style: 'cancel' },
+              Alert.alert(t('settings.importBackupTitle'), t('settings.importBackupConfirm'), [
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: '导入',
+                  text: t('settings.importAction'),
                   onPress: () => {
                     setBackupBusy(true);
                     void services.backup
                       .importFromPicker()
                       .then((result) => {
-                        if (result.ok) setNotice(`已恢复 ${result.value.restoredSettings} 项设置`);
+                        if (result.ok) setNotice(t('settings.restored', { count: result.value.restoredSettings }));
                         else setNotice(result.error.message);
                       })
                       .finally(() => setBackupBusy(false));
@@ -263,9 +265,9 @@ export default function SettingsScreen() {
       </View>
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">错误日志（本机 JS 异常）</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.crashSection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-          记录最近 {crashEntries === null ? '—' : crashEntries.length} 条异常（仅本地，无上报）。
+          {t('settings.crashCount', { count: crashEntries === null ? '—' : crashEntries.length })}
         </Text>
         <View className="mt-2 flex-row gap-2">
           <Pressable
@@ -275,18 +277,18 @@ export default function SettingsScreen() {
               void services.crashLog.recent().then((entries) => {
                 setCrashEntries(entries);
                 if (entries.length === 0) {
-                  Alert.alert('错误日志', '暂无记录');
+                  Alert.alert(t('settings.crashTitle'), t('settings.crashEmpty'));
                   return;
                 }
                 const latest = entries[entries.length - 1];
                 Alert.alert(
-                  `最近 1 条（共 ${entries.length} 条）`,
+                  t('settings.crashRecent', { count: entries.length }),
                   `${new Date(latest.at).toLocaleString('zh-CN')}\n[${latest.source}] ${latest.message}`,
                 );
               });
             }}
           >
-            <Text className="text-sm text-ink dark:text-ink-night">查看</Text>
+            <Text className="text-sm text-ink dark:text-ink-night">{t('settings.crashView')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -295,7 +297,7 @@ export default function SettingsScreen() {
               void services.crashLog.clear().then(() => setCrashEntries([]));
             }}
           >
-            <Text className="text-sm text-danger dark:text-danger-night">清空</Text>
+            <Text className="text-sm text-danger dark:text-danger-night">{t('settings.crashClear')}</Text>
           </Pressable>
         </View>
       </View>
@@ -303,16 +305,16 @@ export default function SettingsScreen() {
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.errorBoundarySection')}</Text>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
-          · 原文文本会发送给 TTS / LLM 服务商{'\n'}
-          · 生成任务仅前台运行；任务与段状态持久化，重进应用可恢复{'\n'}
-          · TXT 支持 UTF-8 / UTF-16 / GB18030 / Big5 等编码，导入前可手动指定；单文件 16MB、单章生成 3 万字{'\n'}
-          · 数据保存在本机沙盒，无账号、无云同步
+          {t('settings.capTextToProvider')}{'\n'}
+          {t('settings.capForeground')}{'\n'}
+          {t('settings.capEncodings')}{'\n'}
+          {t('settings.capLocal')}
         </Text>
       </View>
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">通用</Text>
-        <Text className="mt-2 text-sm text-muted dark:text-muted-night">TaleCast v0.10.0 · 对话分声 · 阅读器交互补齐</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.general')}</Text>
+        <Text className="mt-2 text-sm text-muted dark:text-muted-night">{t('settings.versionLine', { version: Constants.expoConfig?.version ?? '—' })}</Text>
       </View>
     </ScrollView>
   );

@@ -87,7 +87,7 @@ export default function BookshelfScreen() {
           text: t('shelf.deleteBook'),
           style: 'destructive',
           onPress: () =>
-            Alert.alert('删除书籍', `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
+            Alert.alert(t('shelf.deleteTitle'), `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
               { text: '取消', style: 'cancel' },
               { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
             ]),

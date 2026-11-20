@@ -6,6 +6,10 @@ import { VoicePickerSheet } from '@/components/voice-picker-sheet';
 import { EditDialog } from '@/components/edit-dialog';
 import { characterProfileText } from '@/domain/character';
 import { useCharacters } from '@/hooks/use-characters';
+import { useI18n } from '@/hooks/use-i18n';
+import type { StringKey } from '@/i18n';
+
+type Translate = (key: StringKey) => string;
 
 const RATE_CYCLE = ['-20%', '+0%', '+20%'];
 const VOL_CYCLE = ['-20%', '+0%', '+20%'];
@@ -13,14 +17,17 @@ const currentRate = (json: string) => (JSON.parse(json || '{}').rate as string |
 const currentVolume = (json: string) => (JSON.parse(json || '{}').volume as string | undefined) ?? '+0%';
 const nextRate = (json: string) => RATE_CYCLE[(RATE_CYCLE.indexOf(currentRate(json)) + 1) % RATE_CYCLE.length];
 const nextVolume = (json: string) => VOL_CYCLE[(VOL_CYCLE.indexOf(currentVolume(json)) + 1) % VOL_CYCLE.length];
-const rateLabel = (json: string) => ({ '-20%': '慢', '+0%': '标准', '+20%': '快' }[nextRate(json)] ?? '标准');
-const volumeLabel = (json: string) => ({ '-20%': '轻', '+0%': '标准', '+20%': '响' }[nextVolume(json)] ?? '标准');
+const rateLabel = (json: string, t: Translate) =>
+  ({ '-20%': t('characters.rateSlow'), '+0%': t('characters.rateNormal'), '+20%': t('characters.rateFast') }[nextRate(json)] ?? t('characters.rateNormal'));
+const volumeLabel = (json: string, t: Translate) =>
+  ({ '-20%': t('characters.volumeSoft'), '+0%': t('characters.volumeNormal'), '+20%': t('characters.volumeLoud') }[nextVolume(json)] ?? t('characters.volumeNormal'));
 
 export default function CharacterDetailScreen() {
   const params = useLocalSearchParams<{ id: string; characterId: string }>();
   const projectId = params.id;
   const router = useRouter();
   const characters = useCharacters(projectId);
+  const { t } = useI18n();
   const [pickerVisible, setPickerVisible] = useState(false);
   const [renameVisible, setRenameVisible] = useState(false);
 
@@ -37,9 +44,9 @@ export default function CharacterDetailScreen() {
   if (!character) {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-paper dark:bg-paper-night">
-        <Text className="text-sm text-muted dark:text-ink-night">角色不存在或已被删除</Text>
+        <Text className="text-sm text-muted dark:text-ink-night">{t('characters.missing')}</Text>
         <Pressable className="rounded-lg bg-accent px-4 py-2" onPress={() => router.back()}>
-          <Text className="font-semibold text-white">返回</Text>
+          <Text className="font-semibold text-white">{t('common.back')}</Text>
         </Pressable>
       </View>
     );
@@ -56,16 +63,18 @@ export default function CharacterDetailScreen() {
             {character.confirmed ? ' ✓' : ''}
           </Text>
           <Text className="text-xs text-faint">
-            {character.confirmed ? '已确认 · 人工保护中' : '未确认候选'}
+            {character.confirmed ? t('characters.confirmedProtected') : t('characters.unconfirmedCandidate')}
           </Text>
         </View>
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">{profileText}</Text>
       </View>
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
-        <Text className="font-semibold text-ink dark:text-ink-night">音色绑定</Text>
+        <Text className="font-semibold text-ink dark:text-ink-night">{t('characters.voiceBinding')}</Text>
         <Text className="mt-2 text-xs text-muted dark:text-muted-night">
-          {binding ? `当前音色：${characters.voiceName(binding.voiceId)}（修订 ${binding.revision}）` : '未绑定音色'}
+          {binding
+            ? `${t('characters.currentVoice')}：${characters.voiceName(binding.voiceId)}${t('characters.revision', { revision: binding.revision })}`
+            : t('characters.unbound')}
         </Text>
         {binding ? (
           <View className="mt-2 flex-row items-center gap-2">
@@ -73,13 +82,13 @@ export default function CharacterDetailScreen() {
               className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
               onPress={() => void characters.updateParams({ characterId: character.id }, { rate: nextRate(binding.providerParamsJson) })}
             >
-              <Text className="text-xs text-ink dark:text-ink-night">语速：{rateLabel(binding.providerParamsJson)}</Text>
+              <Text className="text-xs text-ink dark:text-ink-night">{t('characters.rate')}：{rateLabel(binding.providerParamsJson, t)}</Text>
             </Pressable>
             <Pressable
               className="rounded-md bg-raised px-2.5 py-1 dark:bg-raised-night"
               onPress={() => void characters.updateParams({ characterId: character.id }, { volume: nextVolume(binding.providerParamsJson) })}
             >
-              <Text className="text-xs text-ink dark:text-ink-night">音量：{volumeLabel(binding.providerParamsJson)}</Text>
+              <Text className="text-xs text-ink dark:text-ink-night">{t('characters.volume')}：{volumeLabel(binding.providerParamsJson, t)}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -88,18 +97,18 @@ export default function CharacterDetailScreen() {
             className="mt-3 items-center rounded-xl bg-accent py-2.5"
             onPress={() => setPickerVisible(true)}
           >
-            <Text className="font-semibold text-white">{binding ? '更换音色' : '绑定音色'}</Text>
+            <Text className="font-semibold text-white">{binding ? t('characters.changeVoice') : t('characters.bindVoice')}</Text>
           </Pressable>
         ) : (
           <Pressable
             className="mt-3 items-center rounded-xl bg-accent py-2.5"
             onPress={() => void characters.confirm(character.id)}
           >
-            <Text className="font-semibold text-white">人工确认此角色</Text>
+            <Text className="font-semibold text-white">{t('characters.confirmThis')}</Text>
           </Pressable>
         )}
         <Text className="mt-2 text-xs text-faint">
-          绑定修订号参与生成任务的 input_hash：更换音色后旧段缓存不会被误用。
+          {t('characters.revisionHint')}
         </Text>
       </View>
 
@@ -108,16 +117,16 @@ export default function CharacterDetailScreen() {
           className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
           onPress={() => setRenameVisible(true)}
         >
-          <Text className="text-sm text-ink dark:text-ink-night">改名</Text>
+          <Text className="text-sm text-ink dark:text-ink-night">{t('characters.rename')}</Text>
         </Pressable>
         {!character.manualProtected ? (
           <Pressable
             className="flex-1 items-center rounded-xl bg-danger-soft py-2.5 dark:bg-danger-nightsoft"
             onPress={() =>
-              Alert.alert('删除候选', `删除未确认候选"${character.name}"？`, [
-                { text: '取消', style: 'cancel' },
+              Alert.alert(t('common.delete'), t('characters.deleteConfirm', { name: character.name }), [
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: '删除',
+                  text: t('common.delete'),
                   style: 'destructive',
                   onPress: () => {
                     void characters.remove(character.id).then(() => router.back());
@@ -126,14 +135,14 @@ export default function CharacterDetailScreen() {
               ])
             }
           >
-            <Text className="text-sm text-danger dark:text-danger-night">删除候选</Text>
+            <Text className="text-sm text-danger dark:text-danger-night">{t('common.delete')}</Text>
           </Pressable>
         ) : null}
       </View>
 
       <VoicePickerSheet
         visible={pickerVisible}
-        title={`给"${character.name}"绑定音色`}
+        title={t('characters.bindTitle', { name: character.name })}
         voices={characters.voices}
         refreshing={characters.busy}
         onRefresh={() => void characters.refreshVoices()}
@@ -143,7 +152,7 @@ export default function CharacterDetailScreen() {
 
       <EditDialog
         visible={renameVisible}
-        title="修改角色名"
+        title={t('characters.renameTitle')}
         initialValue={character.name}
         onConfirm={(value) => void characters.rename(character.id, value)}
         onClose={() => setRenameVisible(false)}

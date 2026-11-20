@@ -19,6 +19,7 @@ import { pageForOffset, paginateText, type ReaderPage } from '@/domain/reader';
 import { sliceStyledText } from '@/domain/annotations';
 import { READER_THEMES, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
+import { useI18n } from '@/hooks/use-i18n';
 
 /**
  * 章节工作台的正文视图（docs/plan.md 4.1.6 + manual-reading-plan R2 + reading-experience-plan RE-1）：
@@ -151,6 +152,8 @@ export interface ReaderViewProps {
 const RENDER_WINDOW = 3;
 
 export function ReaderView(props: ReaderViewProps) {
+  // t 绑定 React state，避免模块级 locale 与界面语言不同步
+  const { t } = useI18n();
   const fontSize = FONT_SIZES[props.fontSize];
   const lineSpacing = LINE_SPACINGS[props.lineSpacing];
   const marginPx = MARGINS[props.margin];
@@ -690,12 +693,12 @@ export function ReaderView(props: ReaderViewProps) {
           className={`absolute inset-x-0 bottom-28 mx-4 flex-row items-center gap-2 rounded-xl border p-2 ${theme.surface} ${theme.border}`}
         >
           <Text className={`flex-1 text-center text-[10px] ${theme.muted}`} numberOfLines={1}>
-            已选中 {props.longPressRange.end - props.longPressRange.start} 字
+            {t('reader.selectedChars', { count: props.longPressRange.end - props.longPressRange.start })}
           </Text>
           {([
-            ['underline', '划线'],
-            ['note', '笔记'],
-            ['copy', '复制'],
+            ['underline', t('reader.underline')],
+            ['note', t('reader.note')],
+            ['copy', t('reader.copy')],
           ] as const).map(([kind, label]) => (
             <Pressable
               key={kind}
@@ -711,7 +714,7 @@ export function ReaderView(props: ReaderViewProps) {
             className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
             onPress={() => props.onLongPressText(null)}
           >
-            <Text className={`text-xs ${theme.muted}`}>取消</Text>
+            <Text className={`text-xs ${theme.muted}`}>{t('common.cancel')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -731,7 +734,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onBack();
               }}
             >
-              <Text className={`text-sm ${theme.text}`}>返回目录</Text>
+              <Text className={`text-sm ${theme.text}`}>{t('reader.backToCatalog')}</Text>
             </Pressable>
             <Text
               className={`${bodyFontClass} mx-3 flex-1 text-center text-sm font-semibold ${theme.text}`}
@@ -750,7 +753,7 @@ export function ReaderView(props: ReaderViewProps) {
                   props.onPause();
                 }}
               >
-                <Text className={`text-xs ${theme.text}`}>暂停</Text>
+                <Text className={`text-xs ${theme.text}`}>{t('reader.pause')}</Text>
               </Pressable>
             ) : pausedHere ? (
               <Pressable accessibilityRole="button"
@@ -760,7 +763,7 @@ export function ReaderView(props: ReaderViewProps) {
                   props.onResume();
                 }}
               >
-                <Text className={`text-xs ${theme.text}`}>继续</Text>
+                <Text className={`text-xs ${theme.text}`}>{t('reader.resume')}</Text>
               </Pressable>
             ) : (
               <Pressable accessibilityRole="button"
@@ -770,15 +773,15 @@ export function ReaderView(props: ReaderViewProps) {
                   props.onPlayChapter();
                 }}
               >
-                <Text className={`text-xs font-semibold ${theme.actionText}`}>播放整章</Text>
+                <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.playChapter')}</Text>
               </Pressable>
             )}
             {props.playingThisChapter && props.segmentCount > 0 ? (
               <Text className={`text-xs ${theme.muted}`}>
-                第 {props.segmentIndex + 1}/{props.segmentCount} 段
+                {t('reader.segmentOf', { index: props.segmentIndex + 1, total: props.segmentCount })}
               </Text>
             ) : (
-              <Text className={`text-xs ${theme.muted}`}>段级播放：当前段即高亮单元</Text>
+              <Text className={`text-xs ${theme.muted}`}>{t('reader.segmentHint')}</Text>
             )}
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -796,7 +799,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onCycleSleep();
               }}
             >
-              <Text className={`text-xs ${props.sleepLabel !== '定时关' ? theme.accent : theme.text}`}>
+              <Text className={`text-xs ${props.sleepLabel !== t('reader.sleepOff') ? theme.accent : theme.text}`}>
                 {props.sleepLabel}
               </Text>
             </Pressable>
@@ -810,14 +813,16 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             >
               <Text className={`text-xs ${theme.text}`}>
-                字
-                {props.fontSize === 'small'
-                  ? '小'
-                  : props.fontSize === 'standard'
-                    ? '中'
-                    : props.fontSize === 'large'
-                      ? '大'
-                      : '特大'}
+                {t('reader.fontSize', {
+                  size:
+                    props.fontSize === 'small'
+                      ? t('reader.sizeSmall')
+                      : props.fontSize === 'standard'
+                        ? t('reader.sizeStandard')
+                        : props.fontSize === 'large'
+                          ? t('reader.sizeLarge')
+                          : t('reader.sizeXLarge'),
+                })}
               </Text>
             </Pressable>
             <Pressable accessibilityRole="button"
@@ -827,7 +832,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onCycleLineSpacing();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>行距</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.lineHeight')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -837,12 +842,14 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             >
               <Text className={`text-xs ${theme.text}`}>
-                段
-                {props.paragraphSpacing === 'compact'
-                  ? '紧'
-                  : props.paragraphSpacing === 'standard'
-                    ? '中'
-                    : '松'}
+                {t('reader.paragraphSpacing', {
+                  value:
+                    props.paragraphSpacing === 'compact'
+                      ? t('reader.tight')
+                      : props.paragraphSpacing === 'standard'
+                        ? t('reader.medium')
+                        : t('reader.loose'),
+                })}
               </Text>
             </Pressable>
             <Pressable accessibilityRole="button"
@@ -853,7 +860,11 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             >
               <Text className={`text-xs ${theme.text}`}>
-                {props.fontFamily === 'serif' ? '宋' : props.fontFamily === 'sans' ? '黑' : '系'}
+                {props.fontFamily === 'serif'
+                  ? t('reader.fontSerif')
+                  : props.fontFamily === 'sans'
+                    ? t('reader.fontSans')
+                    : t('reader.fontSystem')}
               </Text>
             </Pressable>
             <Pressable accessibilityRole="button"
@@ -863,7 +874,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onCycleMargin();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>边距</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.margin')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -872,7 +883,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onToggleIndent();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>缩进{props.indentEnabled ? '开' : '关'}</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.indent')} {props.indentEnabled ? t('common.on') : t('common.off')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -881,7 +892,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onToggleJustify();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>两端{props.justifyEnabled ? '开' : '关'}</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.justify')} {props.justifyEnabled ? t('common.on') : t('common.off')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -890,7 +901,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onCycleTheme();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>主题</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.theme')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
               className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
@@ -900,8 +911,14 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             >
               <Text className={`text-xs ${theme.text}`}>
-                翻
-                {props.pageTurnStyle === 'slide' ? '滑' : props.pageTurnStyle === 'cover' ? '覆' : '卷'}
+                {t('reader.pageTurn', {
+                  value:
+                    props.pageTurnStyle === 'slide'
+                      ? t('reader.turnSlide')
+                      : props.pageTurnStyle === 'cover'
+                        ? t('reader.turnCover')
+                        : t('reader.turnCurl'),
+                })}
               </Text>
             </Pressable>
             <Pressable accessibilityRole="button"
@@ -912,7 +929,7 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             >
               <Text className={`text-xs ${theme.text}`}>
-                {props.mode === 'paged' ? '滚动' : '翻页'}
+                {props.mode === 'paged' ? t('reader.modeScroll') : t('reader.modePaged')}
               </Text>
             </Pressable>
             {props.mode === 'scroll' ? (
@@ -923,7 +940,7 @@ export function ReaderView(props: ReaderViewProps) {
                   props.onCycleAutoScroll();
                 }}
               >
-                <Text className={`text-xs ${theme.text}`}>滚屏{props.autoScrollSpeedLabel}</Text>
+                <Text className={`text-xs ${theme.text}`}>{t('reader.autoScroll', { value: props.autoScrollSpeedLabel })}</Text>
               </Pressable>
             ) : null}
             <Pressable accessibilityRole="button"
@@ -933,7 +950,7 @@ export function ReaderView(props: ReaderViewProps) {
                 props.onAddBookmark();
               }}
             >
-              <Text className={`text-xs ${theme.text}`}>书签</Text>
+              <Text className={`text-xs ${theme.text}`}>{t('reader.bookmark')}</Text>
             </Pressable>
           </View>
         </View>
@@ -955,7 +972,7 @@ export function ReaderView(props: ReaderViewProps) {
               props.onPrevChapter();
             }}
           >
-            <Text className={`text-xs ${theme.text}`}>上一章</Text>
+            <Text className={`text-xs ${theme.text}`}>{t('reader.prevChapter')}</Text>
           </Pressable>
           <ReaderSlider
             value={props.chapterIndex}
@@ -984,12 +1001,12 @@ export function ReaderView(props: ReaderViewProps) {
               props.onNextChapter();
             }}
           >
-            <Text className={`text-xs ${theme.text}`}>下一章</Text>
+            <Text className={`text-xs ${theme.text}`}>{t('reader.nextChapter')}</Text>
           </Pressable>
         </View>
         {props.playingThisChapter && props.segmentCount > 0 ? (
           <View className="flex-row items-center gap-3 px-4 pb-1">
-            <Text className={`text-[10px] ${theme.muted}`}>播放</Text>
+            <Text className={`text-[10px] ${theme.muted}`}>{t('reader.play')}</Text>
             <ReaderSlider
               value={props.segmentIndex}
               max={Math.max(props.segmentCount - 1, 0)}

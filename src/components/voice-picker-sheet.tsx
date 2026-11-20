@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import type { VoiceRecord } from '@/domain/types';
+import { useI18n } from '@/hooks/use-i18n';
 
 export function VoicePickerSheet(props: {
   visible: boolean;
@@ -12,6 +13,7 @@ export function VoicePickerSheet(props: {
   onClose: () => void;
   onRefresh?: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -29,19 +31,19 @@ export function VoicePickerSheet(props: {
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-ink dark:text-ink-night">{props.title}</Text>
               <Pressable onPress={props.onClose}>
-                <Text className="text-sm text-muted">关闭</Text>
+                <Text className="text-sm text-muted">{t('voices.close')}</Text>
               </Pressable>
             </View>
             <TextInput
               className="mt-3 rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"
-              placeholder="搜索音色名 / 标识"
+              placeholder={t('voices.search')}
               value={query}
               onChangeText={setQuery}
             />
             {props.onRefresh ? (
               <Pressable className="mt-2 self-start" disabled={props.refreshing} onPress={props.onRefresh}>
                 <Text className="text-xs text-accent">
-                  {props.refreshing ? '刷新中…' : '从 Edge 服务刷新音色列表'}
+                  {props.refreshing ? t('voices.refreshing') : t('voices.refresh')}
                 </Text>
               </Pressable>
             ) : null}
@@ -68,7 +70,7 @@ export function VoicePickerSheet(props: {
             ListEmptyComponent={
               <View className="items-center py-10">
                 <Text className="text-center text-sm text-muted dark:text-muted-night">
-                  没有匹配的音色。点上方「刷新音色列表」从服务拉取（首次使用必须刷新一次）。
+                  {t('voices.empty')}
                 </Text>
               </View>
             }
