@@ -238,6 +238,8 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
         <Text className="mt-2 text-xs text-faint">{t('settings.backupHint')}</Text>
+        {/* 备份/恢复反馈就近展示：LLM 折叠时也不可见性丢失（#77） */}
+        {notice ? <Text className="mt-2 text-xs text-muted dark:text-muted-night">{notice}</Text> : null}
 
         <View className="mt-3 flex-row items-center justify-between rounded-lg bg-raised px-3 py-2.5 dark:bg-card-night">
           <Text className="flex-1 text-sm text-ink dark:text-ink-night">
