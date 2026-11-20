@@ -567,7 +567,8 @@ export function ReaderView(props: ReaderViewProps) {
   /** 分段选择器：点哪个就是哪个（不再「循环到下一个」） */
   const renderSegmented = <K extends string>(
     options: Array<{ key: K; label: string }>,
-    value: K,
+    /** null = 当前状态不适用（例如滚动模式下的翻页动画），不高亮任何一项 */
+    value: K | null,
     onSelect: (key: K) => void,
   ) => (
     <View className={`flex-1 flex-row rounded-xl ${theme.bg} p-0.5`}>
@@ -595,7 +596,7 @@ export function ReaderView(props: ReaderViewProps) {
   const renderSegRow = <K extends string>(
     label: string,
     options: Array<{ key: K; label: string }>,
-    value: K,
+    value: K | null,
     onSelect: (key: K) => void,
   ) => (
     <View className="mb-1.5 flex-row items-center gap-2">
@@ -753,7 +754,8 @@ export function ReaderView(props: ReaderViewProps) {
                       ? t('reader.turnCurlLong')
                       : t('reader.turnNone'),
             })),
-            props.pageTurnStyle,
+            // 滚动模式下没有翻页动画可言，不给任何一项高亮，避免「选了覆盖却在滚动」的错位观感
+            props.mode === 'paged' ? props.pageTurnStyle : null,
             (key) => {
               props.onSelectPageTurnStyle(key);
               // 滚动模式下选了翻页动画，说明想看翻页效果，顺手切模式
