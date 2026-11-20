@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { nextTheme, isReaderThemeKey, READER_THEMES, THEME_CYCLE } from './reader-theme';
-import { pageForOffset, paginateText } from './reader';
+import { pageForOffset, paginateText, paragraphIndexAtScrollY, paragraphIndexForOffset } from './reader';
 
 describe('reader theme', () => {
   it('主题循环：四套主题顺序循环', () => {
@@ -87,5 +87,30 @@ describe('v0.8.0 排版分页（段间距 / 首行缩进）', () => {
     assertConcatenation(pages, source, 0);
     // 3 行（含空行）：页容量 40px；行1(20) 空行(20+间距10 超) → 每页 1 行
     expect(pages.length).toBe(3);
+  });
+});
+
+describe('v0.19.x 滚动模式位置互查（issue #64 收尾）', () => {
+  it('paragraphIndexAtScrollY：顶边所在段 = 最后一个 top ≤ scrollY 的段', () => {
+    const tops = [0, 120, 300, 300, 480];
+    expect(paragraphIndexAtScrollY([], 0)).toBe(0); // 空章节回落首段
+    expect(paragraphIndexAtScrollY(tops, 0)).toBe(0);
+    expect(paragraphIndexAtScrollY(tops, 119.9)).toBe(0);
+    expect(paragraphIndexAtScrollY(tops, 120)).toBe(1);
+    expect(paragraphIndexAtScrollY(tops, 250)).toBe(1); // 段中间仍在该段
+    expect(paragraphIndexAtScrollY(tops, 300)).toBe(3); // 零高段与上段同顶：取后者
+    expect(paragraphIndexAtScrollY(tops, 479)).toBe(3);
+    expect(paragraphIndexAtScrollY(tops, 480)).toBe(4);
+    expect(paragraphIndexAtScrollY(tops, 9999)).toBe(4); // 越界回落末段
+  });
+
+  it('paragraphIndexForOffset：恢复定位 = 最后一个 startOffset ≤ offset 的段', () => {
+    const starts = [100, 160, 220];
+    expect(paragraphIndexForOffset([0], 9999)).toBe(0);
+    expect(paragraphIndexForOffset(starts, 0)).toBe(0); // 越界回落首段
+    expect(paragraphIndexForOffset(starts, 100)).toBe(0);
+    expect(paragraphIndexForOffset(starts, 159)).toBe(0);
+    expect(paragraphIndexForOffset(starts, 161)).toBe(1);
+    expect(paragraphIndexForOffset(starts, 250)).toBe(2); // 段中间仍在末段
   });
 });

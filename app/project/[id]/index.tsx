@@ -386,32 +386,17 @@ export default function ProjectWorkbenchScreen() {
   );
 
   const paragraphs = current?.paragraphs ?? [];
-  const initialIndex = useMemo(() => {
-    if (pendingOffset <= 0) return undefined;
-    const index = paragraphs.findIndex((p) => p.startOffset > pendingOffset) - 1;
-    return index >= 0 ? index : 0;
-  }, [paragraphs, pendingOffset]);
-  // 按文本长度估算行高：滚动定位精度优于固定值（长段/短段混合的章节尤其明显）
-  const layout = useMemo(() => {
-    const lengths = paragraphs.map((p) => Math.ceil(p.text.length / 22) * 24 + 16);
-    const offsets: number[] = [];
-    let acc = 0;
-    for (const length of lengths) {
-      offsets.push(acc);
-      acc += length;
-    }
-    return { lengths, offsets };
-  }, [paragraphs]);
 
-  const viewableCallbackRef = useRef<((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null>(null);
-  viewableCallbackRef.current = (info) => {
-    const first = info.viewableItems[0];
-    if (first?.item && current && view === 'reader' && readerMode === 'scroll') {
-      lastKnownOffsetRef.current = (first.item as Paragraph).startOffset;
-      setCurrentOffset((first.item as Paragraph).startOffset);
-      saveReadingPosition(current.chapter.id, (first.item as Paragraph).startOffset);
-    }
-  };
+  // 滚动模式顶边段变化（阅读器按 scrollY 互查后上报）：统计基点/ETA/节流落库
+  const handleVisibleCharOffset = useCallback(
+    (charOffset: number) => {
+      if (!current) return;
+      lastKnownOffsetRef.current = charOffset;
+      setCurrentOffset(charOffset);
+      saveReadingPosition(current.chapter.id, charOffset);
+    },
+    [current, saveReadingPosition],
+  );
 
   if (loading) {
     return (
@@ -469,7 +454,7 @@ export default function ProjectWorkbenchScreen() {
         onPrevChapter={() => goChapterDelta(-1)}
         onNextChapter={() => goChapterDelta(1)}
         onSeekChapter={seekChapter}
-        onViewableItems={(info) => viewableCallbackRef.current?.(info)}
+        onVisibleCharOffset={handleVisibleCharOffset}
         onBack={() => {
           setHighlightRange(null);
           setView('chapters');
