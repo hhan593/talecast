@@ -189,13 +189,29 @@ export function ReaderView(props: ReaderViewProps) {
     return () => clearInterval(timer);
   }, [props.mode, props.autoScrollOffsetRef]);
 
+  // 设置面板（UI 重构）：目录/进度/排版/听书四 tab；面板展开时暂停自动隐藏
+  type PanelTab = 'none' | 'catalog' | 'progress' | 'typeset' | 'listen';
+  const [panelTab, setPanelTab] = useState<PanelTab>('none');
+
   // 沉浸模式：工具栏 3 秒无操作自动隐藏，任意点击重置（RE-1）
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleHide = () => {
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    if (panelTab === 'none') {
+      controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
+    }
+  };
   const pokeControls = () => {
     setControlsVisible(true);
+    scheduleHide();
+  };
+  const togglePanel = (tab: PanelTab) => {
+    const next: PanelTab = panelTab === tab ? 'none' : tab;
+    setPanelTab(next);
+    setControlsVisible(true);
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
+    if (next === 'none') controlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
   };
   useEffect(() => {
     return () => {
@@ -477,6 +493,30 @@ export function ReaderView(props: ReaderViewProps) {
   const playingHere = props.playingThisChapter && props.playbackStatus === 'playing';
   const pausedHere = props.playingThisChapter && props.playbackStatus === 'paused';
 
+  /** 设置面板的一行：显示档位选项，当前值高亮；点击调现有 cycle 回调（行为不变，仅为可视化） */
+  const renderTypeRow = <K extends string>(
+    label: string,
+    current: K,
+    options: Record<K, string>,
+    onCycle: () => void,
+  ) => (
+    <View className="mb-2 flex-row items-center justify-between">
+      <Text className={`w-16 text-xs ${theme.muted}`}>{label}</Text>
+      <View className="flex-row flex-wrap justify-end gap-1.5">
+        {(Object.keys(options) as K[]).map((key) => (
+          <Pressable
+            key={key}
+            accessibilityRole="button"
+            className={`rounded-lg px-2.5 py-1 ${current === key ? theme.action : theme.bg}`}
+            onPress={() => { pokeControls(); onCycle(); }}
+          >
+            <Text className={`text-xs ${current === key ? theme.actionText : theme.text}`}>{options[key]}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+
   const pageNumRow = (page: ReaderPage) => (
     <Text className={`mt-4 text-center text-[10px] ${theme.muted}`}>
       {page.ordinal + 1} / {pages.length}
@@ -719,7 +759,7 @@ export function ReaderView(props: ReaderViewProps) {
         </View>
       ) : null}
 
-      {/* 顶部悬浮菜单：导航 + 播放 + 排版（动画显隐） */}
+      {/* 顶部悬浮菜单（UI 重构）：只保留导航 / 章节名 / 书签 / Aa 入口；排版项收进底部面板 */}
       <Animated.View
         pointerEvents={menuPointer}
         className={`absolute inset-x-0 top-0 rounded-b-2xl border-b ${theme.surface} ${theme.border}`}
@@ -742,226 +782,181 @@ export function ReaderView(props: ReaderViewProps) {
             >
               {props.chapterTitle}
             </Text>
-            <View className="w-16" />
-          </View>
-          <View className="mt-2 flex-row flex-wrap items-center gap-2">
-            {playingHere ? (
-              <Pressable accessibilityRole="button"
-                className={`rounded-lg ${theme.bg} px-3 py-1.5`}
-                onPress={() => {
-                  pokeControls();
-                  props.onPause();
-                }}
-              >
-                <Text className={`text-xs ${theme.text}`}>{t('reader.pause')}</Text>
-              </Pressable>
-            ) : pausedHere ? (
-              <Pressable accessibilityRole="button"
-                className={`rounded-lg ${theme.bg} px-3 py-1.5`}
-                onPress={() => {
-                  pokeControls();
-                  props.onResume();
-                }}
-              >
-                <Text className={`text-xs ${theme.text}`}>{t('reader.resume')}</Text>
-              </Pressable>
-            ) : (
-              <Pressable accessibilityRole="button"
-                className={`rounded-lg ${theme.action} px-3 py-1.5`}
-                onPress={() => {
-                  pokeControls();
-                  props.onPlayChapter();
-                }}
-              >
-                <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.playChapter')}</Text>
-              </Pressable>
-            )}
-            {props.playingThisChapter && props.segmentCount > 0 ? (
-              <Text className={`text-xs ${theme.muted}`}>
-                {t('reader.segmentOf', { index: props.segmentIndex + 1, total: props.segmentCount })}
-              </Text>
-            ) : (
-              <Text className={`text-xs ${theme.muted}`}>{t('reader.segmentHint')}</Text>
-            )}
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleRate();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{props.playbackRate}×</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                hapticLight();
-                props.onCycleSleep();
-              }}
-            >
-              <Text className={`text-xs ${props.sleepLabel !== t('reader.sleepOff') ? theme.accent : theme.text}`}>
-                {props.sleepLabel}
-              </Text>
-            </Pressable>
-          </View>
-          <View className="mt-2 flex-row flex-wrap items-center gap-2">
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleFontSize();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>
-                {t('reader.fontSize', {
-                  size:
-                    props.fontSize === 'small'
-                      ? t('reader.sizeSmall')
-                      : props.fontSize === 'standard'
-                        ? t('reader.sizeStandard')
-                        : props.fontSize === 'large'
-                          ? t('reader.sizeLarge')
-                          : t('reader.sizeXLarge'),
-                })}
-              </Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleLineSpacing();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.lineHeight')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleParagraphSpacing();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>
-                {t('reader.paragraphSpacing', {
-                  value:
-                    props.paragraphSpacing === 'compact'
-                      ? t('reader.tight')
-                      : props.paragraphSpacing === 'standard'
-                        ? t('reader.medium')
-                        : t('reader.loose'),
-                })}
-              </Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleFontFamily();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>
-                {props.fontFamily === 'serif'
-                  ? t('reader.fontSerif')
-                  : props.fontFamily === 'sans'
-                    ? t('reader.fontSans')
-                    : t('reader.fontSystem')}
-              </Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleMargin();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.margin')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onToggleIndent();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.indent')} {props.indentEnabled ? t('common.on') : t('common.off')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onToggleJustify();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.justify')} {props.justifyEnabled ? t('common.on') : t('common.off')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCycleTheme();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.theme')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onCyclePageTurnStyle();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>
-                {t('reader.pageTurn', {
-                  value:
-                    props.pageTurnStyle === 'slide'
-                      ? t('reader.turnSlide')
-                      : props.pageTurnStyle === 'cover'
-                        ? t('reader.turnCover')
-                        : t('reader.turnCurl'),
-                })}
-              </Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onToggleMode();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>
-                {props.mode === 'paged' ? t('reader.modeScroll') : t('reader.modePaged')}
-              </Text>
-            </Pressable>
-            {props.mode === 'scroll' ? (
+            <View className="flex-row items-center gap-2">
               <Pressable accessibilityRole="button"
                 className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
                 onPress={() => {
-                  hapticLight();
-                  props.onCycleAutoScroll();
+                  pokeControls();
+                  props.onAddBookmark();
                 }}
               >
-                <Text className={`text-xs ${theme.text}`}>{t('reader.autoScroll', { value: props.autoScrollSpeedLabel })}</Text>
+                <Text className={`text-xs ${theme.text}`}>{t('reader.bookmark')}</Text>
               </Pressable>
-            ) : null}
-            <Pressable accessibilityRole="button"
-              className={`rounded-lg ${theme.bg} px-2.5 py-1.5`}
-              onPress={() => {
-                pokeControls();
-                props.onAddBookmark();
-              }}
-            >
-              <Text className={`text-xs ${theme.text}`}>{t('reader.bookmark')}</Text>
-            </Pressable>
+              <Pressable accessibilityRole="button"
+                accessibilityLabel={t('reader.typeset')}
+                className={`rounded-lg ${panelTab === 'typeset' ? theme.action : theme.bg} px-2.5 py-1.5`}
+                onPress={() => {
+                  hapticLight();
+                  togglePanel('typeset');
+                }}
+              >
+                <Text className={`text-xs font-semibold ${panelTab === 'typeset' ? theme.actionText : theme.text}`}>Aa</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Animated.View>
 
-      {/* 底部悬浮菜单：上一章 / 章节拖动条 / 下一章（v0.8.0） */}
+      {/* 底部悬浮菜单（UI 重构）：四 tab 设置面板 + 章节导航 */}
       <Animated.View
         pointerEvents={menuPointer}
         className={`absolute inset-x-0 bottom-0 rounded-t-2xl border-t ${theme.surface} ${theme.border}`}
         style={menuBottomStyle}
       >
+        {panelTab !== 'none' ? (
+          <View className={`border-b px-4 pb-3 pt-3 ${theme.border}`}>
+            <View className="mb-3 flex-row items-center gap-2">
+              {([
+                ['catalog', 'reader.panelCatalog'],
+                ['progress', 'reader.panelProgress'],
+                ['typeset', 'reader.panelTypeset'],
+                ['listen', 'reader.panelListen'],
+              ] as const).map(([key, labelKey]) => (
+                <Pressable
+                  key={key}
+                  accessibilityRole="tab"
+                  className={`rounded-full px-3 py-1.5 ${panelTab === key ? theme.action : theme.bg}`}
+                  onPress={() => {
+                    hapticLight();
+                    setPanelTab(key);
+                  }}
+                >
+                  <Text className={`text-xs ${panelTab === key ? theme.actionText : theme.text}`}>{t(labelKey)}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {panelTab === 'typeset' ? (
+              <View>
+                <View className="mb-2 flex-row items-center justify-between">
+                  <Text className={`text-xs ${theme.muted}`}>{t('reader.fontSize', { size: '' })}</Text>
+                  <View className="flex-row items-center gap-3">
+                    <Pressable accessibilityRole="button" onPress={() => { pokeControls(); props.onCycleFontSize(); }}>
+                      <Text className={`text-lg ${theme.text}`}>−</Text>
+                    </Pressable>
+                    <Text className={`w-10 text-center text-sm font-semibold ${theme.text}`}>{Math.round(fontSize)}</Text>
+                    <Pressable accessibilityRole="button" onPress={() => { pokeControls(); props.onCycleFontSize(); }}>
+                      <Text className={`text-lg ${theme.text}`}>＋</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                {renderTypeRow(t('reader.lineHeight'), props.lineSpacing, {
+                  compact: t('reader.tight'), standard: t('reader.medium'), relaxed: t('reader.loose'),
+                }, props.onCycleLineSpacing)}
+                {renderTypeRow(t('reader.paragraphSpacing', { value: '' }).trim(), props.paragraphSpacing, {
+                  compact: t('reader.tight'), standard: t('reader.medium'), relaxed: t('reader.loose'),
+                }, props.onCycleParagraphSpacing)}
+                {renderTypeRow(t('reader.theme'), props.theme, {
+                  paper: t('reader.themePaper'), green: t('reader.themeGreen'),
+                  white: t('reader.themeWhite'), night: t('reader.themeNight'),
+                }, props.onCycleTheme)}
+                {renderTypeRow(t('reader.fontFamilyLabel'), props.fontFamily, {
+                  serif: t('reader.fontSerif'), sans: t('reader.fontSans'), system: t('reader.fontSystem'),
+                }, props.onCycleFontFamily)}
+                <View className="mt-2 flex-row flex-wrap gap-2">
+                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${props.indentEnabled ? theme.action : theme.bg}`} onPress={() => { pokeControls(); props.onToggleIndent(); }}>
+                    <Text className={`text-xs ${props.indentEnabled ? theme.actionText : theme.text}`}>{t('reader.indent')} {props.indentEnabled ? t('common.on') : t('common.off')}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${props.justifyEnabled ? theme.action : theme.bg}`} onPress={() => { pokeControls(); props.onToggleJustify(); }}>
+                    <Text className={`text-xs ${props.justifyEnabled ? theme.actionText : theme.text}`}>{t('reader.justify')} {props.justifyEnabled ? t('common.on') : t('common.off')}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onCycleMargin(); }}>
+                    <Text className={`text-xs ${theme.text}`}>{t('reader.margin')} · {props.margin === 'narrow' ? t('reader.tight') : props.margin === 'wide' ? t('reader.loose') : t('reader.medium')}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onToggleMode(); }}>
+                    <Text className={`text-xs ${theme.text}`}>{props.mode === 'paged' ? t('reader.modePaged') : t('reader.modeScroll')}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { pokeControls(); props.onCyclePageTurnStyle(); }}>
+                    <Text className={`text-xs ${theme.text}`}>{t('reader.pageTurn', { value: props.pageTurnStyle === 'slide' ? t('reader.turnSlide') : props.pageTurnStyle === 'cover' ? t('reader.turnCover') : t('reader.turnCurl') })}</Text>
+                  </Pressable>
+                  {props.mode === 'scroll' ? (
+                    <Pressable accessibilityRole="button" className={`rounded-lg px-3 py-2 ${theme.bg}`} onPress={() => { hapticLight(); props.onCycleAutoScroll(); }}>
+                      <Text className={`text-xs ${theme.text}`}>{t('reader.autoScroll', { value: props.autoScrollSpeedLabel })}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {panelTab === 'listen' ? (
+              <View>
+                <View className="flex-row items-center gap-3">
+                  {playingHere ? (
+                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onPause(); }}>
+                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.pause')}</Text>
+                    </Pressable>
+                  ) : pausedHere ? (
+                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onResume(); }}>
+                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.resume')}</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable accessibilityRole="button" className={`rounded-lg ${theme.action} px-4 py-2`} onPress={() => { pokeControls(); props.onPlayChapter(); }}>
+                      <Text className={`text-xs font-semibold ${theme.actionText}`}>{t('reader.playChapter')}</Text>
+                    </Pressable>
+                  )}
+                  <Pressable accessibilityRole="button" className={`rounded-lg ${theme.bg} px-3 py-2`} onPress={() => { pokeControls(); props.onCycleRate(); }}>
+                    <Text className={`text-xs ${theme.text}`}>{props.playbackRate}×</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`rounded-lg ${theme.bg} px-3 py-2`} onPress={() => { hapticLight(); props.onCycleSleep(); }}>
+                    <Text className={`text-xs ${props.sleepLabel !== t('reader.sleepOff') ? theme.accent : theme.text}`}>{props.sleepLabel}</Text>
+                  </Pressable>
+                </View>
+                <Text className={`mt-3 text-xs ${theme.muted}`}>
+                  {props.playingThisChapter && props.segmentCount > 0
+                    ? t('reader.segmentOf', { index: props.segmentIndex + 1, total: props.segmentCount })
+                    : t('reader.segmentHint')}
+                </Text>
+              </View>
+            ) : null}
+
+            {panelTab === 'catalog' ? (
+              <FlatList
+                data={Array.from({ length: props.chapterCount }, (_, i) => i)}
+                keyExtractor={(i) => String(i)}
+                style={{ maxHeight: 220 }}
+                renderItem={({ item: i }) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    className={`flex-row items-center rounded-lg px-3 py-2 ${i === props.chapterIndex ? theme.action : ''}`}
+                    onPress={() => {
+                      hapticLight();
+                      props.onSeekChapter(i);
+                      setPanelTab('none');
+                    }}
+                  >
+                    <Text className={`mr-3 text-xs ${i === props.chapterIndex ? theme.actionText : theme.muted}`}>{i + 1}</Text>
+                    <Text className={`flex-1 text-xs ${i === props.chapterIndex ? theme.actionText : theme.text}`} numberOfLines={1}>{props.getChapterTitle(i)}</Text>
+                  </Pressable>
+                )}
+              />
+            ) : null}
+
+            {panelTab === 'progress' ? (
+              <View>
+                <Text className={`mb-3 text-sm ${theme.text}`}>{progressLabel}</Text>
+                <View className="gap-2">
+                  <Pressable accessibilityRole="button" className={`flex-row items-center justify-between rounded-lg ${theme.bg} px-3 py-2`} disabled={!props.hasPrevChapter} style={!props.hasPrevChapter ? styles.navDisabled : null} onPress={() => { hapticLight(); props.onPrevChapter(); setPanelTab('none'); }}>
+                    <Text className={`text-xs ${theme.text}`}>{t('reader.prevChapter')}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" className={`flex-row items-center justify-between rounded-lg ${theme.bg} px-3 py-2`} disabled={!props.hasNextChapter} style={!props.hasNextChapter ? styles.navDisabled : null} onPress={() => { hapticLight(); props.onNextChapter(); setPanelTab('none'); }}>
+                    <Text className={`text-xs ${theme.text}`}>{t('reader.nextChapter')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         <View className="flex-row items-center gap-3 px-4 pb-4 pt-2">
           <Pressable accessibilityRole="button"
             className={`rounded-lg ${theme.bg} px-2 py-1.5`}

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useProjects } from '@/hooks/use-projects';
 import { useI18n } from '@/hooks/use-i18n';
@@ -15,6 +15,7 @@ export default function BookshelfScreen() {
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'recent' | 'created' | 'title'>('recent');
+  const [searchQuery, setSearchQuery] = useState('');
   const [tagDialog, setTagDialog] = useState<{ projectId: string; title: string; initial: string[] } | null>(null);
   const [covers, setCovers] = useState<Record<string, string>>({});
 
@@ -67,12 +68,20 @@ export default function BookshelfScreen() {
   const visibleProjects = useMemo(() => {
     let list = projects ?? [];
     if (activeTag) list = list.filter((p) => p.tags.includes(activeTag));
+    const query = searchQuery.trim().toLowerCase();
+    if (query) {
+      list = list.filter((p) =>
+        p.title.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        p.tags.some((tag) => tag.toLowerCase().includes(query)),
+      );
+    }
     list = [...list];
     if (sortMode === 'recent') list.sort((a, b) => b.updatedAt - a.updatedAt);
     else if (sortMode === 'created') list.sort((a, b) => b.createdAt - a.createdAt);
     else list.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'));
     return list;
-  }, [projects, activeTag, sortMode]);
+  }, [projects, activeTag, searchQuery, sortMode]);
 
   const openTagDialog = useCallback((projectId: string, title: string, tags: string[]) => {
     setTagDialog({ projectId, title, initial: tags });
@@ -127,6 +136,16 @@ export default function BookshelfScreen() {
       <Text className="mt-1 text-sm text-muted dark:text-muted-night">
         {t('shelf.subtitle')}
       </Text>
+
+      <TextInput
+        accessibilityLabel={t('shelf.searchPlaceholder')}
+        className="mt-3 rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-ink dark:border-line-night dark:bg-card-night dark:text-ink-night"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder={t('shelf.searchPlaceholder')}
+        placeholderTextColor="#8C8272"
+        clearButtonMode="while-editing"
+      />
 
       {error ? (
         <Text className="mt-4 rounded-lg bg-danger-soft p-3 text-sm text-danger dark:bg-danger-nightsoft dark:text-danger-night">
