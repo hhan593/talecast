@@ -20,11 +20,11 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - **人工保护**：确认过的角色身份、音色绑定不被模型建议覆盖
 - **幂等与可恢复**：命令带回执，生成任务按段持久化缓存，重试不重复请求
 
-## 当前状态（v0.18.0，2026-11-20）
+## 当前状态（v0.19.1，2026-11-20）
 
-**已发版**。最新版本 [v0.18.0 正式版](https://github.com/hhan593/talecast/releases/tag/v0.18.0)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.18.0`，`main` 与 `origin/main` 同步。
+**已发版**。最新版本 [v0.19.1 正式版](https://github.com/hhan593/talecast/releases/tag/v0.19.1)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.19.1`，`main` 与 `origin/main` 同步。
 
-质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 214 项全绿（34 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（184 条既有 warning 待清理）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test + lint，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号由 tag 注入）。
+质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 214 项全绿（34 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（181 条既有 warning 待清理）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test + lint，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号与 `android.versionCode` 由 tag 注入）。
 
 ### 功能里程碑
 
@@ -37,7 +37,8 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - [x] **v0.10.0–v0.14.0**：快赢清零与安全加固、阅读器体验周、划线与笔记、听书增强、书架标签/筛选/排序 + EPUB 封面抽取 + 中英双语 + 自研 MOBI/AZW3 导入（PalmDOC LZ77）
 - [x] **v0.16.0–v0.16.2**：统一代码审查闭环（16 个 issue 全走 PR）、睡眠渐弱竞态与 MOBI 解码公式/LLM 归属段落修正、RN 0.88 新架构启动崩溃热修（`react-native-track-player` pnpm 补丁 + 守卫测试）
 - [x] **v0.17.0–v0.17.2**：TXT 导入编码放宽（BOM 优先 + 自动识别 + 手动指定）、Edge TTS 迁移 Sec-MS-GEC v2 令牌（音色列表恢复）、内置离线音色兜底 + 旁白自动绑定（不再要求先跑 LLM 抽取）、i18n 架构修复与全量英文化
-- [x] **v0.18.0（当前）**：阅读器设置面板重构（底部四 Tab：目录/进度/排版/听书，顶栏瘦身）、书架常驻搜索框
+- [x] **v0.18.0–v0.18.1**：阅读器设置面板重构（底部四 Tab：目录/进度/排版/听书，顶栏瘦身）、书架常驻搜索框；点正文显隐工具条、安全区与分页高度修正
+- [x] **v0.19.0–v0.19.1（当前）**：阅读器面板重构（#64）——顶栏单行 / 底栏翻页行 + 目录·书签·夜间·设置四入口进流、底部升起设置面板（亮度·护眼·字号·背景色点·翻页动画）、听书改悬浮球；顺带修复 `reading_state` 违反 NOT NULL 导致阅读位置/模式/字号从未落库
 
 ### 已发布版本
 
@@ -66,6 +67,9 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 | v0.17.1 | Edge TTS v2 令牌 + 离线音色兜底 + i18n 修复      |
 | v0.17.2 | 残留写死文案本地化                               |
 | v0.18.0 | 阅读器设置面板重构 + 书架搜索                    |
+| v0.18.1 | 点正文显隐工具条 + 状态栏/手势条安全区修复       |
+| v0.19.0 | 阅读器面板重构：底栏四入口 + 设置面板 + 悬浮球   |
+| v0.19.1 | 阅读位置/模式/字号持久化修复                     |
 
 全部 Release 见 [GitHub Releases](https://github.com/hhan593/talecast/releases)。
 
