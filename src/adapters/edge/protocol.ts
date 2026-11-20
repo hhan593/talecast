@@ -6,30 +6,58 @@
 
 import { EDGE_AUDIO_FORMAT } from "@/domain/contracts";
 import type { TtsProsody } from "@/domain/jobs";
-import { sha256HexUpper } from "@/domain/hash";
+import {
+  CHROMIUM_MAJOR_VERSION,
+  generateSecMsGecV2,
+  SEC_MS_GEC_VERSION,
+  TRUSTED_CLIENT_TOKEN,
+} from "@/domain/edge-drm";
 
-/** Edge 官方客户端令牌（公开常量，非密钥） */
-export const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E1FB37E23D9EDEDCAAD";
+export {
+  CHROMIUM_FULL_VERSION,
+  CHROMIUM_MAJOR_VERSION,
+  SEC_MS_GEC_VERSION,
+  TRUSTED_CLIENT_TOKEN,
+} from "@/domain/edge-drm";
 
 export const WSS_ENDPOINT =
   "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
 export const VOICES_ENDPOINT =
   "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list";
-export const SEC_MS_GEC_VERSION = "1-130.0.2849.68";
 
 /** 音频输出锁定统一格式（段间播放衔接的前提，docs/plan.md 5.3） */
 
 /**
- * Sec-MS-GEC：当前 UTC 时间自 1601-01-01 起的毫秒数，向下取整到 5 分钟窗口，
- * 与客户端令牌拼接后 SHA-256 大写十六进制。时钟偏移会导致 403。
+ * Sec-MS-GEC v2：5 分钟窗口的时间戳 + 客户端令牌，经改制 SHA-256 与 CS64 双哈希。
+ * 实现见 domain/edge-drm.ts（官方 drm.py 的逐位移植，含抓包向量回归）。
  */
 export function computeSecMsGec(nowMs: number): string {
-  const WINDOWS_EPOCH_OFFSET_MS = 11_644_473_599_991;
-  const TICK_WINDOW_MS = 300_000; // 5 分钟
-  const ticks =
-    Math.floor((nowMs + WINDOWS_EPOCH_OFFSET_MS) / TICK_WINDOW_MS) *
-    TICK_WINDOW_MS;
-  return sha256HexUpper(String(ticks) + TRUSTED_CLIENT_TOKEN);
+  return generateSecMsGecV2(Math.floor(nowMs / 1000));
+}
+
+/** Edge 客户端指纹头：服务端会校验 UA 与令牌版本串一致 */
+export function clientHeaders(): Record<string, string> {
+  return {
+    "User-Agent":
+      `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ` +
+      `Chrome/${CHROMIUM_MAJOR_VERSION}.0.0.0 Safari/537.36 Edg/${CHROMIUM_MAJOR_VERSION}.0.0.0`,
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+}
+
+/** 音色列表额外要求的客户端提示头（缺 Sec-CH-UA 会被判为非 Edge 客户端） */
+export function voicesHeaders(): Record<string, string> {
+  return {
+    ...clientHeaders(),
+    Authority: "speech.platform.bing.com",
+    "Sec-CH-UA": `" Not;A Brand";v="99", "Microsoft Edge";v="${CHROMIUM_MAJOR_VERSION}", "Chromium";v="${CHROMIUM_MAJOR_VERSION}"`,
+    "Sec-CH-UA-Mobile": "?0",
+    Accept: "*/*",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+  };
 }
 
 export function buildVoicesListUrl(nowMs: number): string {
@@ -52,6 +80,7 @@ export function buildWssUrl(
 
 export function requestHeaders(): Record<string, string> {
   return {
+    ...clientHeaders(),
     "Sec-MS-GEC": computeSecMsGec(Date.now()),
     "Sec-MS-GEC-Version": SEC_MS_GEC_VERSION,
   };

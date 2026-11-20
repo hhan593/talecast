@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
 
+import { generateSecMsGecV2 } from "@/domain/edge-drm";
 import {
   buildSsmlMessage,
   buildSpeechConfigMessage,
@@ -24,26 +24,20 @@ function binaryFrameFixture(
 }
 
 describe("computeSecMsGec", () => {
-  it("与社区算法参照一致（固定时刻，5 分钟窗口取整）", () => {
-    // 参照实现：ticks = floor((ms + 11644473599991) / 300000) * 300000；GEC = SHA256(ticks + TOKEN) 大写
-    const TOKEN = "6A5AA1D4EAFF4E1FB37E23D9EDEDCAAD";
-    const reference = (ms: number) => {
-      const ticks = Math.floor((ms + 11644473599991) / 300000) * 300000;
-      return createHash("sha256")
-        .update(String(ticks) + TOKEN)
-        .digest("hex")
-        .toUpperCase();
-    };
+  it("委托 v2 令牌（含 CS64 段），毫秒入参按秒取整", () => {
     for (const ms of [
       0, 1_700_000_000_000, 1_799_999_999_999, 299_999, 300_000, 300_001,
     ]) {
-      expect(computeSecMsGec(ms)).toBe(reference(ms));
+      expect(computeSecMsGec(ms)).toBe(generateSecMsGecV2(Math.floor(ms / 1000)));
+      expect(computeSecMsGec(ms)).toMatch(/^[0-9A-F]{16}-[0-9A-F]{64}$/);
     }
   });
 
   it("同一 5 分钟窗口内令牌相同，跨窗口变化", () => {
-    // 窗口相位：Windows 纪元偏移 11644473599991 mod 300000 = 299991，真实窗口边界在 k*300000+9
-    const windowStart = 1_700_000_100_009;
+    const toTicksSeconds = (ms: number) => Math.floor(ms / 1000) + 11_644_473_600;
+    const base = 1_763_650_800_000;
+    const aligned = toTicksSeconds(base) - (toTicksSeconds(base) % 300);
+    const windowStart = (aligned - 11_644_473_600) * 1000;
     const a = computeSecMsGec(windowStart);
     const b = computeSecMsGec(windowStart + 299_999);
     const c = computeSecMsGec(windowStart + 300_000);

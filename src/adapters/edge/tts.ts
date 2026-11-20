@@ -4,11 +4,14 @@ import { fetch } from "expo/fetch";
 import {
   buildSsmlMessage,
   buildSpeechConfigMessage,
-  buildWssUrl,
   buildVoicesListUrl,
+  buildWssUrl,
+  clientHeaders,
+  computeSecMsGec,
+  SEC_MS_GEC_VERSION,
+  voicesHeaders,
   parseBinaryFrame,
   parseTextFrame,
-  requestHeaders,
 } from "./protocol";
 import { concatBytes } from "@/domain/base64";
 import { EDGE_TTS_PROVIDER } from "@/domain/contracts";
@@ -25,6 +28,16 @@ import type { VoiceInfo } from "@/domain/types";
 const WS_ORIGIN = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold";
 const SYNTH_TIMEOUT_MS = 30_000;
 
+/**
+ * 设备时钟偏移（毫秒）：Sec-MS-GEC 令牌按 5 分钟窗口推导，
+ * 手机时间偏几分钟就会被判 401/403。失败时用服务端 Date 头校准一次。
+ */
+let clockSkewMs = 0;
+
+function nowMs(): number {
+  return Date.now() + clockSkewMs;
+}
+
 /** RN WebSocket 运行时支持第三参自定义头，但内置类型未声明 */
 type RnWebSocketConstructor = new (
   url: string,
@@ -38,36 +51,77 @@ function newHexId(): string {
 
 interface EdgeVoiceJson {
   ShortName: string;
-  LocalName: string;
-  DisplayName: string;
-  Locale: string;
   Gender: string;
-  VoiceType: string;
+  Locale: string;
+  LocaleName?: string;
+  FriendlyName?: string;
+  Status?: string;
+}
+
+/** 服务端 Date 头 → 校准本机时钟；拿不到有效时间时保持原偏移 */
+async function calibrateClockFromServer(): Promise<void> {
+  try {
+    const response = await fetch(buildVoicesListUrl(nowMs()), {
+      headers: { ...voicesHeaders(), "Sec-MS-GEC": computeSecMsGec(nowMs()), "Sec-MS-GEC-Version": SEC_MS_GEC_VERSION },
+    });
+    const serverDate = response.headers.get("date");
+    const parsed = serverDate ? Date.parse(serverDate) : Number.NaN;
+    if (Number.isFinite(parsed)) clockSkewMs = parsed - Date.now();
+  } catch {
+    // 校准失败不影响主流程，交给上层给出可操作提示
+  }
+}
+
+/** "Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)" → "Xiaoxiao · Chinese (Mainland)" */
+function friendlyLabel(voice: EdgeVoiceJson): string {
+  const friendly = voice.FriendlyName ?? "";
+  const match = /^Microsoft\s+(.+?)\s+Online(?:\s+\(Natural\))?\s*-\s*(.+)$/.exec(friendly);
+  if (match) return `${match[1]} · ${match[2]}`;
+  const short = voice.ShortName.split("-");
+  return short[short.length - 1]?.replace(/Neural$/, "") ?? voice.ShortName;
 }
 
 export class EdgeTtsGateway implements TtsGateway {
-  /** 拉取中文音色清单（含多语种音色，应对中英混排） */
+  /** 拉取中文音色清单（含粤语/台湾国语与方言音色，应对中英混排） */
   async listVoices(): Promise<VoiceInfo[]> {
-    const response = await fetch(buildVoicesListUrl(Date.now()), {
-      headers: {
-        ...requestHeaders(),
-        Pragma: "no-cache",
-        "Cache-Control": "no-cache",
-      },
-    });
+    const fetchList = () =>
+      fetch(buildVoicesListUrl(nowMs()), {
+        headers: {
+          ...voicesHeaders(),
+          "Sec-MS-GEC": computeSecMsGec(nowMs()),
+          "Sec-MS-GEC-Version": SEC_MS_GEC_VERSION,
+          Pragma: "no-cache",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+    let response = await fetchList();
+    // 401/403 多为本机时钟偏移导致令牌窗口错位：校准后重试一次
+    if (response.status === 401 || response.status === 403) {
+      await calibrateClockFromServer();
+      response = await fetchList();
+    }
     if (!response.ok) {
       throw new Error(
-        `音色列表拉取失败：HTTP ${response.status}（可能时钟偏移或协议变更）`,
+        `音色列表拉取失败：HTTP ${response.status}` +
+          (response.status === 401 || response.status === 403
+            ? "（请检查手机系统时间是否准确）"
+            : "（网络受限或服务协议变更）"),
       );
     }
     const data = (await response.json()) as EdgeVoiceJson[];
     return data
-      .filter((voice) => voice.Locale.startsWith("zh"))
+      .filter((voice) => voice.Locale?.startsWith("zh"))
+      .sort((a, b) => {
+        const rank = (locale: string) => (locale === "zh-CN" ? 0 : locale.startsWith("zh-CN") ? 1 : 2);
+        return rank(a.Locale) - rank(b.Locale) || a.ShortName.localeCompare(b.ShortName);
+      })
       .map((voice) => ({
         provider: EDGE_TTS_PROVIDER,
         voiceId: voice.ShortName,
-        name: `${voice.LocalName}（${voice.Locale}）`,
-        description: `${voice.DisplayName} · ${voice.Gender} · ${voice.VoiceType}`,
+        name: friendlyLabel(voice),
+        // 性别用中英并列：音色行是持久化数据，切换界面语言后不会重写，避免只存一种语言
+        description: `${voice.Locale} · ${voice.Gender === "Female" ? "女/Female" : "男/Male"}${voice.LocaleName ? ` · ${voice.LocaleName}` : ""}`,
       }));
   }
 
@@ -94,8 +148,22 @@ export class EdgeTtsGateway implements TtsGateway {
     voiceId: string;
     prosody?: TtsProsody;
   }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+    return this.attemptSynthesize(input).catch(async (error: unknown) => {
+      // 握手被拒/连接被关通常是令牌窗口错位：校准时钟后重试一次
+      const retryable = error instanceof Error && error.name === "EdgeRetryableError";
+      if (!retryable) throw error;
+      await calibrateClockFromServer();
+      return this.attemptSynthesize(input);
+    });
+  }
+
+  private attemptSynthesize(input: {
+    text: string;
+    voiceId: string;
+    prosody?: TtsProsody;
+  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
     const requestId = newHexId();
-    const url = buildWssUrl(Date.now(), newHexId());
+    const url = buildWssUrl(nowMs(), newHexId());
     const chunks: Uint8Array[] = [];
     const words: Array<{ offsetMs: number; durationMs: number; word: string }> = [];
 
@@ -106,11 +174,10 @@ export class EdgeTtsGateway implements TtsGateway {
         undefined,
         {
           headers: {
+            ...clientHeaders(),
             Pragma: "no-cache",
             "Cache-Control": "no-cache",
             Origin: WS_ORIGIN,
-            "Accept-Encoding": "gzip, deflate, br",
-            "Accept-Language": "en-US,en;q=0.9",
           },
         },
       );
@@ -161,15 +228,17 @@ export class EdgeTtsGateway implements TtsGateway {
 
       ws.onerror = () => {
         if (!settled) {
-          finish(
-            new Error("Edge TTS 连接失败：协议可能已变更、被限流或网络不可用"),
-          );
+          const error = new Error("Edge TTS 连接失败：令牌被拒、被限流或网络不可用");
+          error.name = "EdgeRetryableError";
+          finish(error);
         }
       };
 
       ws.onclose = () => {
         if (!settled) {
-          finish(new Error("连接在合成完成前关闭"));
+          const error = new Error("连接在合成完成前关闭（令牌可能已过期）");
+          error.name = "EdgeRetryableError";
+          finish(error);
         }
       };
     });
