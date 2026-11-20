@@ -80,4 +80,19 @@ describe('架构依赖方向守卫', () => {
     }
     expect(violations).toEqual([]);
   });
+
+  it('track-player 原生补丁保留 RN 0.88 新架构必需的三处修复', () => {
+    const patch = readFileSync(
+      join(process.cwd(), 'patches/react-native-track-player@4.1.2.patch'),
+      'utf-8',
+    );
+    // Kotlin 表达式体 = scope.launch 会反射成 Job 返回类型，TurboModule 拒绝整个模块
+    expect(patch.match(/^\+.*\) \{$/gm)?.length ?? 0).toBeGreaterThanOrEqual(36);
+    expect(patch).toContain('scope.launch {');
+    // MusicService 不能再走 ReactNativeHost（RN 0.88 bridgeless 直接抛错）
+    expect(patch).toContain('+        reactContext');
+    expect(patch).not.toContain('+        reactNativeHost.reactInstanceManager.currentReactContext');
+    // 历史修复：nullable originalItem 不能传给 Arguments.fromBundle
+    expect(patch).toContain('originalItem?.let');
+  });
 });
