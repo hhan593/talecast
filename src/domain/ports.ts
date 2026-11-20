@@ -1,6 +1,7 @@
 import type { CommandReceipt } from './commands';
 import type { TtsProsody } from './jobs';
 import type { ChapterDraft, ProposalStatus } from './split';
+import type { ReleaseInfo } from './update';
 import type {
   BindingRecord,
   BookmarkRecord,
@@ -119,6 +120,11 @@ export interface KeyStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   delete(key: string): Promise<void>;
+}
+
+/** 应用内更新检查（issue #58）：远端最新 Release 元数据；失败由实现返回 null，不抛错 */
+export interface UpdateGateway {
+  fetchLatestRelease(): Promise<ReleaseInfo | null>;
 }
 
 export interface WordTimelineItem {
