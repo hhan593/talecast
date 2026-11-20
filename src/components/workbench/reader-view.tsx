@@ -407,8 +407,10 @@ export function ReaderView(props: ReaderViewProps) {
    */
   const handleTextTap = (event: { nativeEvent: { pageX: number } }) => {
     if (props.mode === 'scroll') {
-      pokeControls();
+      // 滚动模式没有分区翻页，整屏点击即显隐；自动阅读中仍按旧语义暂停/继续
       props.onScrollTap();
+      if (controlsVisible) setControlsVisible(false);
+      else pokeControls();
       return;
     }
     handleTap(event);
@@ -591,10 +593,10 @@ export function ReaderView(props: ReaderViewProps) {
               >
                 {pages.map((page) =>
                   Math.abs(page.ordinal - activePage) <= RENDER_WINDOW ? (
-                    <View key={page.ordinal} className="flex-1">
+                    <Pressable key={page.ordinal} className="flex-1" onPress={handleTextTap}>
                       {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
                       {pageNumRow(page)}
-                    </View>
+                    </Pressable>
                   ) : (
                     <View key={page.ordinal} className="flex-1" />
                   ),
@@ -655,8 +657,10 @@ export function ReaderView(props: ReaderViewProps) {
                       },
                     ]}
                   >
-                    {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
-                    {pageNumRow(page)}
+                    <Pressable className="flex-1" onPress={handleTextTap}>
+                      {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
+                      {pageNumRow(page)}
+                    </Pressable>
                   </Animated.View>
                 )}
               />
@@ -697,8 +701,10 @@ export function ReaderView(props: ReaderViewProps) {
                       coverTransforms[page.ordinal],
                     ]}
                   >
-                    {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
-                    {pageNumRow(page)}
+                    <Pressable className="flex-1" onPress={handleTextTap}>
+                      {chunksForPage(page).map((chunk) => renderChunk(chunk, page))}
+                      {pageNumRow(page)}
+                    </Pressable>
                   </Animated.View>
                 )}
               />
@@ -724,6 +730,11 @@ export function ReaderView(props: ReaderViewProps) {
               scrollEventThrottle={32}
               data={props.paragraphs}
               keyExtractor={(item, index) => `${item.startOffset}-${index}`}
+              ListFooterComponent={
+                // 段落块只覆盖自身高度，正文之下的空白点不动（ScrollView 吃掉触摸）。
+                // 用一段透明 footer 占位，让"点空白显隐工具条"在章节末尾也成立。
+                <Pressable style={{ height: 320 }} onPress={handleTextTap} />
+              }
               onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
               renderItem={({ item }) => {
                 const isHighlighted =
