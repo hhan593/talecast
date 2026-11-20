@@ -1,0 +1,24 @@
+<!--
+  TaleCast 图标 glyph 源文件（issue #59）。
+  设计语言取自 tailwind.config.js 的墨韵纸感 token：
+    纸 paper #F6F1E7 / 墨 ink #2C2822 / 赭 accent #B5442D
+  造型：开卷书居左（墨），书页右侧发出三道右凸声波（赭红，宽度递减）
+  ——「读书声从书页里发出来」，经典有声书图形语汇。
+  变体规则：
+    - 全出血 icon.svg：纸底 + 本 glyph 原尺寸
+    - android-icon-foreground / monochrome：同 glyph 需缩进自适应安全区
+      （中心 66% 圆），由 glyph-safe.svg 包一层 0.78 缩放
+  光栅化：pnpm dlx sharp-cli -i <svg> -o <png> resize 1024 1024
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 打开的书：外缘高、书脊下凹的开卷剪影 -->
+  <path fill="#2C2822" d="M384 401 C 332 361 232 341 150 355 L 150 685 C 232 671 332 691 384 731 C 436 691 536 671 618 685 L 618 355 C 536 341 436 361 384 401 Z"/>
+  <!-- 书脊留白：与纸底同色，把左右页分开 -->
+  <path fill="#F6F1E7" d="M376 401 L 376 731 L 392 731 L 392 401 Z"/>
+  <!-- 声波：圆心在书右缘外（650,530），取圆的右半弧，三道宽度递减 -->
+  <g fill="none" stroke="#B5442D" stroke-linecap="round">
+    <path stroke-width="40" d="M 695 452 A 90 90 0 0 1 695 608"/>
+    <path stroke-width="34" d="M 730 391 A 160 160 0 0 1 730 669"/>
+    <path stroke-width="28" d="M 765 331 A 230 230 0 0 1 765 729"/>
+  </g>
+</svg>
