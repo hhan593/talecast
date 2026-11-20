@@ -2,7 +2,7 @@
   "expo": {
     "name": "TaleCast",
     "slug": "talecast",
-    "version": "0.17.1",
+    "version": "0.17.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "talecast",
