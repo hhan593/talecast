@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-import { Alert } from 'react-native';
 import { useServices } from '@/container';
 import Constants from 'expo-constants';
 
 import { useI18n } from '@/hooks/use-i18n';
+import { useUpdatePrompt } from '@/hooks/use-update-prompt';
 
 /** 与 services/stats.ReadingStats 同构（架构守卫：app 不 import services，类型本地投影） */
 interface ReadingStats {
@@ -19,6 +28,8 @@ interface ReadingStats {
 export default function SettingsScreen() {
   const services = useServices();
   const { t, changeLanguage } = useI18n();
+  const { checkAndPrompt } = useUpdatePrompt();
+  const [updateChecking, setUpdateChecking] = useState(false);
   const [stats, setStats] = useState<ReadingStats | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -316,6 +327,23 @@ export default function SettingsScreen() {
 
       <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
         <Text className="font-semibold text-ink dark:text-ink-night">{t('settings.general')}</Text>
+        {Platform.OS === 'android' ? (
+          <Pressable
+            accessibilityRole="button"
+            className="mt-3 flex-row items-center justify-between rounded-lg bg-raised px-3 py-2.5 dark:bg-card-night"
+            onPress={() => {
+              setUpdateChecking(true);
+              void checkAndPrompt({ manual: true }).finally(() => setUpdateChecking(false));
+            }}
+          >
+            <Text className="flex-1 text-sm text-ink dark:text-ink-night">{t('settings.updateCheck')}</Text>
+            {updateChecking ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              <Text className="text-xs text-faint">v{Constants.expoConfig?.version ?? '—'}</Text>
+            )}
+          </Pressable>
+        ) : null}
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">{t('settings.versionLine', { version: Constants.expoConfig?.version ?? '—' })}</Text>
       </View>
     </ScrollView>

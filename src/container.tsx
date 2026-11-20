@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
@@ -13,6 +14,7 @@ import {
 } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
+import { createGithubReleaseGateway } from '@/adapters/github-release';
 import { coverFileStore } from '@/adapters/files';
 import { createCrashLogService, installCrashLog } from '@/adapters/crash-log';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
@@ -35,6 +37,7 @@ import { createProjectsService } from '@/services/projects';
 import { createReadingService } from '@/services/reading';
 import { createExportService } from '@/services/export';
 import { createSettingsService } from '@/services/settings';
+import { createUpdateService } from '@/services/update';
 import { createStatsService } from '@/services/stats';
 import { createBackupService } from '@/services/backup';
 import { createSplitReviewService } from '@/services/split-review';
@@ -202,6 +205,11 @@ const services = {
     sourceFileStore: sandboxSourceFileStore,
   }),
   stats: createStatsService({ settingsRepository: adapters.settingsRepository }),
+  update: createUpdateService({
+    gateway: createGithubReleaseGateway('hhan593/talecast'),
+    settingsRepository: adapters.settingsRepository,
+    currentVersion: Constants.expoConfig?.version ?? '0.0.0',
+  }),
   annotations: createAnnotationsService({
     annotationRepository: adapters.annotationRepository,
     libraryRepository: adapters.libraryRepository,
