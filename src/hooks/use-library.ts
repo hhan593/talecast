@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
-import type { EncodingChoice, EncodingDetection } from '@/domain/encoding';
-import { err, errorMessage, ok, type Result } from '@/domain/result';
+import { errorMessage, ok, type Result } from '@/domain/result';
 import type { Chapter, SourceInfo } from '@/domain/types';
 
 /**
@@ -15,15 +14,6 @@ export function useLibrary(projectId: string, revision: number) {
   const [source, setSource] = useState<SourceInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 选文件后待确认编码的导入；未确认前不写盘 */
-  const [pendingImport, setPendingImport] = useState<{
-    commandId: string;
-    fileName: string;
-    bytes: Uint8Array;
-    detection: EncodingDetection;
-  } | null>(null);
-  const [importEncoding, setImportEncoding] = useState<EncodingChoice>('auto');
-
   const refresh = useCallback(async () => {
     try {
       const [chapterRows, sourceInfo] = await Promise.all([
@@ -64,64 +54,19 @@ export function useLibrary(projectId: string, revision: number) {
     [refresh, run, services],
   );
 
-  /** 第一步：选文件 + 识别编码（只内存暂存，不写盘） */
+  /** 选文件直接导入（issue #63：编码自动识别，不向用户展示格式信息/选项；失败时经 error 提示） */
   const pickImportTxt = useCallback(
     () =>
       run(async () => {
-        const result = await services.import.pickImportFile();
-        if (!result.ok) return result;
-        if (!result.value) return ok(null);
-        const picked = result.value;
-        const lowerName = picked.fileName.toLowerCase();
-        const containerFile =
-          lowerName.endsWith('.epub') || lowerName.endsWith('.mobi') ||
-          lowerName.endsWith('.azw3') || lowerName.endsWith('.prc') ||
-          (picked.bytes[0] === 0x50 && picked.bytes[1] === 0x4b); // ZIP container
-        if (containerFile) {
-          // EPUB/MOBI 的编码由各自解析器处理，不弹 TXT 编码选择
-          const imported = await services.import.importSource({
-            commandId: services.newCommandId(),
-            projectId,
-            fileName: picked.fileName,
-            bytes: picked.bytes,
-          });
-          if (imported.ok) await refresh();
-          return imported;
-        }
-        setPendingImport({
+        const imported = await services.import.pickAndImport({
+          projectId,
           commandId: services.newCommandId(),
-          fileName: picked.fileName,
-          bytes: picked.bytes,
-          detection: picked.detection,
         });
-        setImportEncoding('auto');
-        return ok(null);
-    }),
+        if (imported.ok && imported.value) await refresh();
+        return imported;
+      }),
     [projectId, refresh, run, services],
   );
-
-  /** 第二步：按确认/覆盖的编码真正导入 */
-  const confirmImportTxt = useCallback(
-    () =>
-      run(async () => {
-        if (!pendingImport) return err('invalid', '请先选择要导入的文件');
-        const result = await services.import.importSource({
-          commandId: pendingImport.commandId,
-          projectId,
-          fileName: pendingImport.fileName,
-          bytes: pendingImport.bytes,
-          encoding: importEncoding,
-        });
-        if (result.ok) {
-          await refresh();
-          setPendingImport(null);
-        }
-        return result;
-      }),
-    [importEncoding, pendingImport, projectId, refresh, run, services],
-  );
-
-  const cancelImportTxt = useCallback(() => setPendingImport(null), []);
 
   const resplit = useCallback(
     () =>
@@ -230,11 +175,6 @@ export function useLibrary(projectId: string, revision: number) {
     setError,
     refresh,
     pickImportTxt,
-    pendingImport,
-    importEncoding,
-    setImportEncoding,
-    confirmImportTxt,
-    cancelImportTxt,
     resplit,
     adopt,
     undo,

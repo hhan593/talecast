@@ -1,7 +1,7 @@
 import { buildInitialChapterDrafts, type ChapterDraft } from '@/domain/split';
 import { parseEpub } from '@/domain/epub';
 import { checkImportSize } from '@/domain/source';
-import { decodeSourceText, detectEncoding, type EncodingChoice, type EncodingDetection } from '@/domain/encoding';
+import { decodeSourceText, type EncodingChoice } from '@/domain/encoding';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { parseMobi } from '@/domain/mobi';
@@ -240,18 +240,7 @@ export function createImportService(deps: ImportDeps) {
         .then((receipt) => resolveIdempotent(receipt, () => runImport(deps, command)));
     },
 
-    /** 只选文件并识别编码，不写入；UI 据此让用户确认/覆盖后调用 importSource */
-    async pickImportFile(): Promise<Result<{ fileName: string; bytes: Uint8Array; detection: EncodingDetection } | null>> {
-      try {
-        const picked = await deps.filePicker.pickTextFile();
-        if (!picked) return ok(null);
-        return ok({ fileName: picked.name, bytes: picked.bytes, detection: detectEncoding(picked.bytes) });
-      } catch (error) {
-        return err('storage', `读取文件失败：${errorMessage(error)}`);
-      }
-    },
-
-    /** 选文件并直接导入（兼容老调用）；encoding 省略时自动识别 */
+    /** 选文件并直接导入；encoding 省略时自动识别（issue #63：不再向用户展示编码信息/选项） */
     async pickAndImport(command: {
       projectId: string;
       commandId: string;
