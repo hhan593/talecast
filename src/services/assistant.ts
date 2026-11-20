@@ -1,4 +1,11 @@
-import { parseResplitProposalBlock, ASSISTANT_SYSTEM_PROMPT } from '@/domain/assistant';
+import {
+  parseResplitProposalBlock,
+  ASSISTANT_SYSTEM_PROMPT,
+  ASSISTANT_BOOK_HEAD_CHARS,
+  ASSISTANT_CONTEXT_CHAR_LIMIT,
+  resolveAssistantScope,
+  type AssistantScope,
+} from '@/domain/assistant';
 import { toChapterDrafts } from '@/domain/split';
 import type {
   AssistantMessageRecord,
@@ -10,6 +17,8 @@ import type {
 } from '@/domain/ports';
 import { errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
 
+
+export type { AssistantScope } from '@/domain/assistant';
 
 export interface AssistantDeps {
   assistantRepository: AssistantRepository;
@@ -26,6 +35,8 @@ export interface AssistantMessageView {
   text: string;
   /** 候选卡：助手产出的分章候选（待审阅） */
   proposalId: string | null;
+  /** 用户消息：本次实际发送给模型的范围告知 */
+  scopeNotice: string | null;
   version: number;
 }
 
@@ -51,6 +62,16 @@ function partsToProposalId(partsJson: string): string | null {
   }
 }
 
+function partsToScopeNotice(partsJson: string): string | null {
+  try {
+    const parts = JSON.parse(partsJson) as Array<{ type?: string; text?: string }>;
+    const part = parts.find((p) => p.type === 'scope_notice');
+    return part?.text ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function toView(record: AssistantMessageRecord): AssistantMessageView {
   return {
     id: record.id,
@@ -58,25 +79,38 @@ function toView(record: AssistantMessageRecord): AssistantMessageView {
     role: record.role,
     text: partsToText(record.partsJson),
     proposalId: partsToProposalId(record.partsJson),
+    scopeNotice: partsToScopeNotice(record.partsJson),
     version: record.version,
   };
 }
 
 export function createAssistantService(deps: AssistantDeps) {
-  async function buildContext(projectId: string): Promise<{ chapterMeta: string; textHead: string; textLength: number }> {
+  /** 按用户可见范围构建上下文：章节/选区用书级偏移从原文取真实片段，超上限截断 */
+  async function buildContext(
+    projectId: string,
+    scope: AssistantScope,
+  ): Promise<Result<{ chapterMeta: string; scopeText: string; textLength: number; notice: string }>> {
     const source = await deps.libraryRepository.getSource(projectId);
     const chapters = await deps.libraryRepository.listChapters(projectId);
+    const resolved = resolveAssistantScope(scope, chapters);
+    if (!resolved) return err('invalid', '助手上下文范围无效：章节不存在或选区越界');
     const chapterMeta = chapters
       .map((chapter) => `- 《${chapter.title}》 偏移 ${chapter.startOffset}–${chapter.endOffset}`)
       .join('\n');
-    let textHead = '';
+    let scopeText = '';
     let textLength = 0;
     if (source) {
       const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
       textLength = text.length;
-      textHead = text.slice(0, 1200);
+      if (scope.kind === 'book') {
+        scopeText = text.slice(0, ASSISTANT_BOOK_HEAD_CHARS);
+      } else {
+        const start = resolved.startOffset!;
+        const end = Math.min(resolved.endOffset!, start + ASSISTANT_CONTEXT_CHAR_LIMIT);
+        scopeText = text.slice(start, end);
+      }
     }
-    return { chapterMeta, textHead, textLength };
+    return ok({ chapterMeta, scopeText, textLength, notice: resolved.notice });
   }
 
   return {
@@ -91,11 +125,15 @@ export function createAssistantService(deps: AssistantDeps) {
       projectId: string;
       commandId: string;
       userText: string;
+      scope?: AssistantScope;
       onDelta?: (delta: string) => void;
-    }): Promise<Result<{ assistantText: string; proposalId: string | null }>> {
+    }): Promise<Result<{ assistantText: string; proposalId: string | null; scopeNotice: string }>> {
       if (command.userText.trim().length === 0) return err('invalid', '消息不能为空');
+      const scope: AssistantScope = command.scope ?? { kind: 'book' };
       const session = await deps.assistantRepository.getOrCreateSession(command.projectId);
-      const context = await buildContext(command.projectId);
+      const contextResult = await buildContext(command.projectId, scope);
+      if (!contextResult.ok) return contextResult;
+      const context = contextResult.value;
       const baseOrdinal = await deps.assistantRepository.countMessages(session.id);
 
       const userRecord: AssistantMessageRecord = {
@@ -103,16 +141,20 @@ export function createAssistantService(deps: AssistantDeps) {
         sessionId: session.id,
         ordinal: baseOrdinal,
         role: 'user',
-        partsJson: JSON.stringify([{ type: 'text', text: command.userText }]),
+        partsJson: JSON.stringify([
+          { type: 'text', text: command.userText },
+          { type: 'scope_notice', text: context.notice },
+        ]),
         version: 0,
         createdAt: Date.now(),
       };
       await deps.assistantRepository.appendMessage(userRecord);
 
       const contextPrompt =
+        `【本次发送范围】${context.notice}\n` +
         '【书籍上下文】\n章节目录（字符偏移，半开区间）：\n' +
         (context.chapterMeta || '（还没有章节）') +
-        `\n全文共 ${context.textLength} 字。\n开头预览：\n${context.textHead}\n\n【用户消息】\n${command.userText}`;
+        `\n全文共 ${context.textLength} 字。\n本次提供的正文片段：\n${context.scopeText}\n\n【用户消息】\n${command.userText}`;
 
       // 先落占位消息，流式增量节流持久化（docs/plan.md 5.3：按会话序号写入，中断可恢复）
       const assistantRecord: AssistantMessageRecord = {
@@ -164,8 +206,10 @@ export function createAssistantService(deps: AssistantDeps) {
         return err(remoteErrorCode(error), message);
       }
 
-      // 候选产出：分章候选 → pending 提案；绝不直接改章节
-      const proposalBlock = parseResplitProposalBlock(assistantText, context.textLength);
+      // 候选产出：全书分章候选需要全书偏移视野；局部范围不产出候选（避免凭半本书猜偏移）
+      const proposalBlock = scope.kind === 'book'
+        ? parseResplitProposalBlock(assistantText, context.textLength)
+        : null;
       let proposalId: string | null = null;
       if (proposalBlock) {
         const currentChapters = await deps.libraryRepository.listChapters(command.projectId);
@@ -195,7 +239,7 @@ export function createAssistantService(deps: AssistantDeps) {
       if (proposalId) parts.push({ type: 'resplit_candidate', proposalId });
       await deps.assistantRepository.updateMessageParts(session.id, assistantRecord.ordinal, JSON.stringify(parts), version + 1);
 
-      return ok({ assistantText, proposalId });
+      return ok({ assistantText, proposalId, scopeNotice: context.notice });
     },
   };
 }

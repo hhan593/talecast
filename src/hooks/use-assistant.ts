@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
+import type { AssistantScope } from '@/domain/assistant';
 import type { AssistantMessageView } from '@/services/assistant';
 
 export function useAssistant(projectId: string) {
@@ -9,6 +10,8 @@ export function useAssistant(projectId: string) {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** 本次提问发送给模型的正文范围（默认全书概览，不发送全文） */
+  const [scope, setScope] = useState<AssistantScope>({ kind: 'book' });
   /** 历史分页：最早已加载的 ordinal；null 表示已到头 */
   const [oldestOrdinal, setOldestOrdinal] = useState<number | null>(null);
   const PAGE_SIZE = 20;
@@ -48,6 +51,7 @@ export function useAssistant(projectId: string) {
           projectId,
           commandId: services.newCommandId(),
           userText,
+          scope,
           onDelta: (delta) => setStreamText((prev) => prev + delta),
         });
         if (!result.ok) {
@@ -61,8 +65,8 @@ export function useAssistant(projectId: string) {
         setStreamText('');
       }
     },
-    [projectId, reloadLatest, services],
+    [projectId, reloadLatest, scope, services],
   );
 
-  return { messages, streaming, streamText, error, hasEarlier: oldestOrdinal !== null && oldestOrdinal > 0, send, loadEarlier, reloadLatest };
+  return { messages, streaming, streamText, error, scope, setScope, hasEarlier: oldestOrdinal !== null && oldestOrdinal > 0, send, loadEarlier, reloadLatest };
 }

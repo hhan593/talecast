@@ -563,6 +563,10 @@ export default function ProjectWorkbenchScreen() {
         error={assistant.error}
         hasEarlier={assistant.hasEarlier}
         input={assistantInput}
+        scope={assistant.scope}
+        chapters={chapters.map((c) => ({ id: c.id, title: c.title, startOffset: c.startOffset, endOffset: c.endOffset }))}
+        selection={longPressRange}
+        onScopeChange={assistant.setScope}
         onBack={() => setView('chapters')}
         onLoadEarlier={() => void assistant.loadEarlier()}
         onInputChange={setAssistantInput}

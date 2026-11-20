@@ -1,5 +1,7 @@
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
+import { resolveAssistantScope, type AssistantScope } from '@/domain/assistant';
+
 /**
  * 章节工作台的助手视图（docs/plan.md 4.1.7）：流式消息 + 历史分页 + 候选卡。
  * 纯展示组件：会话状态与回调经 props 注入（components 不 import services/adapters）。
@@ -11,6 +13,8 @@ export interface AssistantMessageItem {
   text: string;
   /** 非空时渲染"去审阅"候选卡（采用在审阅 modal 完成） */
   proposalId: string | null;
+  /** 用户消息附带本次发送范围，历史可追溯 */
+  scopeNotice: string | null;
 }
 
 export interface AssistantViewProps {
@@ -20,6 +24,10 @@ export interface AssistantViewProps {
   error: string | null;
   hasEarlier: boolean;
   input: string;
+  scope: AssistantScope;
+  chapters: Array<{ id: string; title: string; startOffset: number; endOffset: number }>;
+  selection: { start: number; end: number } | null;
+  onScopeChange(scope: AssistantScope): void;
   onBack(): void;
   onLoadEarlier(): void;
   onInputChange(text: string): void;
@@ -28,6 +36,20 @@ export interface AssistantViewProps {
 }
 
 export function AssistantView(props: AssistantViewProps) {
+  const resolved = resolveAssistantScope(props.scope, props.chapters);
+  const notice = resolved?.notice ?? '范围无效，请重新选择';
+  // 选区是书级偏移：按偏移找所属章节，不能沿用当前范围（否则跨章选区会静默指向错误章节）
+  const selectionChapter = props.selection
+    ? props.chapters.find((c) => props.selection!.start >= c.startOffset && props.selection!.end <= c.endOffset)
+    : undefined;
+  const selectionScope: AssistantScope | null = props.selection && selectionChapter
+    ? { kind: 'selection', chapterId: selectionChapter.id, startOffset: props.selection.start, endOffset: props.selection.end }
+    : null;
+  const options: Array<{ key: string; label: string; value: AssistantScope }> = [
+    { key: 'book', label: '全书概览', value: { kind: 'book' } },
+    ...props.chapters.map((c) => ({ key: `ch-${c.id}`, label: c.title, value: { kind: 'chapter' as const, chapterId: c.id } })),
+    ...(selectionScope ? [{ key: 'selection', label: '选中段落', value: selectionScope }] : []),
+  ];
   return (
     <View className="flex-1 bg-paper pt-14 dark:bg-paper-night">
       <View className="flex-row items-center justify-between px-4">
@@ -37,6 +59,23 @@ export function AssistantView(props: AssistantViewProps) {
         <Text className="text-sm font-semibold text-ink dark:text-ink-night">书籍助手</Text>
         <View className="w-16" />
       </View>
+      <Text className="mt-3 px-4 text-xs text-muted dark:text-muted-night">发送范围（原文片段会提交给配置的文本模型服务商）</Text>
+      <FlatList
+        className="mt-1 px-4"
+        horizontal
+        data={options}
+        keyExtractor={(item) => item.key}
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <Pressable
+            className={`mr-2 rounded-full border px-3 py-1.5 ${JSON.stringify(item.value) === JSON.stringify(props.scope) ? 'border-accent bg-accent-soft' : 'border-line dark:border-line-night'}`}
+            onPress={() => props.onScopeChange(item.value)}
+          >
+            <Text className="text-xs text-ink dark:text-ink-night">{item.label}</Text>
+          </Pressable>
+        )}
+      />
+      <Text className="px-4 pt-1 text-xs text-faint" numberOfLines={2}>本次发送：{notice}</Text>
       {props.hasEarlier ? (
         <Pressable className="mt-2 self-center px-4" onPress={props.onLoadEarlier}>
           <Text className="text-xs text-accent">加载更早消息</Text>
@@ -70,6 +109,9 @@ export function AssistantView(props: AssistantViewProps) {
               >
                 {item.text}
               </Text>
+              {item.role === 'user' && item.scopeNotice ? (
+                <Text className="mt-1 text-[10px] text-faint">发送范围：{item.scopeNotice}</Text>
+              ) : null}
               {item.proposalId ? (
                 <Pressable
                   className="mt-2 rounded-lg bg-gold px-3 py-1.5 self-start"

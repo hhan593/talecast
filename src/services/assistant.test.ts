@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ASSISTANT_CONTEXT_CHAR_LIMIT } from '@/domain/assistant';
 import { LlmNotConfiguredError } from '@/domain/result';
 import { createAssistantService } from './assistant';
 import { createImportService } from './import';
@@ -127,6 +128,104 @@ describe('P3 工程助手', () => {
     const earlier = await s.assistant.listMessages('p1', { limit: 4, beforeOrdinal: latest[0].ordinal });
     expect(earlier.length).toBe(4);
     expect(earlier[0].text).toBe('问 1');
+  });
+});
+
+describe('助手上下文范围（按章/选段）', () => {
+  it('全书概览：只发送目录 + 开头 1200 字，不发送全文', async () => {
+    const s = await setup();
+    const source = await s.library.getSource('p1');
+    if (!source) throw new Error('no source');
+    const text = await s.files.readDecodedText(source.textSha256);
+    await s.assistant.sendMessage({ projectId: 'p1', commandId: 'c-scope-book', userText: '概括开头' });
+    const prompt = s.llm.calls.at(-1)!.user;
+    expect(prompt).toContain('章节目录');
+    expect(prompt).toContain(text.slice(0, 1200));
+    expect(prompt).toContain('开头 1200 字（不发送全书正文）');
+    // 文案声明"不发送全书"必须与行为一致：加长正文后提示词仍只含开头片段
+    const longText = '头'.repeat(1500) + text + '尾'.repeat(3000);
+    await s.files.writeDecodedText(source.textSha256, longText);
+    await s.assistant.sendMessage({ projectId: 'p1', commandId: 'c-scope-book-long', userText: '再问' });
+    expect(s.llm.calls.at(-1)!.user).not.toContain('尾'.repeat(20));
+  });
+
+  it('按章：只发送该章正文（书级偏移），其他章节不进提示词', async () => {
+    const s = await setup();
+    const source = await s.library.getSource('p1');
+    if (!source) throw new Error('no source');
+    const text = await s.files.readDecodedText(source.textSha256);
+    const chapters = await s.library.listChapters('p1');
+    const target = chapters[1];
+    const result = await s.assistant.sendMessage({
+      projectId: 'p1',
+      commandId: 'c-scope-chapter',
+      userText: '这章讲了什么',
+      scope: { kind: 'chapter', chapterId: target.id },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const prompt = s.llm.calls.at(-1)!.user;
+    expect(prompt).toContain(text.slice(target.startOffset, target.endOffset));
+    expect(prompt).not.toContain(text.slice(chapters[2].startOffset, chapters[2].startOffset + 10));
+    expect(result.value.scopeNotice).toContain(target.title);
+    // 历史消息标注本次范围（可追溯）
+    const messages = await s.assistant.listMessages('p1', { limit: 10 });
+    expect(messages.find((m) => m.text === '这章讲了什么')?.scopeNotice).toContain(target.title);
+  });
+
+  it('选段：只发送选中书级区间，越界范围直接拒绝且不调用模型', async () => {
+    const s = await setup();
+    const source = await s.library.getSource('p1');
+    if (!source) throw new Error('no source');
+    const text = await s.files.readDecodedText(source.textSha256);
+    const chapters = await s.library.listChapters('p1');
+    const target = chapters[0];
+    const start = target.startOffset + 3;
+    const end = start + 12;
+    const result = await s.assistant.sendMessage({
+      projectId: 'p1',
+      commandId: 'c-scope-selection',
+      userText: '解释这段',
+      scope: { kind: 'selection', chapterId: target.id, startOffset: start, endOffset: end },
+    });
+    expect(result.ok).toBe(true);
+    const prompt = s.llm.calls.at(-1)!.user;
+    expect(prompt).toContain(text.slice(start, end));
+    expect(prompt).toContain('选中片段');
+
+    const callsBefore = s.llm.calls.length;
+    const invalid = await s.assistant.sendMessage({
+      projectId: 'p1',
+      commandId: 'c-scope-invalid',
+      userText: '越界',
+      scope: { kind: 'selection', chapterId: target.id, startOffset: target.startOffset, endOffset: target.endOffset + 1 },
+    });
+    expect(invalid.ok).toBe(false);
+    expect(s.llm.calls.length).toBe(callsBefore);
+  });
+
+  it('局部范围不产出全书分章候选；超长章节截断并告知', async () => {
+    const s = await setup();
+    const source = await s.library.getSource('p1');
+    if (!source) throw new Error('no source');
+    const chapters = await s.library.listChapters('p1');
+    const longText = '长'.repeat(ASSISTANT_CONTEXT_CHAR_LIMIT + 500);
+    await s.files.writeDecodedText(source.textSha256, longText);
+    s.library.chapters[0] = { ...chapters[0], endOffset: longText.length };
+    s.llm.response =
+      '```json\n{"type":"resplit_proposal","chapters":[{"title":"上","startOffset":0,"endOffset":100}]}\n```';
+    const result = await s.assistant.sendMessage({
+      projectId: 'p1',
+      commandId: 'c-scope-long',
+      userText: '分章',
+      scope: { kind: 'chapter', chapterId: chapters[0].id },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.proposalId).toBeNull();
+    expect(result.value.scopeNotice).toContain(`仅发送前 ${ASSISTANT_CONTEXT_CHAR_LIMIT} 字`);
+    const prompt = s.llm.calls.at(-1)!.user;
+    expect(prompt.match(/长/g)?.length).toBe(ASSISTANT_CONTEXT_CHAR_LIMIT);
   });
 });
 
