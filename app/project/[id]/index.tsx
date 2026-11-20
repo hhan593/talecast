@@ -1,7 +1,8 @@
 import * as Clipboard from 'expo-clipboard';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { VolumeManager } from 'react-native-volume-manager';
 import {
   ActivityIndicator,
@@ -16,6 +17,7 @@ import {
 
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
+import { SideDrawer } from '@/components/side-drawer';
 import { MARGINS, ReaderView, type HighlightRange, type ReaderBookmark } from '@/components/workbench/reader-view';
 import { useAnnotations } from '@/hooks/use-annotations';
 import { useAssistant } from '@/hooks/use-assistant';
@@ -36,6 +38,7 @@ import type { Chapter } from '@/domain/types';
 export default function ProjectWorkbenchScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const projectId = params.id;
+  const colorScheme = useColorScheme();
   const { project, loading, notFound } = useProject(projectId);
   const services = useServices();
   const { t } = useI18n();
@@ -74,6 +77,8 @@ export default function ProjectWorkbenchScreen() {
   const [volumeEvent, setVolumeEvent] = useState<{ seq: number; direction: 'up' | 'down' } | null>(null);
   const [wordKaraoke, setWordKaraoke] = useState(false);
   const [assistantInput, setAssistantInput] = useState('');
+  // 右侧抽屉（issue #65）：角色中心/助手/听书/制作入口统一收纳，顶栏只留「···」
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [current, setCurrent] = useState<{
     chapter: Chapter;
     chapterText: string;
@@ -270,6 +275,42 @@ export default function ProjectWorkbenchScreen() {
     [chapters],
   );
 
+  // 重新分章（issue #65 收进右侧抽屉）：提案生成后跳审阅
+  const handleResplit = useCallback(() => {
+    void library.resplit().then((result) => {
+      if (result.ok && result.value && typeof result.value === 'object' && 'proposalId' in result.value) {
+        router.push({
+          pathname: '/project/[id]/review',
+          params: { id: projectId, proposalId: String((result.value as { proposalId: string }).proposalId) },
+        });
+      }
+    });
+  }, [library, projectId, router]);
+
+  // 章节操作菜单（issue #65）：目录行只留标题，制作/编辑能力收进长按菜单
+  const buildChapterActions = useCallback(
+    (chapter: Chapter) => {
+      Alert.alert(chapter.title, undefined, [
+        { text: t('workbench.rename'), onPress: () => setDialog({ kind: 'rename', chapterId: chapter.id, title: t('workbench.renameTitle'), initial: chapter.title }) },
+        { text: t('workbench.split'), onPress: () => setDialog({ kind: 'split', chapterId: chapter.id, title: t('workbench.splitTitle'), initial: String(Math.floor((chapter.startOffset + chapter.endOffset) / 2)) }) },
+        { text: t('workbench.boundary'), onPress: () => setDialog({ kind: 'boundary', chapterId: chapter.id, title: t('workbench.boundaryTitle'), initial: String(chapter.endOffset) }) },
+        { text: t('workbench.previewFirst'), onPress: () => void generation.preview(chapter.id) },
+        { text: t('workbench.generateChapter'), onPress: () => void generation.start(chapter.id) },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(t('workbench.deleteChapter'), t('workbench.deleteChapterConfirm', { title: chapter.title }), [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('common.delete'), style: 'destructive', onPress: () => void library.remove(chapter.id) },
+            ]),
+        },
+        { text: t('common.cancel'), style: 'cancel' },
+      ]);
+    },
+    [generation, library, t],
+  );
+
   // 划线与笔记（v0.12.0）：当前书全部区间下发给阅读器渲染
   const annotationRanges = useMemo(
     () => annotations.annotations.map((a) => ({ start: a.startOffset, end: a.endOffset })),
@@ -416,6 +457,38 @@ export default function ProjectWorkbenchScreen() {
   }
 
   // ------------------------------------------------------------------ 正文视图
+  // ------------------------------------------------------------------ 右侧抽屉
+  const inkColor = colorScheme === 'dark' ? '#EAE3D5' : '#2C2822';
+  // 早退 return 之下不再调 hook：Set 直接按次渲染构建（章节数量级，无性能问题）
+  const chapterIds = new Set(chapters.map((c) => c.id));
+  const playingThisBook =
+    playback.state.chapterId !== null && chapterIds.has(playback.state.chapterId) && playback.state.status === 'playing';
+  const pausedThisBook =
+    playback.state.chapterId !== null && chapterIds.has(playback.state.chapterId) && playback.state.status === 'paused';
+  const drawerEntry = (params: {
+    icon: 'headset-outline' | 'people-outline' | 'chatbubble-ellipses-outline' | 'document-text-outline' | 'mic-outline' | 'time-outline';
+    label: string;
+    active?: boolean;
+    onPress: () => void;
+  }) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: params.active === true }}
+      className={`mt-2 flex-row items-center gap-3 rounded-xl px-4 py-3 ${
+        params.active ? 'bg-accent-soft dark:bg-accent-nightsoft' : 'bg-raised dark:bg-raised-night'
+      }`}
+      onPress={params.onPress}
+    >
+      <Ionicons name={params.icon} size={18} color={params.active ? '#B5442D' : inkColor} />
+      <Text
+        className={`flex-1 text-sm ${params.active ? 'text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
+        numberOfLines={1}
+      >
+        {params.label}
+      </Text>
+    </Pressable>
+  );
+
   if (view === 'reader' && current) {
     return (
       <ReaderView
@@ -602,34 +675,31 @@ export default function ProjectWorkbenchScreen() {
   // ------------------------------------------------------------------ 目录视图
   return (
     <View className="flex-1 bg-paper px-4 pb-6 pt-14 dark:bg-paper-night">
-      <Text className="font-serif text-2xl font-bold text-ink dark:text-ink-night" numberOfLines={1}>
-        {project.title}
-      </Text>
-      <Text className="mt-1 text-xs text-muted dark:text-muted-night">
-        revision {project.revision}
-        {library.source ? t('workbench.sourceSuffix', { name: library.source.filename }) : ''}
-      </Text>
+      <View className="flex-row items-start justify-between gap-2">
+        <View className="flex-1">
+          <Text className="font-serif text-2xl font-bold text-ink dark:text-ink-night" numberOfLines={1}>
+            {project.title}
+          </Text>
+          <Text className="mt-1 text-xs text-muted dark:text-muted-night">
+            revision {project.revision}
+            {library.source ? t('workbench.sourceSuffix', { name: library.source.filename }) : ''}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('workbench.more')}
+          className="h-9 w-9 items-center justify-center rounded-lg bg-raised dark:bg-raised-night"
+          onPress={() => setDrawerOpen(true)}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={inkColor} />
+        </Pressable>
+      </View>
 
       {library.error ? (
         <Text className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger dark:bg-danger-nightsoft dark:text-danger-night">
           {library.error}
         </Text>
       ) : null}
-
-      <View className="mt-3 flex-row gap-2">
-        <Pressable accessibilityRole="button"
-          className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
-          onPress={() => router.push({ pathname: '/project/[id]/characters', params: { id: projectId } })}
-        >
-          <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.characters')}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button"
-          className="flex-1 items-center rounded-xl bg-raised py-2.5 dark:bg-card-night"
-          onPress={() => setView('assistant')}
-        >
-          <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.assistant')}</Text>
-        </Pressable>
-      </View>
 
       {generation.progress ? (
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-night">
@@ -681,58 +751,15 @@ export default function ProjectWorkbenchScreen() {
         </View>
       ) : null}
 
-      <View className="mt-3 flex-row flex-wrap gap-2">
-        {!library.source ? (
-          <Pressable accessibilityRole="button"
-            className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
-            disabled={library.busy}
-            onPress={() => void library.pickImportTxt()}
-          >
-            <Text className="font-semibold text-white">{t('workbench.importTxt')}</Text>
-          </Pressable>
-        ) : (
-          <>
-            <Pressable accessibilityRole="button"
-              className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
-              disabled={library.busy}
-              onPress={() => {
-                void library.resplit().then((result) => {
-                  if (result.ok && result.value && typeof result.value === 'object' && 'proposalId' in result.value) {
-                    router.push({
-                      pathname: '/project/[id]/review',
-                      params: { id: projectId, proposalId: String((result.value as { proposalId: string }).proposalId) },
-                    });
-                  }
-                });
-              }}
-            >
-              <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.resplit')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className="rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
-              onPress={() =>
-                Alert.alert(t('workbench.capability'), t('workbench.capabilityHint'))
-              }
-            >
-              <Text className="text-sm text-ink dark:text-ink-night">{t('workbench.proposalHistory')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              className={`rounded-xl px-3 py-2.5 ${dialogueVoices ? 'bg-accent-soft dark:bg-accent-nightsoft' : 'bg-raised dark:bg-card-night'}`}
-              onPress={() => {
-                const next = !dialogueVoices;
-                setDialogueVoices(next);
-                void services.settings.setSetting(`dialogue-voices:${projectId}`, next ? 'on' : 'off');
-              }}
-            >
-              <Text
-                className={`text-sm ${dialogueVoices ? 'text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
-              >
-                {t('workbench.dialogueVoices')} · {dialogueVoices ? t('common.on') : t('common.off')}
-              </Text>
-            </Pressable>
-          </>
-        )}
-      </View>
+      {!library.source ? (
+        <Pressable accessibilityRole="button"
+          className="mt-3 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
+          disabled={library.busy}
+          onPress={() => void library.pickImportTxt()}
+        >
+          <Text className="font-semibold text-white">{t('workbench.importTxt')}</Text>
+        </Pressable>
+      ) : null}
 
       {/* 目录三分区（v0.8.0）：章节 / 书签列表（含摘录） / 全文搜索 */}
       <View className="mt-3 flex-row gap-2">
@@ -765,54 +792,16 @@ export default function ProjectWorkbenchScreen() {
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={library.busy} onRefresh={() => void library.refresh()} />}
         renderItem={({ item, index }) => (
-          <View className="rounded-xl bg-card px-4 py-3 dark:bg-card-night">
-            <Pressable onPress={() => void openChapter(item.id)}>
-              <Text className="font-semibold text-ink dark:text-ink-night">
-                {index + 1}. {item.title}
-              </Text>
-              <Text className="mt-1 text-xs text-faint">
-                {t('workbench.offset', { start: item.startOffset, end: item.endOffset })}
-              </Text>
-            </Pressable>
-            {library.source ? (
-              <View className="mt-2 flex-row flex-wrap gap-2">
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'rename', chapterId: item.id, title: t('workbench.renameTitle'), initial: item.title })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.rename')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'split', chapterId: item.id, title: t('workbench.splitTitle'), initial: String(Math.floor((item.startOffset + item.endOffset) / 2)) })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.split')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" className="rounded-md bg-raised px-2 py-1 dark:bg-card-night" onPress={() => setDialog({ kind: 'boundary', chapterId: item.id, title: t('workbench.boundaryTitle'), initial: String(item.endOffset) })}>
-                  <Text className="text-xs text-muted dark:text-ink-night">{t('workbench.boundary')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button"
-                  className="rounded-md bg-accent-soft px-2 py-1 dark:bg-accent-nightsoft"
-                  disabled={generation.busy}
-                  onPress={() => void generation.preview(item.id)}
-                >
-                  <Text className="text-xs text-accent dark:text-accent-night">{t('workbench.previewFirst')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button"
-                  className="rounded-md bg-accent px-2 py-1"
-                  disabled={generation.busy}
-                  onPress={() => void generation.start(item.id)}
-                >
-                  <Text className="text-xs font-semibold text-white">{t('workbench.generateChapter')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button"
-                  className="rounded-md bg-danger-soft px-2 py-1 dark:bg-danger-nightsoft"
-                  onPress={() =>
-                    Alert.alert(t('workbench.deleteChapter'), t('workbench.deleteChapterConfirm', { title: item.title }), [
-                      { text: t('common.cancel'), style: 'cancel' },
-                      { text: t('common.delete'), style: 'destructive', onPress: () => void library.remove(item.id) },
-                    ])
-                  }
-                >
-                  <Text className="text-xs text-danger dark:text-danger-night">{t('common.delete')}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            className="rounded-xl bg-card px-4 py-3 active:bg-raised dark:bg-card-night dark:active:bg-raised-night"
+            onPress={() => void openChapter(item.id)}
+            onLongPress={() => buildChapterActions(item)}
+          >
+            <Text className="font-semibold text-ink dark:text-ink-night" numberOfLines={1}>
+              {index + 1}. {item.title}
+            </Text>
+          </Pressable>
         )}
         ItemSeparatorComponent={() => <View className="h-2" />}
         ListEmptyComponent={
@@ -1032,6 +1021,63 @@ export default function ProjectWorkbenchScreen() {
         }}
         onClose={() => setDialog(null)}
       />
+
+      {/* 右侧抽屉（issue #65）：顶栏入口与制作功能统一收纳，正文区只留目录/书签/笔记/搜索 */}
+      <SideDrawer side="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        {drawerEntry({
+          icon: 'headset-outline',
+          label: playingThisBook ? t('reader.pause') : t('workbench.listenBook'),
+          active: playingThisBook || pausedThisBook,
+          onPress: () => {
+            setDrawerOpen(false);
+            if (playingThisBook) void playback.pause();
+            else if (pausedThisBook) void playback.resume();
+            else if (chapters.length > 0) void playback.playChapter(chapters[0].id);
+          },
+        })}
+        {drawerEntry({
+          icon: 'people-outline',
+          label: t('workbench.characters'),
+          onPress: () => {
+            setDrawerOpen(false);
+            router.push({ pathname: '/project/[id]/characters', params: { id: projectId } });
+          },
+        })}
+        {drawerEntry({
+          icon: 'chatbubble-ellipses-outline',
+          label: t('workbench.assistant'),
+          onPress: () => {
+            setDrawerOpen(false);
+            setView('assistant');
+          },
+        })}
+        {drawerEntry({
+          icon: 'document-text-outline',
+          label: t('workbench.resplit'),
+          onPress: () => {
+            setDrawerOpen(false);
+            handleResplit();
+          },
+        })}
+        {drawerEntry({
+          icon: 'mic-outline',
+          label: `${t('workbench.dialogueVoices')} · ${dialogueVoices ? t('common.on') : t('common.off')}`,
+          active: dialogueVoices,
+          onPress: () => {
+            const next = !dialogueVoices;
+            setDialogueVoices(next);
+            void services.settings.setSetting(`dialogue-voices:${projectId}`, next ? 'on' : 'off');
+          },
+        })}
+        {drawerEntry({
+          icon: 'time-outline',
+          label: t('workbench.proposalHistory'),
+          onPress: () => {
+            setDrawerOpen(false);
+            Alert.alert(t('workbench.capability'), t('workbench.capabilityHint'));
+          },
+        })}
+      </SideDrawer>
     </View>
   );
 }
