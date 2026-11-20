@@ -1,6 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, Text, TextInput, View } from 'react-native';
+import Constants from 'expo-constants';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from 'react-native';
 
 import { useProjects } from '@/hooks/use-projects';
 import { useI18n } from '@/hooks/use-i18n';
@@ -18,6 +32,15 @@ export default function BookshelfScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [tagDialog, setTagDialog] = useState<{ projectId: string; title: string; initial: string[] } | null>(null);
   const [covers, setCovers] = useState<Record<string, string>>({});
+  // 左侧抽屉（issue #62）：入口与展开/收起交互先落地，面板内容后续再定
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnim = useRef(new Animated.Value(0)).current; // 0 收起 → 1 展开
+  const colorScheme = useColorScheme();
+  const menuIconColor = colorScheme === 'dark' ? '#EAE3D5' : '#2C2822';
+
+  useEffect(() => {
+    Animated.timing(menuAnim, { toValue: menuOpen ? 1 : 0, duration: 200, useNativeDriver: true }).start();
+  }, [menuOpen, menuAnim]);
 
   useEffect(() => {
     void services.settings.getSetting('bookshelf-view').then((saved) => {
@@ -125,7 +148,17 @@ export default function BookshelfScreen() {
   return (
     <View className="flex-1 bg-paper px-4 pb-4 pt-16 dark:bg-paper-night">
       <View className="flex-row items-center justify-between">
-        <Text className="font-serif text-3xl font-bold tracking-wide text-ink dark:text-ink-night">{t('shelf.title')}</Text>
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('shelf.menu')}
+            className="h-9 w-9 items-center justify-center rounded-lg bg-raised dark:bg-raised-night"
+            onPress={() => setMenuOpen(true)}
+          >
+            <Ionicons name="menu" size={20} color={menuIconColor} />
+          </Pressable>
+          <Text className="font-serif text-3xl font-bold tracking-wide text-ink dark:text-ink-night">{t('shelf.title')}</Text>
+        </View>
         <Pressable accessibilityRole="button"
           className="rounded-lg bg-raised px-3 py-1.5 dark:bg-raised-night"
           onPress={toggleView}
@@ -282,6 +315,42 @@ export default function BookshelfScreen() {
         onConfirm={handleCreate}
         onClose={() => setCreateVisible(false)}
       />
+
+      {/* 左侧抽屉（issue #62）：面板内容后续再定，先放版本与设置入口 */}
+      <Animated.View
+        pointerEvents={menuOpen ? 'auto' : 'none'}
+        className="absolute inset-0"
+        style={styles.menuLayer}
+      >
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', opacity: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
+        </Animated.View>
+        <Animated.View
+          className="absolute inset-y-0 left-0 w-[78%] rounded-r-2xl bg-paper px-5 pb-6 pt-16 dark:bg-paper-night"
+          style={{ transform: [{ translateX: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [-400, 0] }) }] }}
+        >
+          <Text className="font-serif text-2xl font-bold tracking-wide text-ink dark:text-ink-night">TaleCast</Text>
+          <Text className="mt-1 text-xs text-muted dark:text-muted-night">
+            v{Constants.expoConfig?.version ?? '—'}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            className="mt-6 flex-row items-center gap-3 rounded-xl bg-raised px-4 py-3 dark:bg-raised-night"
+            onPress={() => {
+              setMenuOpen(false);
+              router.navigate('/settings');
+            }}
+          >
+            <Ionicons name="settings-outline" size={18} color={menuIconColor} />
+            <Text className="text-sm text-ink dark:text-ink-night">{t('settings.title')}</Text>
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // 抽屉层抬到列表之上（FlatList 同级绝对定位即可命中）
+  menuLayer: { zIndex: 50 },
+});

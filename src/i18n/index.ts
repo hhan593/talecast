@@ -14,6 +14,7 @@ const zh = {
   // 书架
   'shelf.title': 'TaleCast',
   'shelf.subtitle': '书架 · 把一本小说变成可以听的章节音频',
+  'shelf.menu': '打开菜单',
   'shelf.add': '＋ 添加书籍',
   'shelf.empty': '书架还是空的。点"添加书籍"创建一本书籍，再导入 TXT 文本。',
   'shelf.grid': '▦ 网格',
@@ -335,6 +336,7 @@ const en: Partial<Record<StringKey, string>> = {
   'shelf.editTags': 'Edit Tags',
   'shelf.deleteBook': 'Delete Book',
   'shelf.title': 'TaleCast',
+  'shelf.menu': 'Open menu',
   'shelf.tagsDialogSuffix': ' · Tags',
   'shelf.coverLabel': '{title} cover',
   'shelf.longPressHint': 'Long-press a book to delete it.',
