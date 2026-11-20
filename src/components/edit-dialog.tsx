@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
+import { useI18n } from '@/hooks/use-i18n';
+
 /**
  * 通用编辑对话框：改标题 / 输入偏移（拆分、边界）共用。
  * 确认时把文本交给 onConfirm，由调用方做校验与错误展示（Result 语义保持在 hooks）。
@@ -14,6 +16,7 @@ export function EditDialog(props: {
   onConfirm: (value: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(props.initialValue);
 
   useEffect(() => {
@@ -35,11 +38,11 @@ export function EditDialog(props: {
             onChangeText={setValue}
             keyboardType={props.keyboardType ?? 'default'}
             autoFocus
-            placeholder={props.keyboardType === 'numeric' ? '字符偏移量' : undefined}
+            placeholder={props.keyboardType === 'numeric' ? t('editDialog.offsetPlaceholder') : undefined}
           />
           <View className="mt-4 flex-row justify-end gap-3">
             <Pressable className="rounded-lg px-4 py-2" onPress={props.onClose}>
-              <Text className="text-sm text-muted dark:text-muted-night">取消</Text>
+              <Text className="text-sm text-muted dark:text-muted-night">{t('common.cancel')}</Text>
             </Pressable>
             <Pressable
               className="rounded-lg bg-accent px-4 py-2"
@@ -48,7 +51,7 @@ export function EditDialog(props: {
                 props.onClose();
               }}
             >
-              <Text className="text-sm font-semibold text-white">{props.confirmLabel ?? '确认'}</Text>
+              <Text className="text-sm font-semibold text-white">{props.confirmLabel ?? t('common.confirm')}</Text>
             </Pressable>
           </View>
         </Pressable>

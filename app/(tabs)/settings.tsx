@@ -109,7 +109,9 @@ export default function SettingsScreen() {
             </View>
             <View>
               <Text className="mb-1 text-xs text-muted">
-                {t('settings.apiKey')}（{hasApiKey ? t('settings.apiKeySet') : t('settings.apiKeyUnset')}）
+                {t('settings.apiKeyState', {
+                  state: hasApiKey ? t('settings.apiKeySet') : t('settings.apiKeyUnset'),
+                })}
               </Text>
               <TextInput
                 className="rounded-lg border border-line px-3 py-2 text-sm text-ink dark:border-line-night dark:text-ink-night"

@@ -87,12 +87,12 @@ export default function BookshelfScreen() {
           text: t('shelf.deleteBook'),
           style: 'destructive',
           onPress: () =>
-            Alert.alert(t('shelf.deleteTitle'), `《${item.title}》\n${t('shelf.deleteConfirm')}`, [
-              { text: '取消', style: 'cancel' },
-              { text: '删除', style: 'destructive', onPress: () => void deleteProject(item.id) },
+            Alert.alert(t('shelf.deleteTitle'), t('shelf.deleteConfirm', { title: item.title }), [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('common.delete'), style: 'destructive', onPress: () => void deleteProject(item.id) },
             ]),
         },
-        { text: '取消', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
       ]),
     [deleteProject, openTagDialog, t],
   );
@@ -206,7 +206,7 @@ export default function BookshelfScreen() {
                   <Image
                     source={{ uri: covers[item.id] }}
                     className="h-full w-full rounded-lg"
-                    accessibilityLabel={`${item.title} 封面`}
+                    accessibilityLabel={t('shelf.coverLabel', { title: item.title })}
                   />
                 ) : (
                   <Text className="font-serif text-sm tracking-widest text-paper">
@@ -228,7 +228,8 @@ export default function BookshelfScreen() {
           <View className="items-center py-16">
             <Text className="text-center text-sm text-muted dark:text-muted-night">
               {t('shelf.empty')}
-              {'\n'}长按书籍可删除。
+              {'\n'}
+              {t('shelf.longPressHint')}
             </Text>
           </View>
         }
@@ -243,7 +244,7 @@ export default function BookshelfScreen() {
 
       <EditDialog
         visible={tagDialog !== null}
-        title={tagDialog ? `${tagDialog.title} · 标签` : ''}
+        title={tagDialog ? `${tagDialog.title}${t('shelf.tagsDialogSuffix')}` : ''}
         initialValue={tagDialog?.initial.join(' / ') ?? ''}
         keyboardType="default"
         onConfirm={(value) => {
@@ -256,9 +257,9 @@ export default function BookshelfScreen() {
 
       <EditDialog
         visible={createVisible}
-        title="添加书籍"
+        title={t('shelf.addTitle')}
         initialValue=""
-        confirmLabel="创建"
+        confirmLabel={t('shelf.create')}
         onConfirm={handleCreate}
         onClose={() => setCreateVisible(false)}
       />

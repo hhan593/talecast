@@ -1022,7 +1022,7 @@ export function ReaderView(props: ReaderViewProps) {
               }}
             />
             <Text className={`text-[10px] ${theme.muted}`}>
-              {props.segmentIndex + 1}/{props.segmentCount} 段
+              {t('reader.segmentBadge', { index: props.segmentIndex + 1, total: props.segmentCount })}
             </Text>
           </View>
         ) : null}

@@ -1,6 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { t } from '@/i18n';
+
 
 let crashLog: { record(source: 'boundary', error: unknown): Promise<void> } | null = null;
 function getCrashLog() {
@@ -42,19 +44,19 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-paper px-8 dark:bg-paper-night">
         <Text className="font-serif text-xl font-bold text-ink dark:text-ink-night">
-          出错了
+          {t('errorBoundary.title')}
         </Text>
         <Text className="text-center text-sm text-muted dark:text-muted-night" numberOfLines={6}>
-          {this.state.error.message || '发生未知渲染错误'}
+          {this.state.error.message || t('errorBoundary.unknown')}
         </Text>
         <Pressable
           className="rounded-xl bg-accent px-6 py-3 active:bg-accent-deep"
           onPress={() => this.setState({ error: null })}
         >
-          <Text className="font-semibold text-white">重试</Text>
+          <Text className="font-semibold text-white">{t('errorBoundary.retry')}</Text>
         </Pressable>
         <Text className="text-center text-xs text-faint">
-          重试无效请重启应用；书籍与进度数据不受影响
+          {t('errorBoundary.hint')}
         </Text>
       </View>
     );
