@@ -1,8 +1,9 @@
 {
   "name": "talecast",
-  "version": "0.16.2",
+  "version": "0.17.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@exodus/bytes": "1.16.0",
     "@expo/vector-icons": "^15.1.1",
     "expo": "~58.0.25",
     "expo-audio": "~58.0.12",

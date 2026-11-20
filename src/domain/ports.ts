@@ -31,7 +31,7 @@ export interface ReceiptStore {
 }
 
 
-/** 系统文件选择器：P1 只接受 UTF-8 TXT */
+/** 系统文件选择器：返回原始字节；编码由 domain/encoding 识别或用户指定 */
 export interface FilePicker {
   pickTextFile(): Promise<{ name: string; bytes: Uint8Array } | null>;
 }

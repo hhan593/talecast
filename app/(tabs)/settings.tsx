@@ -305,7 +305,7 @@ export default function SettingsScreen() {
         <Text className="mt-2 text-sm text-muted dark:text-muted-night">
           · 原文文本会发送给 TTS / LLM 服务商{'\n'}
           · 生成任务仅前台运行；任务与段状态持久化，重进应用可恢复{'\n'}
-          · 首版仅接受 UTF-8 编码文本；单文件 16MB、单章生成 3 万字{'\n'}
+          · TXT 支持 UTF-8 / UTF-16 / GB18030 / Big5 等编码，导入前可手动指定；单文件 16MB、单章生成 3 万字{'\n'}
           · 数据保存在本机沙盒，无账号、无云同步
         </Text>
       </View>

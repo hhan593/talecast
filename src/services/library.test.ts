@@ -101,7 +101,7 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     expect(result.value.source.rawSha256).toBe(sha256Bytes(bytes));
     expect(result.value.source.byteSize).toBe(bytes.length);
     // 双哈希口径：raw = 原始字节身份，text = 解码文本身份。
-    // 来源是 UTF-8 时两者字节流相同，哈希值相等是预期行为（GB18030 输入被拒绝，不会出现不同值）。
+    // UTF-8 来源两者字节流相同，哈希值相等是预期行为。
     const text = new TextDecoder().decode(bytes);
     expect(result.value.source.textSha256).toBe(sha256Bytes(new TextEncoder().encode(text)));
     // 不可变文件已按内容寻址落盘
@@ -123,7 +123,7 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
     expect(s.library.calls.filter((c) => c === 'createSourceWithChapters')).toHaveLength(1);
   });
 
-  it('拒绝非 UTF-8 字节并给出明确文案', async () => {
+  it('GBK/GB18030 自动识别导入：记录真实编码并按 UTF-8 文本落盘', async () => {
     const s = setup();
     const gbkBytes = new Uint8Array([0xd6, 0xd0, 0xb9, 0xfa]); // "中国" 的 GBK 字节
     const result = await s.importService.importSource({
@@ -132,10 +132,26 @@ describe('P1 导入 → 分章 → 采用/撤销 → 编辑 全流程', () => {
       fileName: 'gbk.txt',
       bytes: gbkBytes,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('invalid');
-    expect(result.error.message).toContain('UTF-8');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.source.encoding).toBe('gb18030');
+    expect(s.files.text.get(result.value.source.textSha256)).toBe('中国');
+  });
+
+  it('手动指定编码覆盖自动识别', async () => {
+    const s = setup();
+    const bytes = new Uint8Array([0xd6, 0xd0, 0xb9, 0xfa]);
+    const result = await s.importService.importSource({
+      commandId: 'cmd-manual-encoding',
+      projectId: 'p1',
+      fileName: 'manual.txt',
+      bytes,
+      encoding: 'windows-1252',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.source.encoding).toBe('windows-1252');
+    expect(s.files.text.get(result.value.source.textSha256)).toBe('ÖÐ¹ú');
   });
 
   it('一本书只接受一份文本来源', async () => {

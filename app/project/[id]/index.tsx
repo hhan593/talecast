@@ -16,6 +16,7 @@ import {
 
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
+import { EncodingDialog } from '@/components/encoding-dialog';
 import { MARGINS, ReaderView, type HighlightRange } from '@/components/workbench/reader-view';
 import { useAnnotations } from '@/hooks/use-annotations';
 import { useAssistant } from '@/hooks/use-assistant';
@@ -671,7 +672,7 @@ export default function ProjectWorkbenchScreen() {
           <Pressable accessibilityRole="button"
             className="flex-1 items-center rounded-xl bg-accent py-2.5 active:bg-accent-deep"
             disabled={library.busy}
-            onPress={() => void library.importTxt()}
+            onPress={() => void library.pickImportTxt()}
           >
             <Text className="font-semibold text-white">{t('workbench.importTxt')}</Text>
           </Pressable>
@@ -986,6 +987,16 @@ export default function ProjectWorkbenchScreen() {
           />
         </View>
       ) : null}
+
+      <EncodingDialog
+        visible={library.pendingImport !== null}
+        fileName={library.pendingImport?.fileName ?? ''}
+        detection={library.pendingImport?.detection ?? null}
+        value={library.importEncoding}
+        onChange={library.setImportEncoding}
+        onConfirm={() => void library.confirmImportTxt()}
+        onCancel={library.cancelImportTxt}
+      />
 
       <EditDialog
         visible={dialog !== null}

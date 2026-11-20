@@ -1,6 +1,7 @@
 import { buildInitialChapterDrafts, type ChapterDraft } from '@/domain/split';
 import { parseEpub } from '@/domain/epub';
-import { checkImportSize, decodeValidatedUtf8, isValidUtf8 } from '@/domain/source';
+import { checkImportSize } from '@/domain/source';
+import { decodeSourceText, detectEncoding, type EncodingChoice, type EncodingDetection } from '@/domain/encoding';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { parseMobi } from '@/domain/mobi';
@@ -11,7 +12,7 @@ import type { SourceInfo } from '@/domain/types';
 
 /**
  * 导入用例（docs/plan.md 5.3 导入流程）：
- * 系统选择器取文件 → 校验 UTF-8 → 双哈希 → 写不可变文件 → 同一事务写 sources + 初始 chapters → 回执。
+ * 系统选择器取文件 → 识别/指定编码并解码 → 双哈希 → 写不可变文件 → 同一事务写 sources + 初始 chapters → 回执。
  * 一个书籍一份来源；重复导入给出明确错误。
  */
 
@@ -37,6 +38,8 @@ export interface ImportSourceCommand extends Command {
   projectId: string;
   fileName: string;
   bytes: Uint8Array;
+  /** TXT 编码：auto=自动识别（默认），其余为手动指定；EPUB/MOBI 忽略 */
+  encoding?: EncodingChoice;
 }
 
 export interface ImportSourceResult {
@@ -166,7 +169,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
   const { bytes, projectId } = command;
 
   if (bytes.length === 0) return Promise.resolve(err('invalid', '文件内容为空'));
-  // EPUB 分支（v0.5.0）：二进制 ZIP 容器，内部 XHTML 自身 UTF-8；在 UTF-8 字节校验之前分流
+  // EPUB 分支（v0.5.0）：二进制 ZIP 容器；在 TXT 编码识别之前分流
   if (deps.epubParser && (command.fileName.toLowerCase().endsWith('.epub') || (bytes[0] === 0x50 && bytes[1] === 0x4b))) {
     return runEpubImport(deps, command);
   }
@@ -184,19 +187,14 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
       err('invalid', `文件超出首版 16MB 上限（当前 ${(bytes.length / 1024 / 1024).toFixed(1)}MB），请拆分后导入`),
     );
   }
-  if (!isValidUtf8(bytes)) {
-    return Promise.resolve(
-      err('invalid', '该文件不是 UTF-8 编码。首版只接受 UTF-8，请先在电脑上转码后重新导入'),
-    );
-  }
-
+  const decoded = decodeSourceText(bytes, command.encoding ?? 'auto');
+  const text = decoded.text;
 
   return deps.libraryRepository.getSource(projectId).then((existing) => {
     if (existing) {
       return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
     }
 
-    const text = decodeValidatedUtf8(bytes);
     const rawSha256 = sha256Bytes(bytes);
     const textSha256 = sha256Text(text);
     const drafts = buildInitialChapterDrafts(text);
@@ -212,7 +210,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
             id: `src-${projectId}-${rawSha256.slice(0, 16)}`,
             projectId,
             filename: command.fileName,
-            encoding: 'utf-8',
+            encoding: decoded.detection.encoding,
             rawSha256,
             textSha256,
             byteSize: bytes.length,
@@ -242,10 +240,22 @@ export function createImportService(deps: ImportDeps) {
         .then((receipt) => resolveIdempotent(receipt, () => runImport(deps, command)));
     },
 
-    /** 从系统文件选择器发起导入；用户取消返回 ok(null)，其余与 importSource 相同 */
+    /** 只选文件并识别编码，不写入；UI 据此让用户确认/覆盖后调用 importSource */
+    async pickImportFile(): Promise<Result<{ fileName: string; bytes: Uint8Array; detection: EncodingDetection } | null>> {
+      try {
+        const picked = await deps.filePicker.pickTextFile();
+        if (!picked) return ok(null);
+        return ok({ fileName: picked.name, bytes: picked.bytes, detection: detectEncoding(picked.bytes) });
+      } catch (error) {
+        return err('storage', `读取文件失败：${errorMessage(error)}`);
+      }
+    },
+
+    /** 选文件并直接导入（兼容老调用）；encoding 省略时自动识别 */
     async pickAndImport(command: {
       projectId: string;
       commandId: string;
+      encoding?: EncodingChoice;
     }): Promise<Result<ImportSourceResult | null>> {
       const picked = await deps.filePicker.pickTextFile();
       if (!picked) return ok(null);
@@ -254,6 +264,7 @@ export function createImportService(deps: ImportDeps) {
         projectId: command.projectId,
         fileName: picked.name,
         bytes: picked.bytes,
+        encoding: command.encoding,
       });
     },
   };

@@ -1,3 +1,4 @@
+import type { SourceEncoding } from './encoding';
 
 export type ProjectId = string;
 
@@ -17,8 +18,8 @@ export interface SourceInfo {
   id: string;
   projectId: ProjectId;
   filename: string;
-  /** 首版恒为 'utf-8'（docs/plan.md 4.2） */
-  encoding: 'utf-8';
+  /** 导入时实际采用的编码（规范名，见 domain/encoding）；EPUB/MOBI 归一为 utf-8 文本 */
+  encoding: SourceEncoding;
   rawSha256: string;
   textSha256: string;
   byteSize: number;
