@@ -1,0 +1,14 @@
+<!--
+  Android 自适应图标单色层：白色剪影 + 透明底 + 安全区缩放。
+  书脊留白省略——白色层上无法用纸色表现镂空（如需镂空改 evenodd 双路径）。
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(512 512) scale(0.78) translate(-514 -530)">
+    <path fill="#FFFFFF" d="M384 401 C 332 361 232 341 150 355 L 150 685 C 232 671 332 691 384 731 C 436 691 536 671 618 685 L 618 355 C 536 341 436 361 384 401 Z"/>
+    <g fill="none" stroke="#FFFFFF" stroke-linecap="round">
+      <path stroke-width="40" d="M 695 452 A 90 90 0 0 1 695 608"/>
+      <path stroke-width="34" d="M 730 391 A 160 160 0 0 1 730 669"/>
+      <path stroke-width="28" d="M 765 331 A 230 230 0 0 1 765 729"/>
+    </g>
+  </g>
+</svg>
