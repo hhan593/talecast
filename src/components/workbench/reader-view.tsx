@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import {
   Animated,
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,7 +17,14 @@ import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
-import { pageForOffset, paginateText, type PageTurnStyle, type ReaderPage } from '@/domain/reader';
+import {
+  pageForOffset,
+  paginateText,
+  paragraphIndexAtScrollY,
+  paragraphIndexForOffset,
+  type PageTurnStyle,
+  type ReaderPage,
+} from '@/domain/reader';
 import { sliceStyledText } from '@/domain/annotations';
 import { READER_THEMES, THEME_CYCLE, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
@@ -31,6 +39,11 @@ import type { StringKey } from '@/i18n';
  * 设置面板从底部升起覆盖翻页行、四入口保持可见；听书改为右侧悬浮球，不占排版空间。
  * 底栏进流而非悬浮，是这次的关键取舍：悬浮条一显隐就会改变正文可用高度，
  * 翻页模式下要重新分页（文字整体跳动）；进流后高度稳定，切工具条不再重排。
+ *
+ * 滚动模式收尾（issue #64）：正文 FlatList → ScrollView + flexGrow 尾部占位，
+ * 短章的尾部空白整块可点（此前超 320dp 点不到）；位置持久化从 FlatList 可视区
+ * 回调改为「每段实测 y + scrollY 互查」（domain/reader.ts 纯函数），并补上
+ * 滚动模式从未有过的段级位置恢复（initialOffset 此前只有翻页模式消费）。
  *
  * 仍然保留的能力：双模式（滚动/翻页）、四套主题、排版（字号/行距/段距/边距/缩进/对齐/
  * 字体族）、翻页动画（平移/覆盖/仿真/瞬切）、搜索命中与划线高亮、听读跟随、
@@ -172,8 +185,8 @@ export interface ReaderViewProps {
   onLongPressText(range: { start: number; end: number } | null): void;
   /** 长按操作：划线/笔记/复制 */
   onAnnotate(kind: 'underline' | 'note' | 'copy'): void;
-  /** 滚动模式：可视段落变化（阅读位置持久化） */
-  onViewableItems(info: { viewableItems: Array<{ item?: unknown }> }): void;
+  /** 滚动模式：顶边所在段变化（阅读位置持久化；ScrollView 按 scrollY 互查） */
+  onVisibleCharOffset(charOffset: number): void;
   /** 翻页模式：页选择变化（阅读位置持久化） */
   onPageChange(charOffset: number): void;
 }
@@ -213,12 +226,15 @@ export function ReaderView(props: ReaderViewProps) {
   // 覆盖动画：滚动偏移驱动每页位移（当前页静止，下一页从右滑入覆盖）
   const coverScrollX = useRef(new Animated.Value(0)).current;
   const coverScrollRef = useRef<FlatList | null>(null);
-  const scrollListRef = useRef<FlatList | null>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView> | null>(null);
   const scrollOffsetRef = useRef(0);
-  const viewableCbRef = useRef<
-    ((info: { viewableItems: Array<{ item?: unknown }> }) => void) | null
-  >(null);
-  viewableCbRef.current = (info) => props.onViewableItems(info);
+  // 滚动模式位置互查（issue #64 收尾）：每段实测 y（onLayout 填充）+ 顶边段索引
+  const paragraphTopsRef = useRef<number[]>([]);
+  const visibleIndexRef = useRef<number | null>(null);
+  /** 切章待恢复的段索引：布局就绪后由 tryScrollToPending 一次性定位 */
+  const pendingScrollIndexRef = useRef<number | null>(null);
+  /** null = 尚未见过本章（挂载也按切章处理，走一次恢复定位） */
+  const scrollChapterBaseRef = useRef<number | null>(null);
 
   /** 上一套浅色主题：底栏「夜间」一键在浅色 ↔ 暖黑之间来回 */
   const lastLightThemeRef = useRef<ReaderThemeKey>(
@@ -271,7 +287,7 @@ export function ReaderView(props: ReaderViewProps) {
     transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
   } as const;
 
-  // 自动滚屏驱动：hook 每帧推进 offsetRef，本组件按增量滚动 FlatList
+  // 自动滚屏驱动：hook 每帧推进 offsetRef，本组件按增量滚动 ScrollView
   useEffect(() => {
     if (props.mode !== 'scroll' || props.autoScrollOffsetRef === null) return;
     const timer = setInterval(() => {
@@ -279,7 +295,7 @@ export function ReaderView(props: ReaderViewProps) {
       const current = scrollOffsetRef.current;
       if (target > current) {
         const next = Math.max(current + (target - current), current + 1);
-        scrollListRef.current?.scrollToOffset({ offset: next, animated: false });
+        scrollRef.current?.scrollTo({ y: next, animated: false });
         scrollOffsetRef.current = next;
       }
     }, 32);
@@ -404,6 +420,45 @@ export function ReaderView(props: ReaderViewProps) {
     goToPage(pageForOffset(pages, offset));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.chapterBaseOffset, pages.length, props.mode, props.pageTurnStyle, contentSize?.h]);
+
+  // 滚动模式定位：切章 → 恢复/起始偏移所在段（此前滚动模式只有章级恢复，无段级）。
+  // 布局未必立刻就绪：先记 pending，onLayout/onContentSizeChange 兜底触发 tryScrollToPending。
+  const tryScrollToPending = (): void => {
+    const index = pendingScrollIndexRef.current;
+    if (index === null) return;
+    const top = paragraphTopsRef.current[index];
+    if (top === undefined) return;
+    pendingScrollIndexRef.current = null;
+    scrollRef.current?.scrollTo({ y: Math.max(top, 0), animated: false });
+  };
+  useEffect(() => {
+    paragraphTopsRef.current = [];
+    visibleIndexRef.current = null;
+    const chapterChanged = scrollChapterBaseRef.current !== props.chapterBaseOffset;
+    scrollChapterBaseRef.current = props.chapterBaseOffset;
+    if (props.mode !== 'scroll') return;
+    if (!chapterChanged) return;
+    const targetOffset =
+      props.initialOffset > 0 ? props.initialOffset : props.chapterBaseOffset;
+    const startOffsets = props.paragraphs.map((p) => p.startOffset);
+    pendingScrollIndexRef.current =
+      startOffsets.length > 0 ? paragraphIndexForOffset(startOffsets, targetOffset) : null;
+    tryScrollToPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.paragraphs, props.mode]);
+
+  // 滚动位置上报：顶边段变化时通知父级（统计/ETA/节流落库），替代 FlatList 的可视区回调
+  const handleScroll = (event: { nativeEvent: { contentOffset: { y: number } } }): void => {
+    const y = event.nativeEvent.contentOffset.y;
+    scrollOffsetRef.current = y;
+    if (pendingScrollIndexRef.current !== null) return; // 恢复定位期间不上报
+    const tops = paragraphTopsRef.current;
+    if (tops.length === 0 || props.paragraphs.length === 0) return;
+    const index = paragraphIndexAtScrollY(tops, y);
+    if (index === visibleIndexRef.current) return;
+    visibleIndexRef.current = index;
+    props.onVisibleCharOffset(props.paragraphs[index].startOffset);
+  };
 
   const coverPageFromScroll = (event: unknown): number => {
     const x = (event as { nativeEvent: { contentOffset: { x: number } } }).nativeEvent.contentOffset.x;
@@ -1344,30 +1399,28 @@ export function ReaderView(props: ReaderViewProps) {
           </View>
         ) : null}
         {props.mode === 'scroll' ? (
-          <FlatList
-            ref={scrollListRef}
+          <ScrollView
+            ref={scrollRef}
             className="flex-1"
             style={{ paddingHorizontal: marginPx }}
-            contentContainerStyle={{ paddingBottom: 24 }}
-            onScroll={(event) => {
-              scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-            }}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+            onScroll={handleScroll}
+            onContentSizeChange={() => tryScrollToPending()}
             scrollEventThrottle={32}
-            data={props.paragraphs}
-            keyExtractor={(item, index) => `${item.startOffset}-${index}`}
-            ListFooterComponent={
-              // 段落块只覆盖自身高度，正文之下的空白点不动（ScrollView 吃掉触摸）。
-              // 用一段透明 footer 占位，让"点空白显隐工具条"在章节末尾也成立。
-              <Pressable style={{ height: 320 }} onPress={handleTextTap} />
-            }
-            onViewableItemsChanged={(info) => viewableCbRef.current?.(info)}
-            renderItem={({ item }) => {
+          >
+            {props.paragraphs.map((item, index) => {
               const isHighlighted =
                 props.highlightOffset !== null &&
                 item.startOffset <= props.highlightOffset &&
                 props.highlightOffset < item.endOffset;
               return (
                 <Pressable
+                  key={`${item.startOffset}-${index}`}
+                  onLayout={(e) => {
+                    // 每段实测 y：滚动位置持久化按「顶边所在段」互查（替代可视区回调）
+                    paragraphTopsRef.current[index] = e.nativeEvent.layout.y;
+                    tryScrollToPending();
+                  }}
                   onPress={handleTextTap}
                   onLongPress={() => {
                     hapticLight();
@@ -1394,8 +1447,11 @@ export function ReaderView(props: ReaderViewProps) {
                   </Text>
                 </Pressable>
               );
-            }}
-          />
+            })}
+            {/* 尾部占位（issue #64 收尾）：内容不足一屏时撑满剩余空白、整块可点，
+                长章时 flexBasis 0 收拢为 0 高——替代固定 320dp footer，空白区不再点不到 */}
+            <Pressable style={styles.scrollTail} onPress={handleTextTap} />
+          </ScrollView>
         ) : null}
       </View>
 
@@ -1589,6 +1645,9 @@ const styles = StyleSheet.create({
   },
   entryIconIdle: {
     opacity: 0.72,
+  },
+  scrollTail: {
+    flex: 1,
   },
   listenBall: {
     right: 6,

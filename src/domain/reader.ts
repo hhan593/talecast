@@ -163,3 +163,27 @@ export function pageForOffset(pages: ReaderPage[], offset: number): number {
   }
   return index;
 }
+
+/**
+ * 滚动模式位置互查（issue #64 收尾）：ScrollView 无虚拟化可视区回调，
+ * 位置持久化改为「每段实测 y（单调不减）+ 滚动偏移」纯函数互查。
+ */
+/** 滚动偏移 → 顶边所在段索引（最后一个 top ≤ scrollY 的段；越界回落首段） */
+export function paragraphIndexAtScrollY(tops: number[], scrollY: number): number {
+  let index = 0;
+  for (let i = 0; i < tops.length; i++) {
+    if (tops[i] <= scrollY) index = i;
+    else break;
+  }
+  return index;
+}
+
+/** 字符偏移 → 段索引（最后一个 startOffset ≤ offset 的段；越界回落首段） */
+export function paragraphIndexForOffset(startOffsets: number[], offset: number): number {
+  let index = 0;
+  for (let i = 0; i < startOffsets.length; i++) {
+    if (startOffsets[i] <= offset) index = i;
+    else break;
+  }
+  return index;
+}
