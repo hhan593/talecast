@@ -32,3 +32,20 @@
 ## 结论
 
 工程化基础（类型门、测试门、架构守卫、本地构建链、发版链）已经齐且真实生效；最大缺口是 **CI 执行点** 与 **lint 进门**，两者都是小时级工作量。
+
+---
+
+## 现状更新（2026-11-20，v0.18.0）
+
+上文为 v0.1.0 时点的快照，保留作历史；下列条目已全部补齐：
+
+| 原差距 | 现状 |
+| --- | --- |
+| CI 缺位（最大差距） | `.github/workflows/ci.yml` 在 push main / PR 上跑 `install → typecheck → test → lint`；`.github/workflows/release.yml` 在 `v*` tag 上跑同一道门后 `expo prebuild` + `gradlew assembleRelease`，产物 APK + `SHA256SUMS` 直接发布 Release |
+| lint 未进门 | 已进 CI；本地 `pnpm lint` 0 errors（184 条既有 warning，未阻塞） |
+| 测试规模 | 69 用例 / 14 文件 → **214 用例 / 34 文件**，含 domain、services（in-memory fakes）、适配器纯函数、架构守卫 |
+| 架构守卫 | 3 条 → **4 条**：domain 不 import 上层、app/components 不直连 services/adapters、services 不 import adapters 常量、`react-native-track-player` 原生补丁三处修复必须保留（v0.16.2 RN 0.88 崩溃热修后补的守卫） |
+| 发版版本号手工改 | 仍手工 bump `package.json`，但 `app.json` 的 `expo.version` 由 release workflow 从 tag 注入，APK 内显示版本始终等于 tag |
+| 依赖治理 | 仍无自动过期检查（Dependabot/Renovate 缺位）；pnpm 补丁机制已用于原生库修补（`patches/react-native-track-player@4.1.2.patch`） |
+
+仍未闭环的两项：**依赖自动更新**、**iOS 构建链**（本机 Xcode 16.3 / Swift 6.1 低于 Expo SDK 58 要求的 Xcode 26+ / Swift 6.2）。

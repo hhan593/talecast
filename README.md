@@ -20,18 +20,24 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - **人工保护**：确认过的角色身份、音色绑定不被模型建议覆盖
 - **幂等与可恢复**：命令带回执，生成任务按段持久化缓存，重试不重复请求
 
-## 当前状态（v0.5.1，2026-11-19）
+## 当前状态（v0.18.0，2026-11-20）
 
-**已发版**。最新版本 [v0.5.1 正式版](https://github.com/hhan593/talecast/releases/tag/v0.5.1)（非预发行），附带可直接安装的 Android APK。`app.json` 与 `package.json` 版本均为 `0.5.1`，`main` 与 `origin/main` 同步。
+**已发版**。最新版本 [v0.18.0 正式版](https://github.com/hhan593/talecast/releases/tag/v0.18.0)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.18.0`，`main` 与 `origin/main` 同步。
 
-质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 96 项全绿（20 个测试文件）；`src/architecture.test.ts` 3 条依赖方向守卫；零 TODO 残留。[GitHub Actions](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test。
+质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 214 项全绿（34 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（184 条既有 warning 待清理）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号由 tag 注入）。
 
 ### 功能里程碑
 
 - [x] **P0–P4（v0.1.0 / v0.1.1）**：脚手架与数据底座、导入与分章闭环、角色/音色/云端生成、播放与助手、加固；v0.1.1 完成工程化收敛（六路评审 40+ 项发现、27 项行为保持简化、9 个模块修复 PR、CI 上线）。见 [module-assessment.md](docs/module-assessment.md) / [findings](docs/review/2026-11-17-findings.md) / [复盘](docs/knowledge/lessons/2026-11-18-engineering-retrospective.md)
 - [x] **v0.2.0**：墨韵纸感设计系统（衬线正文）、后台/锁屏播放（`react-native-track-player`）、章节 MP3 导出与系统分享、按绑定的 TTS 韵律参数（rate/pitch/volume）、书架三列网格视图
-- [x] **v0.3.0–v0.5.0**：手动阅读模式完整落地——滚动/翻页双模式、确定性字符偏移分页、字号四档、横屏、边听边读跟随、书签、全文搜索；翻页动画三样式（平移/覆盖/卷页近似）、横屏双栏；EPUB 导入（spine 结构直建）、URL TXT 导入、书源规则骨架（Legado 子集解析）。MOBI 后置（npm 候选不可靠，见 [phase2-plan §5](docs/design/2026-11-19-phase2-plan.md)）
-- [x] **v0.5.1（当前）**：质量收敛——生成热循环 SQLite 逐字段 UPDATE 合并、架构守卫补 hooks 层、EPUB 死代码清理与恢复；问题→issue→修复走 GitHub issue/PR 流程（#21/#22）
+- [x] **v0.3.0–v0.5.0**：手动阅读模式完整落地——滚动/翻页双模式、确定性字符偏移分页、字号四档、横屏、边听边读跟随、书签、全文搜索；翻页动画三样式（平移/覆盖/卷页近似）、横屏双栏；EPUB 导入（spine 结构直建）、URL TXT 导入、书源规则骨架（Legado 子集解析）。MOBI 当时后置（npm 候选不可靠，见 [phase2-plan §5](docs/design/2026-11-19-phase2-plan.md)），v0.14.0 以自研 PalmDOC LZ77 解码补上
+- [x] **v0.5.1**：质量收敛——生成热循环 SQLite 逐字段 UPDATE 合并、架构守卫补 hooks 层、EPUB 死代码清理与恢复；问题→issue→修复走 GitHub issue/PR 流程（#21/#22）
+- [x] **v0.5.2–v0.5.3**：添加书籍创建弹窗与详情页跳转、书架交互补齐
+- [x] **v0.6.0–v0.9.0**：阅读体验升级（主题/排版/连播/文本净化/搜索）、阅读统计 + JSON 备份 + EPUB 封面、交互与排版进阶、对话式多语音 TTS（按角色与归属分配音色）
+- [x] **v0.10.0–v0.14.0**：快赢清零与安全加固、阅读器体验周、划线与笔记、听书增强、书架标签/筛选/排序 + EPUB 封面抽取 + 中英双语 + 自研 MOBI/AZW3 导入（PalmDOC LZ77）
+- [x] **v0.16.0–v0.16.2**：统一代码审查闭环（16 个 issue 全走 PR）、睡眠渐弱竞态与 MOBI 解码公式/LLM 归属段落修正、RN 0.88 新架构启动崩溃热修（`react-native-track-player` pnpm 补丁 + 守卫测试）
+- [x] **v0.17.0–v0.17.2**：TXT 导入编码放宽（BOM 优先 + 自动识别 + 手动指定）、Edge TTS 迁移 Sec-MS-GEC v2 令牌（音色列表恢复）、内置离线音色兜底 + 旁白自动绑定（不再要求先跑 LLM 抽取）、i18n 架构修复与全量英文化
+- [x] **v0.18.0（当前）**：阅读器设置面板重构（底部四 Tab：目录/进度/排版/听书，顶栏瘦身）、书架常驻搜索框
 
 ### 已发布版本
 
@@ -43,6 +49,23 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 | v0.4.0 | 阅读器升级（双模式/翻页动画/横屏双栏/书签/搜索） |
 | v0.5.0 | EPUB 导入 + 在线书源骨架                         |
 | v0.5.1 | 质量收敛（#21/#22 + 架构守卫 + EPUB 修复）       |
+| v0.5.2–v0.5.3 | 添加书籍弹窗、书架交互补齐                 |
+| v0.6.0 | 阅读体验升级（主题/排版/连播/净化/搜索）         |
+| v0.7.0 | 阅读统计 + JSON 备份 + EPUB 封面                 |
+| v0.8.0 | 交互补齐 + 排版进阶                              |
+| v0.9.0 | 对话式多语音 TTS                                 |
+| v0.10.0 | 快赢清零 + 安全加固                             |
+| v0.11.0 | 阅读器体验周                                    |
+| v0.12.0 | 划线、笔记与标注                                |
+| v0.13.0 | 听书增强                                        |
+| v0.14.0 | 书架标签/筛选/排序 + 中英双语 + MOBI/AZW3 导入    |
+| v0.16.0 | 统一代码审查闭环（16 issue 走 PR）               |
+| v0.16.1 | 睡眠渐弱竞态 + MOBI 解码 + LLM 归属修正          |
+| v0.16.2 | Android 启动崩溃热修（RN 0.88 新架构）           |
+| v0.17.0 | TXT 导入编码放宽（多编码自动识别）               |
+| v0.17.1 | Edge TTS v2 令牌 + 离线音色兜底 + i18n 修复      |
+| v0.17.2 | 残留写死文案本地化                               |
+| v0.18.0 | 阅读器设置面板重构 + 书架搜索                    |
 
 全部 Release 见 [GitHub Releases](https://github.com/hhan593/talecast/releases)。
 
@@ -100,10 +123,10 @@ xcodebuild -workspace TaleCast.xcworkspace -scheme TaleCast -configuration Relea
 | 框架      | Expo 58 + React Native 0.88 + React 19 + TypeScript 6（pnpm）                                                                          |
 | 路由      | Expo Router（typedRoutes）                                                                                                             |
 | 样式      | NativeWind 4 + Tailwind CSS；墨韵纸感设计系统（衬线正文）                                                                              |
-| 本地存储  | expo-sqlite（SQLite 为唯一权威状态，数据库 schema v6）                                                                                 |
+| 本地存储  | expo-sqlite（SQLite 为唯一权威状态，数据库 schema v8）                                                                                 |
 | 语音生成  | Edge TTS（免费、非官方 WebSocket 协议，按绑定可配 rate/pitch/volume；官方 provider 作为后备位）                                        |
 | 文本模型  | 远程 OpenAI 兼容 API（助手与角色抽取）                                                                                                 |
 | 阅读器    | 确定性字符偏移分页、滚动/翻页双模式、翻页动画（平移/覆盖/卷页近似）、横屏双栏                                                          |
 | 导入格式  | TXT（UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / Windows-1252，BOM 优先 + 自动识别 + 手动指定）、EPUB（spine 解析）、URL TXT；MOBI 另见导入 |
 | 播放/导出 | react-native-track-player（后台/锁屏播放）、章节 MP3 导出 + 系统分享                                                                   |
-| 架构      | ports & adapters：domain 纯 TS + vitest，平台能力收口 adapters，hooks 为 UI 唯一服务入口；`architecture.test.ts` 编码 3 条依赖方向守卫 |
+| 架构      | ports & adapters：domain 纯 TS + vitest，平台能力收口 adapters，hooks 为 UI 唯一服务入口；`architecture.test.ts` 编码 4 条守卫 |
