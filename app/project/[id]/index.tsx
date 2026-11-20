@@ -83,6 +83,8 @@ export default function ProjectWorkbenchScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 阅读器右侧抽屉（issue #90）：··· 改开更多菜单，角色中心/助手从阅读器可达
   const [readerDrawerOpen, setReaderDrawerOpen] = useState(false);
+  // 目录左侧抽屉（issue #94）：底栏「目录」从左滑出章节列表
+  const [catalogDrawerOpen, setCatalogDrawerOpen] = useState(false);
   const [current, setCurrent] = useState<{
     chapter: Chapter;
     chapterText: string;
@@ -659,6 +661,7 @@ export default function ProjectWorkbenchScreen() {
         }}
         onDeleteBookmark={(bookmarkId) => void bookmarks.remove(bookmarkId)}
         onOpenDrawer={() => setReaderDrawerOpen(true)}
+        onOpenCatalog={() => setCatalogDrawerOpen(true)}
         onPlayChapter={() => playWithAlert(current.chapter.id)}
       />
       {/* 阅读器右侧抽屉（issue #90）：··· = 更多菜单；设置面板入口仍在底栏「设置」 */}
@@ -690,6 +693,44 @@ export default function ProjectWorkbenchScreen() {
             setView('assistant');
           },
         })}
+      </SideDrawer>
+      {/* 目录左侧抽屉（issue #94）：底栏「目录」从左滑出章节列表，当前章高亮 */}
+      <SideDrawer side="left" open={catalogDrawerOpen} onClose={() => setCatalogDrawerOpen(false)}>
+        <Text className="mb-2 text-xs text-muted dark:text-muted-night">
+          {t('reader.catalog')} · {Math.max(chapterIndex, 0) + 1}/{chapters.length}
+        </Text>
+        <FlatList
+          className="flex-1"
+          data={chapters}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => {
+            const active = index === chapterIndex;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                className={`flex-row items-center rounded-lg px-3 py-2.5 ${
+                  active ? 'bg-accent-soft dark:bg-accent-nightsoft' : ''
+                }`}
+                onPress={() => {
+                  setCatalogDrawerOpen(false);
+                  if (!active) seekChapter(index);
+                }}
+              >
+                <Text className={`mr-3 w-7 text-xs ${active ? 'text-accent dark:text-accent-night' : 'text-faint'}`}>
+                  {index + 1}
+                </Text>
+                <Text
+                  className={`flex-1 text-sm ${active ? 'font-semibold text-accent dark:text-accent-night' : 'text-ink dark:text-ink-night'}`}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </Text>
+                {active ? <Ionicons name="checkmark" size={14} color="#B5442D" /> : null}
+              </Pressable>
+            );
+          }}
+        />
       </SideDrawer>
       </View>
     );

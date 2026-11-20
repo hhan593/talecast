@@ -36,10 +36,11 @@ export interface ReaderPage {
 }
 
 /**
- * 翻页动画（v0.19.0）：slide 平移 / cover 覆盖 / curl 卷页近似 / none 无动画瞬切。
+ * 翻页动画（v0.19.0；v0.20.2 补 vertical 上下，issue #94）：
+ * slide 平移 / cover 覆盖 / curl 卷页近似 / vertical 上下（PagerView 纵向） / none 无动画瞬切。
  * none 复用 PagerView 的 setPageWithoutAnimation，不新增渲染路径。
  */
-export type PageTurnStyle = 'slide' | 'cover' | 'curl' | 'none';
+export type PageTurnStyle = 'slide' | 'cover' | 'curl' | 'vertical' | 'none';
 
 export interface ReaderSegment {
   /** 段首在全文中的字符偏移 */
