@@ -81,7 +81,26 @@ export function createPlaybackService(deps: PlaybackDeps) {
   let sleepTimerHandle: number | null = null;
   /** 渐弱代次：取消/新定时器/新播放使旧渐弱链失效 */
   let fadeGeneration = 0;
+  /** 渐弱链在跑 = 定时器已到期；用于区分"过期状态需清理"与"未来定时器仍有效" */
+  let fadingOut = false;
   let sleepMode: SleepTimerMode | null = null;
+
+  /** 使当前渐弱链失效；音量/状态语义由调用方负责 */
+  function invalidateFade(): void {
+    fadeGeneration += 1;
+    fadingOut = false;
+  }
+
+  /** 新播放入口统一调用（issue #28）：三个播放入口都要失效旧渐弱链 */
+  function invalidateFadeForNewPlayback(): void {
+    const wasFading = fadingOut;
+    invalidateFade();
+    if (wasFading) {
+      // 定时器已到期但渐弱被新播放打断：清掉过期的睡眠状态（不动未来定时器）
+      sleepMode = null;
+      setState({ sleepMode: null, sleepDeadline: null });
+    }
+  }
 
   function cancelSleepTimerInternal(): void {
     if (sleepTimerHandle !== null) {
@@ -91,7 +110,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     sleepMode = null;
     setState({ sleepMode: null, sleepDeadline: null });
     // 取消进行中的渐弱并立即恢复音量（下次播放也兜底重置）
-    fadeGeneration += 1;
+    invalidateFade();
     void deps.audioPlayer.setVolume(1).catch(() => undefined);
   }
 
@@ -121,7 +140,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
 
   async function loadAndPlay(index: number): Promise<void> {
     // 新播放使进行中的渐弱链失效（issue #28：渐弱 3 秒窗口内开播新章会被旧链降音量并暂停）
-    fadeGeneration += 1;
+    invalidateFadeForNewPlayback();
     const item = queue[index];
     // 词级时间线随段加载（v0.13.0）：伴生 JSON 读取失败视为无卡拉OK
     if (deps.audioFileStore?.readText) {
@@ -290,11 +309,12 @@ export function createPlaybackService(deps: PlaybackDeps) {
     return ok({ segmentCount: queue.length });
   }
 
-  /** 睡眠到期：音量渐弱后暂停并恢复音量（代次失效防取消竞态） */
+  /** 睡眠到期：音量渐弱后暂停并恢复音量（代次失效防取消/新播放竞态） */
   async function fadeOutAndPause(): Promise<void> {
     const generation = fadeGeneration;
+    fadingOut = true;
     for (let step = FADE_STEPS; step >= 1; step--) {
-      if (generation !== fadeGeneration) return; // 期间取消了
+      if (generation !== fadeGeneration) return; // 期间取消或新播放
       try {
         await deps.audioPlayer.setVolume(step / FADE_STEPS);
       } catch {
@@ -305,13 +325,22 @@ export function createPlaybackService(deps: PlaybackDeps) {
     if (generation !== fadeGeneration) return;
     try {
       await deps.audioPlayer.pause();
-      await deps.audioPlayer.setVolume(1);
     } catch {
-      // 渐弱收尾失败不阻塞状态更新
+      // 暂停失败不阻塞状态更新
+    }
+    if (generation !== fadeGeneration) {
+      // pause() 在途期间开播新章：恢复它，避免旧链误暂停新播放（issue #28）
+      try {
+        await deps.audioPlayer.play();
+      } catch {
+        // 恢复失败由新播放链自行兜底
+      }
+      return;
     }
     setState({ status: 'paused' });
-    // 到期即完成：清除睡眠状态，避免状态栏永远显示过期的激活定时器（issue #37）
-    if (generation === fadeGeneration) cancelSleepTimerInternal();
+    // 到期即完成：清睡眠状态 + 恢复音量（issue #37）；音量恢复由此处统一负责，
+    // 不再在 pause() 后重复 setVolume(1)（此前两次调用只是被测试断言掩盖）
+    cancelSleepTimerInternal();
   }
 
   return {
@@ -332,6 +361,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
     },
 
     async resume(): Promise<void> {
+      // 渐弱 3 秒窗口内点"继续播放"同样不能被旧链接管（issue #28）
+      invalidateFadeForNewPlayback();
       await deps.audioPlayer.play();
       setState({ status: 'playing' });
     },
@@ -339,6 +370,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
     /** 点段跳转 / 拖动进度到某段起点 */
     async seekToSegment(index: number, offsetMs = 0): Promise<Result<null>> {
       if (queue.length === 0 || state.chapterId === null) return err('invalid', '当前没有播放队列');
+      // 跳段是新播放行为：旧渐弱链不得继续降音量/暂停（issue #28）
+      invalidateFadeForNewPlayback();
       const clamped = Math.min(Math.max(index, 0), queue.length - 1);
       if (clamped === state.segmentIndex) {
         await deps.audioPlayer.seek(offsetMs);
@@ -359,6 +392,8 @@ export function createPlaybackService(deps: PlaybackDeps) {
      * 单文件播放（试听场景）：停掉段队列，独占音频设备。
      */
     async playStandalone(uri: string): Promise<Result<null>> {
+      // 试听同样独占音频设备：先失效旧渐弱链（issue #28）
+      invalidateFadeForNewPlayback();
       queue = [];
       setState({
         projectId: null,

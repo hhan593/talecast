@@ -20,7 +20,7 @@ import {
   textToBytes,
 } from './fakes';
 
-async function setupWithGeneratedChapter() {
+async function setupWithGeneratedChapter(audioPlayerOverride?: FakeAudioPlayer) {
   const project = { id: 'p1', title: '示例', description: '', tags: [], revision: 0, createdAt: 1, updatedAt: 1 };
   const projects = new FakeProjectRepository([project]);
   const library = new FakeLibraryRepository([project]);
@@ -81,7 +81,7 @@ async function setupWithGeneratedChapter() {
   if (!started.ok) throw new Error(started.error.message);
   await new Promise((resolve) => setTimeout(resolve, 20));
 
-  const audioPlayer = new FakeAudioPlayer();
+  const audioPlayer = audioPlayerOverride ?? new FakeAudioPlayer();
   const settingsRepository = new (await import('./fakes')).FakeSettingsRepository();
   const playback = createPlaybackService({
     audioPlayer,
@@ -192,8 +192,8 @@ describe('v0.8.0 睡眠渐弱与章节预生成', () => {
       await vi.advanceTimersByTimeAsync(65_000);
       expect(s.playback.getState().status).toBe('paused');
       const vols = s.audioPlayer.volumes;
-      // 渐弱序列 + 收尾恢复 + 完成后的 cancelSleepTimerInternal 兜底恢复（issue #37）
-      expect(vols.slice(-6)).toEqual([0.8, 0.6, 0.4, 0.2, 1, 1]);
+      // 渐弱 5 步（1→0.2）+ 完成时 cancelSleepTimerInternal 统一恢复音量（issue #37，无重复调用）
+      expect(vols.slice(-6)).toEqual([1, 0.8, 0.6, 0.4, 0.2, 1]);
     } finally {
       vi.useRealTimers();
     }
@@ -292,37 +292,95 @@ describe('v0.13.0 词级卡拉OK对齐', () => {
 });
 
 describe('issue #28/#37 渐弱竞态与状态清理', () => {
-  it('渐弱进行中开播新章：不被旧渐弱链降音量/暂停', async () => {
-    const s = await setupWithGeneratedChapter();
+  type Harness = Awaited<ReturnType<typeof setupWithGeneratedChapter>>;
+
+  /** 真实定时器下完成 setup/开播，再切假定时器推进到到期后首步（t=60.2s，尚无 <1 的音量） */
+  async function withFadeInProgress(
+    run: (s: Harness) => Promise<void>,
+    player?: FakeAudioPlayer,
+  ): Promise<void> {
+    const s = await setupWithGeneratedChapter(player);
     await s.playback.playChapter('p1', s.chapters[0].id);
     vi.useFakeTimers();
     try {
       await s.playback.setSleepTimer('minutes', 1);
-      await vi.advanceTimersByTimeAsync(61_000); // 到期渐弱，第一步已执行
-      // 渐弱进行中：恢复播放（新章）
+      await vi.advanceTimersByTimeAsync(60_200);
+      await run(s);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it('渐弱进行中开播新章：不被旧渐弱链降音量/暂停，且过期睡眠状态清除', async () => {
+    await withFadeInProgress(async (s) => {
       await s.playback.playChapter('p1', s.chapters[1].id);
       expect(s.playback.getState().status).toBe('playing');
       await vi.advanceTimersByTimeAsync(10_000); // 旧渐弱链窗口过去
-      // 新播放不被旧链暂停；音量不被继续降
       expect(s.playback.getState().status).toBe('playing');
-      expect(s.audioPlayer.volumes.filter((v) => v < 1).length).toBeLessThanOrEqual(5); // 仅旧链早期步骤
-    } finally {
-      vi.useRealTimers();
+      // 渐弱最多 4 次 <1；旧链若继续跑必然 >0，此处必须为 0
+      expect(s.audioPlayer.volumes.filter((v) => v < 1)).toEqual([]);
+      expect(s.playback.getState().sleepMode).toBeNull();
+      expect(s.playback.getState().sleepDeadline).toBeNull();
+    });
+  });
+
+  it('渐弱进行中 resume：旧链不再接管播放', async () => {
+    await withFadeInProgress(async (s) => {
+      await s.playback.resume();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(s.playback.getState().status).toBe('playing');
+      expect(s.audioPlayer.volumes.filter((v) => v < 1)).toEqual([]);
+      expect(s.audioPlayer.pauses).toBe(0);
+    });
+  });
+
+  it('渐弱进行中跳段：旧链不再降音量/暂停', async () => {
+    await withFadeInProgress(async (s) => {
+      await s.playback.seekToSegment(1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(s.playback.getState().status).toBe('playing');
+      expect(s.audioPlayer.volumes.filter((v) => v < 1)).toEqual([]);
+      expect(s.audioPlayer.pauses).toBe(0);
+    });
+  });
+
+  it('渐弱进行中试听：旧链不再降音量/暂停', async () => {
+    await withFadeInProgress(async (s) => {
+      await s.playback.playStandalone('standalone://preview');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(s.playback.getState().status).toBe('playing');
+      expect(s.audioPlayer.volumes.filter((v) => v < 1)).toEqual([]);
+      expect(s.audioPlayer.pauses).toBe(0);
+    });
+  });
+
+  it('pause() 在途期间开播新章：旧链恢复播放且不覆盖状态（issue #28）', async () => {
+    class DelayedPausePlayer extends FakeAudioPlayer {
+      public pauseGate: (() => void) | null = null;
+      override async pause(): Promise<void> {
+        this.pauses += 1;
+        await new Promise<void>((resolve) => { this.pauseGate = resolve; });
+      }
     }
+    const player = new DelayedPausePlayer();
+    await withFadeInProgress(async (s) => {
+      await vi.advanceTimersByTimeAsync(3_000); // 渐弱完成，pause() 被 gate 卡住
+      expect(player.pauseGate).not.toBeNull();
+      await s.playback.playChapter('p1', s.chapters[1].id); // 新章在 pause() 在途期间开播
+      player.pauseGate?.(); // 放行旧链的 pause()
+      await vi.advanceTimersByTimeAsync(10);
+      expect(s.playback.getState().status).toBe('playing');
+      // 首次播放 + 新章播放 + 旧链补发 play()
+      expect(player.plays).toBeGreaterThanOrEqual(3);
+    }, player);
   });
 
   it('minutes 到期暂停后睡眠状态清除（#37）', async () => {
-    const s = await setupWithGeneratedChapter();
-    await s.playback.playChapter('p1', s.chapters[0].id);
-    vi.useFakeTimers();
-    try {
-      await s.playback.setSleepTimer('minutes', 1);
-      await vi.advanceTimersByTimeAsync(65_000);
+    await withFadeInProgress(async (s) => {
+      await vi.advanceTimersByTimeAsync(5_000); // 渐弱收尾
       expect(s.playback.getState().status).toBe('paused');
       expect(s.playback.getState().sleepMode).toBeNull();
       expect(s.playback.getState().sleepDeadline).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    });
   });
 });

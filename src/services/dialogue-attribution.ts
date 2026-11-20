@@ -85,7 +85,7 @@ ${text}`;
       try {
         const parsed = JSON.parse(raw.trim()) as Array<{ p: number; s: string }>;
         // 段落起点表：按 LLM 提示口径构建——跳过空行的段落序号 → 段首偏移
-        //（splitParagraphs 的段落 = 非空行；空行不计入 item.p）
+        //（item.p 只数非空行；消费端 applyAttributionOverrides 用同一文本的原始行区间匹配）
         const lines = chapterText.split('\n');
         const paragraphStarts: number[] = [];
         let cursor = 0;

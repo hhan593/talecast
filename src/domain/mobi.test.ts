@@ -93,11 +93,10 @@ describe('v0.14.0 MOBI 解析', () => {
     expect(new TextDecoder().decode(out)).toBe('abccccccccccc');
   });
 
-  it('回引分支规范向量：多字节距离', () => {
-    // 'abcdefgh' + 0x84,0x1B：pair=0x841B → distance=(0x841B>>3)&0x7FF=(0x1083)&0x7FF=131? 重算：
-    // 0x841B>>3 = 0x1083 = 4227 → &0x7FF = 4227-4096 = 131 → >8 越界拒绝（损坏流保护）
+  it('损坏回引向量：距离超出已输出长度 → 拒绝整流（libmobi 同语义）', () => {
+    // 'abcdefgh' + 0x84,0x1B：pair=0x841B → distance=(0x841B>>3)&0x7FF=131
+    // 131 > 已输出 8 字节 → 越界，返回空流而非复制未定义内存
     const stream = new Uint8Array([0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x84, 0x1b]);
-    // distance=(0x841B>>3)&0x7FF=131 > 已输出 8 字节 → 损坏流保护：返回空
     const out = palmdocDecompress(stream);
     expect(out.length).toBe(0);
   });
@@ -108,7 +107,7 @@ describe('v0.14.0 MOBI 解析', () => {
     expect(new TextDecoder().decode(out)).toBe(' A B _');
   });
 
-  it('回引分支手工向量：0x51 字面量转义', () => {
+  it('字面量转义向量：0x00 0x51 → Q', () => {
     // 'a' + 0x00 转义 'Q' + 'b' → 'aQb'
     const stream = new Uint8Array([0x61, 0x00, 0x51, 0x62]);
     const out = palmdocDecompress(stream);

@@ -73,13 +73,13 @@ export function parseMobiHeader(record0: Uint8Array): MobiHeader {
 }
 
 /**
- * PalmDOC LZ77 解压（MobileRead PalmDOC 规范）：
+ * PalmDOC LZ77 解压（MobileRead 规范，对照 libmobi compression.c / calibre palmdoc）：
  * - 0x00：字面量 0x00（后随 0x51 'Q' 表示字面量 Q 的转义）
  * - 1-0x08：字面量串（该值个数字节）
  * - 0x09-0x7F：字面量（该值本身）
- * - 0x80-0xBF 与下一字节组成 14 位：distance=(14位)>>2, length=(末2位)+3
- * - 0xC0-0xC1：整词重复（0xC0）与词间空白（0xC1）
- * - 0xC2-0xFF 与下一字节：distance=((c&0x3F)<<2)|(b>>2), length=(b&0x3)+3
+ * - 0x80-0xBF 与下一字节组成 16 位 pair：distance=(pair>>3)&0x7FF（11 位），length=(b&7)+3
+ * - 0xC0-0xFF：空格 + (c^0x80) 两字符（非回引）
+ * 损坏回引（distance=0 或超出已输出长度）返回空流：拒绝越界复制（libmobi 同语义）。
  */
 export function palmdocDecompress(data: Uint8Array): Uint8Array {
   const out: number[] = [];
