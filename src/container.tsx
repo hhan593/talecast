@@ -50,7 +50,8 @@ import { createBindingsService } from '@/services/bindings';
  * 本文件依赖所有层但只做装配。组件经 useServices 消费，不直接 import adapters。
  */
 
-const adapters = createSqliteAdapters();
+function buildServices() {
+  const adapters = createSqliteAdapters();
 
 const newCommandId = (): string => Crypto.randomUUID();
 
@@ -233,27 +234,50 @@ const services = {
   shareTextFile,
 };
 
-// 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）。
-// 仅原生环境执行：Expo Router 的 server 渲染 pass 会执行本模块（Node 无原生模块）
-if (Platform.OS === 'android' || Platform.OS === 'ios') {
-  installCrashLog();
-  void services.generation.recoverInterrupted();
-  void services.playback.restoreRate();
+  // 应用启动恢复：中断的生成任务标记失败；倍速偏好恢复（F-1）。
+  // 仅原生环境执行（web 端此函数由首次 useServices 触发，无原生模块可用）
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    installCrashLog();
+    void services.generation.recoverInterrupted();
+    void services.playback.restoreRate();
+  }
+
+  // 类组件（ErrorBoundary）无法经 hook 取服务：组合根经全局引用注入**最小载荷**（issue #41）
+  (globalThis as { __talecastServices?: Pick<Services, 'crashLog'> }).__talecastServices = {
+    crashLog: services.crashLog,
+  };
+
+  return services;
 }
 
-export type Services = typeof services;
+export type Services = ReturnType<typeof buildServices>;
 
-// 类组件（ErrorBoundary）无法经 hook 取服务：组合根经全局引用注入**最小载荷**（issue #41）
-(globalThis as { __talecastServices?: Pick<Services, 'crashLog'> }).__talecastServices = {
-  crashLog: services.crashLog,
-};
+let _services: Services | null = null;
 
-const ServicesContext = createContext<Services>(services);
+/** 惰性获取服务（issue #93）：web 端 expo-sqlite worker 异步加载，
+ * 模块求值期同步 openDatabase 会崩；首次 useServices 才装配。 */
+export function getServices(): Services {
+  if (_services === null) {
+    _services = buildServices();
+  }
+  return _services;
+}
+
+/** web 预热数据库（issue #93）：等待 expo-sqlite worker 就绪，_layout 的 web 门 await 本方法 */
+export async function warmUpDatabaseAsync(): Promise<void> {
+  const { openDatabaseAsync } = await import('@/adapters/sqlite/db');
+  const db = await openDatabaseAsync();
+  await db.closeAsync();
+}
+
+const ServicesContext = createContext<Services | null>(null);
 
 export function ServicesProvider({ children }: { children: ReactNode }) {
-  return <ServicesContext.Provider value={services}>{children}</ServicesContext.Provider>;
+  return <ServicesContext.Provider value={getServices()}>{children}</ServicesContext.Provider>;
 }
 
 export function useServices(): Services {
-  return useContext(ServicesContext);
+  const context = useContext(ServicesContext);
+  // Provider 外消费（错误边界等）回落到惰性单例，保持既有行为
+  return context ?? getServices();
 }
