@@ -33,9 +33,10 @@ export function SideDrawer(props: {
         style={{
           transform: [
             {
+              // 百分比位移：按面板自身宽度滑出，桌面宽屏/手机都完全离屏（issue #93 自测发现）
               translateX: anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: fromLeft ? [-400, 0] : [400, 0],
+                outputRange: fromLeft ? ['-110%', '0%'] : ['110%', '0%'],
               }),
             },
           ],

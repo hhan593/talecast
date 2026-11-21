@@ -59,7 +59,8 @@
     "web": "expo start --web",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "web:preview": "expo export -p web && node scripts/serve-web.mjs"
   },
   "private": true,
   "expo": {

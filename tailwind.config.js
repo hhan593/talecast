@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
+// NativeWind v4 web 要求 class 模式：css-interop 会手动 set colorScheme（media 模式下抛错，issue #93）
 module.exports = {
+  darkMode: 'class',
   content: ['./app/**/*.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
   theme: {
