@@ -2,9 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, useColorScheme } from 'react-native';
-import { VolumeManager } from 'react-native-volume-manager';
-import {
+import { Platform, useColorScheme ,
   ActivityIndicator,
   Alert,
   FlatList,
@@ -14,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { VolumeManager } from 'react-native-volume-manager';
 
 import { AssistantView } from '@/components/workbench/assistant-view';
 import { EditDialog } from '@/components/edit-dialog';
@@ -223,7 +222,7 @@ export default function ProjectWorkbenchScreen() {
       if (!position || position.charOffset === 0) return; // 无历史位置/在开头 → 停留目录
       void openChapterRef.current(position.chapterId, position.charOffset);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [library.chapters, restored, projectId, services]);
 
   const openChapter = useCallback(
@@ -422,25 +421,6 @@ export default function ProjectWorkbenchScreen() {
     return t('workbench.remainingMinutes', { minutes: Math.max(1, Math.ceil(minutes)) });
   }, [current, currentOffset, playback.state.chapterId, playback.state.status, playback.state.rate]);
 
-  // 点段跳转 / 正文跟随（docs/plan.md P3：拖动进度/切章后高亮跟随）
-  const seekToParagraph = useCallback(
-    async (paragraph: Paragraph) => {
-      const st = services.playback.getState();
-      if (st.chapterId !== current?.chapter.id || st.queueOffsets.length === 0) {
-        if (!current) return;
-        const played = await playback.playChapter(current.chapter.id);
-        if (!played.ok) return;
-      }
-      const offsets = services.playback.getState().queueOffsets;
-      let index = 0;
-      for (let i = 0; i < offsets.length; i++) {
-        if (offsets[i] <= paragraph.startOffset) index = i;
-      }
-      await playback.seekToSegment(index);
-    },
-    [current, playback, projectId, services],
-  );
-
   const saveReadingPosition = useCallback(
     (chapterId: string, charOffset: number) => {
       const now = Date.now();
@@ -450,8 +430,6 @@ export default function ProjectWorkbenchScreen() {
     },
     [projectId, services],
   );
-
-  const paragraphs = current?.paragraphs ?? [];
 
   // 滚动模式顶边段变化（阅读器按 scrollY 互查后上报）：统计基点/ETA/节流落库
   const handleVisibleCharOffset = useCallback(
@@ -644,7 +622,7 @@ export default function ProjectWorkbenchScreen() {
         }
         onCycleAutoScroll={() => {
           setAutoScrollPaused(false);
-          const cycle: Array<'off' | 'slow' | 'standard' | 'fast'> = ['off', 'slow', 'standard', 'fast'];
+          const cycle: ('off' | 'slow' | 'standard' | 'fast')[] = ['off', 'slow', 'standard', 'fast'];
           setAutoScrollSpeed(cycle[(cycle.indexOf(autoScrollSpeed) + 1) % cycle.length]);
         }}
         onSeekSegment={(index) => void playback.seekToSegment(index)}

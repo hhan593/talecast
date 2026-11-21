@@ -21,7 +21,7 @@ export function usePageSound(enabled: boolean) {
     if (!enabled || Platform.OS === 'web') return;
     try {
       if (!playerRef.current) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         playerRef.current = createAudioPlayer(require('../../assets/sounds/page-turn.wav'));
       }
       const player = playerRef.current;

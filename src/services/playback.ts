@@ -1,10 +1,8 @@
 import type {
   AudioPlayer,
   GenerationStore,
-  LibraryRepository,
   ReadingStateRepository,
-  SettingsRepository,
-} from '@/domain/ports';
+  SettingsRepository } from '@/domain/ports';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { GenerationService } from '@/services/generation';
 
@@ -39,7 +37,7 @@ interface QueueItem {
   startOffset: number;
   endOffset: number;
   /** 词级时间线（v0.13.0，加载时读取伴生 JSON；null=无） */
-  words: Array<{ offsetMs: number; durationMs: number; word: string }> | null;
+  words: { offsetMs: number; durationMs: number; word: string }[] | null;
 }
 
 export interface PlaybackDeps {
@@ -71,8 +69,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     rate: 1,
     wordHighlight: null,
     sleepMode: null,
-    sleepDeadline: null,
-  };
+    sleepDeadline: null };
   const listeners = new Set<(state: PlaybackState) => void>();
   let queue: QueueItem[] = [];
   let queueProjectId: string | null = null;
@@ -131,8 +128,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       if (positionMs <= word.offsetMs + word.durationMs) {
         return {
           start: item.startOffset + charIndex,
-          end: item.startOffset + charIndex + word.word.length,
-        };
+          end: item.startOffset + charIndex + word.word.length };
       }
     }
     return null;
@@ -146,7 +142,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     if (deps.audioFileStore?.readText) {
       try {
         const raw = await deps.audioFileStore.readText(item.filePath);
-        const parsed = JSON.parse(raw) as { words?: Array<{ offsetMs: number; durationMs: number; word: string }> };
+        const parsed = JSON.parse(raw) as { words?: { offsetMs: number; durationMs: number; word: string }[] };
         item.words = Array.isArray(parsed.words) ? parsed.words : null;
       } catch {
         item.words = null;
@@ -164,8 +160,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
     setState({
       status: 'playing',
       segmentIndex: index,
-      segmentStartOffset: item.startOffset,
-    });
+      segmentStartOffset: item.startOffset });
     persistPosition(item.ordinal, 0);
   }
 
@@ -184,8 +179,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       audioSegmentOrdinal: segmentOrdinal,
       audioOffsetMs: Math.round(offsetMs),
       readerMode: null,
-      fontSize: null,
-    });
+      fontSize: null });
   }
 
   deps.audioPlayer.onProgress((positionMs) => {
@@ -256,8 +250,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
         text: segment.text,
         startOffset,
         endOffset,
-        words: null,
-      });
+        words: null });
       if (found !== -1) cursor = found + segment.text.length;
     }
     queueProjectId = projectId;
@@ -303,8 +296,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       status: 'playing',
       segmentIndex: startIndex,
       segmentStartOffset: queue[startIndex].startOffset,
-      queueOffsets: queue.map((item) => item.startOffset),
-    });
+      queueOffsets: queue.map((item) => item.startOffset) });
     await loadAndPlay(startIndex);
     void deps.generationService?.pregenNextChapter(projectId, chapterId);
     return ok({ segmentCount: queue.length });
@@ -384,8 +376,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       setState({
         segmentIndex: clamped,
         status: 'playing',
-        segmentStartOffset: queue[clamped].startOffset,
-      });
+        segmentStartOffset: queue[clamped].startOffset });
       return ok(null);
     },
 
@@ -403,8 +394,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
         segmentIndex: 0,
         segmentCount: 0,
         segmentStartOffset: null,
-        queueOffsets: [],
-      });
+        queueOffsets: [] });
       try {
         await deps.audioPlayer.load(uri);
         await deps.audioPlayer.play();
@@ -479,8 +469,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       deps.audioPlayer.release();
       queue = [];
       setState({ status: 'idle', chapterId: null, segmentIndex: 0, segmentCount: 0, segmentStartOffset: null, queueOffsets: [], wordHighlight: null });
-    },
-  };
+    } };
 }
 
 export type PlaybackService = ReturnType<typeof createPlaybackService>;

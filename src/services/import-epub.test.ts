@@ -6,10 +6,8 @@ import { parseEpub } from '@/domain/epub';
 import { createImportService } from './import';
 import {
   FakeLibraryRepository,
-  FakeProjectRepository,
   FakeReceiptStore,
-  FakeSourceFileStore,
-} from './fakes';
+  FakeSourceFileStore } from './fakes';
 
 async function buildEpub(): Promise<Uint8Array> {
   const zip = new JSZip();
@@ -35,9 +33,7 @@ async function setup() {
     sourceFileStore: files,
     receiptStore: new FakeReceiptStore(),
     epubParser: {
-      parseEpub: (bytes) => parseEpub(createJszipEpubDeps(bytes), bytes),
-    },
-  });
+      parseEpub: (bytes) => parseEpub(createJszipEpubDeps(bytes), bytes) } });
   return { project, library, files, importService };
 }
 
@@ -49,8 +45,7 @@ describe('EPUB 导入', () => {
       commandId: 'c-epub',
       projectId: 'p1',
       fileName: 'book.epub',
-      bytes,
-    });
+      bytes });
     if (!result.ok) {
       console.log('RESULT-ERROR:', JSON.stringify(result.error));
       throw new Error(result.error.message);

@@ -24,7 +24,7 @@ function toVoice(row: VoiceRow): VoiceRecord {
 export class SqliteVoiceRepository implements VoiceRecordRepository {
   constructor(private readonly db: TalecastDatabase) {}
 
-  async replaceAllForProvider(provider: string, voices: Array<Omit<VoiceRecord, 'id'>>): Promise<void> {
+  async replaceAllForProvider(provider: string, voices: Omit<VoiceRecord, 'id'>[]): Promise<void> {
     this.db.withTransactionSync(() => {
       this.db.runSync('DELETE FROM voices WHERE provider = ?', provider);
       for (const voice of voices) {

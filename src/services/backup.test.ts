@@ -70,7 +70,7 @@ describe('v0.10.0 JSON 备份', () => {
   });
 
   it('导出并分享：服务产出 {name, content} 交给注入的 share（issue #41）', async () => {
-    const shared: Array<{ name: string; content: string }> = [];
+    const shared: { name: string; content: string }[] = [];
     const s = setup({ share: async (file) => void shared.push(file) });
     const result = await s.service.exportAndShare();
     expect(result.ok).toBe(true);

@@ -2,21 +2,16 @@ import { utf8Bytes } from '@/domain/hash';
 import type { ChapterDraft } from '@/domain/split';
 import type {
   Chapter,
-  GenerationJobRecord,
-  GenerationSegmentRecord,
   Project,
-  SourceInfo,
-} from '@/domain/types';
+  SourceInfo } from '@/domain/types';
 import type {
-  ChapterEditKind,
   FilePicker,
   LibraryRepository,
   ReadingState,
   ReadingStateRepository,
   SourceFileStore,
   SplitProposalRecord,
-  SplitProposalRepository,
-} from '@/domain/ports';
+  SplitProposalRepository } from '@/domain/ports';
 
 export class FakeSourceFileStore implements SourceFileStore {
   public raw = new Map<string, Uint8Array>();
@@ -72,8 +67,7 @@ export class FakeLibraryRepository implements LibraryRepository {
       endOffset: draft.endOffset,
       volume: 0,
       ordinal,
-      headingLine: draft.headingLine,
-    }));
+      headingLine: draft.headingLine }));
     return record;
   }
 
@@ -103,8 +97,7 @@ export class FakeLibraryRepository implements LibraryRepository {
       endOffset: draft.endOffset,
       volume: 0,
       ordinal,
-      headingLine: draft.headingLine,
-    }));
+      headingLine: draft.headingLine }));
     if (options.bumpRevision) {
       project.revision += 1;
       project.updatedAt = Date.now();
@@ -171,8 +164,7 @@ export class FakeReadingStateRepository implements ReadingStateRepository {
       audioOffsetMs: state.audioOffsetMs ?? existing?.audioOffsetMs ?? null,
       readerMode: state.readerMode ?? existing?.readerMode ?? null,
       fontSize: state.fontSize ?? existing?.fontSize ?? null,
-      updatedAt: Date.now(),
-    };
+      updatedAt: Date.now() };
     this.rows.set(state.projectId, merged);
   }
 }

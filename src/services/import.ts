@@ -1,11 +1,10 @@
 import { buildInitialChapterDrafts, type ChapterDraft } from '@/domain/split';
-import { parseEpub } from '@/domain/epub';
+import { stripHtml } from '@/domain/epub';
 import { checkImportSize } from '@/domain/source';
 import { decodeSourceText, type EncodingChoice } from '@/domain/encoding';
 import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { parseMobi } from '@/domain/mobi';
-import { stripHtml } from '@/domain/epub';
 import type { FilePicker, LibraryRepository, ReceiptStore, SourceFileStore } from '@/domain/ports';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
 import type { SourceInfo } from '@/domain/types';
@@ -23,7 +22,7 @@ export interface ImportDeps {
   receiptStore: ReceiptStore;
   /** EPUB 解析适配（v0.5.0）：jszip 注入实现 */
   epubParser?: {
-    parseEpub(bytes: Uint8Array): Promise<{ bookTitle: string; chapters: Array<{ title: string; text: string }> }>;
+    parseEpub(bytes: Uint8Array): Promise<{ bookTitle: string; chapters: { title: string; text: string }[] }>;
     /** 封面提取（v0.14.0）：返回字节与 MIME；无封面/不支持返回 null */
     extractCover?(bytes: Uint8Array): Promise<{ bytes: Uint8Array; mime: string } | null>;
   };
@@ -50,7 +49,7 @@ export interface ImportSourceResult {
 
 
 /** 解析结果 → 章节草案 + 全文（EPUB/MOBI 共用组装，issue #41） */
-function assembleChaptersFromParsed(chapters: Array<{ title: string; text: string }>): {
+function assembleChaptersFromParsed(chapters: { title: string; text: string }[]): {
   drafts: ChapterDraft[];
   fullText: string;
 } {

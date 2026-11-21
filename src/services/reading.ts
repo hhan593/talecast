@@ -1,6 +1,6 @@
 import { splitParagraphs, type Paragraph } from '@/domain/source';
 import { applyReplacements, deserializeRules } from '@/domain/replacement';
-import type { LibraryRepository, ReadingStateRepository, SourceFileStore } from '@/domain/ports';
+import type { ReadingStateRepository } from '@/domain/ports';
 import { err, ok, type Result } from '@/domain/result';
 import type { Chapter } from '@/domain/types';
 

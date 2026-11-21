@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { nextTheme, isReaderThemeKey, READER_THEMES, THEME_CYCLE } from './reader-theme';
-import { pageForOffset, paginateText, paragraphIndexAtScrollY, paragraphIndexForOffset } from './reader';
+import { paginateText, paragraphIndexAtScrollY, paragraphIndexForOffset } from './reader';
 
 describe('reader theme', () => {
   it('主题循环：四套主题顺序循环', () => {

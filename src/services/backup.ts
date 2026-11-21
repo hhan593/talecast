@@ -31,16 +31,16 @@ export interface BackupDeps {
 export interface BackupData {
   version: 1;
   exportedAt: string;
-  projects: Array<{ id: string; title: string; revision: number }>;
-  bookmarks: Array<{
+  projects: { id: string; title: string; revision: number }[];
+  bookmarks: {
     projectId: string;
     chapterId: string;
     charOffset: number;
     excerpt: string;
     createdAt: number;
-  }>;
+  }[];
   /** v0.20.3 增补（issue #79）：划线与笔记；旧版本备份无此字段，导入按缺省跳过 */
-  annotations?: Array<{
+  annotations?: {
     id: string;
     projectId: string;
     chapterId: string;
@@ -49,7 +49,7 @@ export interface BackupData {
     note: string;
     createdAt: number;
     updatedAt: number;
-  }>;
+  }[];
   settings: Record<string, string>;
 }
 

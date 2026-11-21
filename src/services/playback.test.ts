@@ -98,7 +98,7 @@ async function setupWithGeneratedChapter(audioPlayerOverride?: FakeAudioPlayer) 
 describe('P3 播放服务', () => {
   it('播放整章：段队列就位、偏移映射单调递增、段尾自动推进', async () => {
     const s = await setupWithGeneratedChapter();
-    const states: Array<{ segmentIndex: number; segmentStartOffset: number | null }> = [];
+    const states: { segmentIndex: number; segmentStartOffset: number | null }[] = [];
     s.playback.subscribe((state) =>
       states.push({ segmentIndex: state.segmentIndex, segmentStartOffset: state.segmentStartOffset }),
     );

@@ -99,10 +99,10 @@ export interface StyledSlice {
   highlighted: boolean;
 }
 
-export function sliceStyledText(text: string, ranges: Array<{ start: number; end: number }>): StyledSlice[] {
+export function sliceStyledText(text: string, ranges: { start: number; end: number }[]): StyledSlice[] {
   if (ranges.length === 0 || text.length === 0) return [{ text, highlighted: false }];
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
-  const merged: Array<{ start: number; end: number }> = [];
+  const merged: { start: number; end: number }[] = [];
   for (const range of sorted) {
     const start = Math.max(0, range.start);
     const end = Math.min(text.length, range.end);

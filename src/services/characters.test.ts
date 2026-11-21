@@ -6,12 +6,10 @@ import {
   FakeCharacterRepository,
   FakeLibraryRepository,
   FakeLlmGateway,
-  FakeProjectRepository,
   FakeReceiptStore,
   FakeRequestLogRepository,
   FakeSourceFileStore,
-  textToBytes,
-} from './fakes';
+  textToBytes } from './fakes';
 import type { CharacterRecord } from '@/domain/types';
 
 const now = 1;
@@ -26,8 +24,7 @@ function protectedCharacter(name: string): CharacterRecord {
     confirmed: true,
     manualProtected: true,
     createdAt: now,
-    updatedAt: now,
-  };
+    updatedAt: now };
 }
 
 async function setup(existing: CharacterRecord[] = []) {
@@ -43,15 +40,13 @@ async function setup(existing: CharacterRecord[] = []) {
     filePicker: { pickTextFile: async () => null },
     libraryRepository: library,
     sourceFileStore: files,
-    receiptStore: receipts,
-  });
+    receiptStore: receipts });
   const filler = '夜里落了细雨，屋檐下的灯忽明忽暗。';
   await importService.importSource({
     commandId: 'c-import',
     projectId: 'p1',
     fileName: 'n.txt',
-    bytes: textToBytes(`第一章 起\n${filler.repeat(10)}`),
-  });
+    bytes: textToBytes(`第一章 起\n${filler.repeat(10)}`) });
 
   const characters = createCharactersService({
     characterRepository: charactersRepo,
@@ -59,8 +54,7 @@ async function setup(existing: CharacterRecord[] = []) {
     sourceFileStore: files,
     llmGateway: llm,
     requestLogRepository: new FakeRequestLogRepository(),
-    receiptStore: receipts,
-  });
+    receiptStore: receipts });
   return { characters, charactersRepo, llm };
 }
 

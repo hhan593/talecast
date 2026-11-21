@@ -12,7 +12,7 @@ import { LlmNotConfiguredError } from '@/domain/result';
 
 
 interface ChatDelta {
-  choices?: Array<{ delta?: { content?: string } }>;
+  choices?: { delta?: { content?: string } }[];
 }
 
 export function createOpenAiCompatibleLlmGateway(deps: {

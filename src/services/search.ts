@@ -23,7 +23,7 @@ export function createSearchService(deps: SearchDeps) {
     async searchBook(
       projectId: string,
       query: string,
-    ): Promise<Result<Array<BookSearchResult>>> {
+    ): Promise<Result<BookSearchResult[]>> {
       const source = await deps.libraryRepository.getSource(projectId);
       if (!source) return err('invalid', '书籍还没有导入来源');
       if (query.trim().length === 0) return err('invalid', '搜索词不能为空');

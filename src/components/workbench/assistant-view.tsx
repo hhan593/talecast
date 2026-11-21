@@ -32,7 +32,7 @@ export interface AssistantViewProps {
   hasEarlier: boolean;
   input: string;
   scope: AssistantScope;
-  chapters: Array<{ id: string; title: string; startOffset: number; endOffset: number }>;
+  chapters: { id: string; title: string; startOffset: number; endOffset: number }[];
   selection: { start: number; end: number } | null;
   onScopeChange(scope: AssistantScope): void;
   onBack(): void;
@@ -62,7 +62,7 @@ export function AssistantView(props: AssistantViewProps) {
   // 新消息 / 流式开始时贴底：用户视线焦点始终是最新内容
   useEffect(() => {
     listRef.current?.scrollToEnd({ animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [props.messages?.length, props.streaming]);
 
   const scopeChip = (params: { label: string; active: boolean; icon?: 'globe-outline' | 'text-outline'; onPress: () => void }) => (

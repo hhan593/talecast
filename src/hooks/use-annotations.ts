@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
 import type { AnnotationRecord } from '@/domain/annotations';
-import type { Result } from '@/domain/result';
+
 
 /** 划线与笔记数据入口（v0.12.0）：列表/添加/删除/笔记编辑（失败经 Result 透出，issue #33） */
 export function useAnnotations(projectId: string) {

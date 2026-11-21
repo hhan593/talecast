@@ -1,5 +1,5 @@
 import { buildDialogueCandidates } from '@/domain/dialogue';
-import type { DialogueCandidate } from '@/domain/dialogue';
+
 import type { CharacterRepository, LlmGateway, LibraryRepository, SettingsRepository, SourceFileStore, BindingRepository } from '@/domain/ports';
 import { sha256Text } from '@/domain/hash';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
@@ -27,7 +27,7 @@ const MAX_LLM_TEXT_CHARS = 30_000;
 
 export function createDialogueAttributionService(deps: DialogueAttributionDeps) {
   /** 角色候选（同 buildDialogueCandidates 语义：已确认 × 已绑定） */
-  async function candidates(projectId: string): Promise<Array<{ key: string; names: string[] }>> {
+  async function candidates(projectId: string): Promise<{ key: string; names: string[] }[]> {
     const characters = await deps.characterRepository.list(projectId);
     const bindings = await deps.bindingRepository.list(projectId);
     return buildDialogueCandidates(characters, bindings);
@@ -83,7 +83,7 @@ ${text}`;
       }
       let overrides: SpeakerOverride[];
       try {
-        const parsed = JSON.parse(raw.trim()) as Array<{ p: number; s: string }>;
+        const parsed = JSON.parse(raw.trim()) as { p: number; s: string }[];
         // 段落起点表：按 LLM 提示口径构建——跳过空行的段落序号 → 段首偏移
         //（item.p 只数非空行；消费端 applyAttributionOverrides 用同一文本的原始行区间匹配）
         const lines = chapterText.split('\n');

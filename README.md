@@ -24,7 +24,7 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 
 **已发版**。最新版本 [v0.20.6 正式版](https://github.com/hhan593/talecast/releases/tag/v0.20.6)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.20.6`，`main` 与 `origin/main` 同步。
 
-质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 247 项全绿（38 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（179 条既有 warning 待清理）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test + lint，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号与 `android.versionCode` 由 tag 注入）。
+质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 247 项全绿（38 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（69 条 React Compiler 观察项，规则已降级记录、不阻塞门禁）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test + lint，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号与 `android.versionCode` 由 tag 注入）。
 
 ### 功能里程碑
 

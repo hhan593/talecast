@@ -71,7 +71,7 @@ function toSegment(row: SegmentRow): GenerationSegmentRecord {
 export class SqliteGenerationStore implements GenerationStore {
   constructor(private readonly db: TalecastDatabase) {}
 
-  async createJob(job: GenerationJobRecord, segments: Array<GenerationSegmentRecord>): Promise<void> {
+  async createJob(job: GenerationJobRecord, segments: GenerationSegmentRecord[]): Promise<void> {
     this.db.withTransactionSync(() => {
       this.db.runSync(
         `INSERT INTO generation_jobs (id, project_id, chapter_id, status, provider, input_hash, voice_id, binding_revision, total_segments, progress, error, created_at, updated_at)

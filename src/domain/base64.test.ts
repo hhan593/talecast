@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
+
 
 import { base64ToBytes, bytesToBase64 } from './base64';
 
 describe('base64 编解码', () => {
   it('已知向量：RFC 4648 样例', () => {
-    const vec: Array<[string, string]> = [
+    const vec: [string, string][] = [
       ['', ''],
       ['f', 'Zg=='],
       ['fo', 'Zm8='],

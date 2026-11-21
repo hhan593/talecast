@@ -5,9 +5,7 @@ import {
   FakeAnnotationRepository,
   FakeProjectRepository,
   FakeReceiptStore,
-  FakeSourceFileStore,
-  textToBytes,
-} from './fakes';
+  FakeSourceFileStore } from './fakes';
 
 async function setup() {
   const project = { id: 'p1', title: '示例书', description: '', tags: [], revision: 0, createdAt: 1, updatedAt: 1 };
@@ -19,8 +17,7 @@ async function setup() {
     getSource: async () => ({ id: 's1', projectId: 'p1', filename: 'n.txt', rawSha256: 'a', textSha256: 'b', importedAt: 1 }),
     createSourceWithChapters: async () => null,
     replaceChapters: async () => null,
-    mutateChapters: async () => null,
-  } as never;
+    mutateChapters: async () => null } as never;
   const files = new FakeSourceFileStore();
   const fullText = '第一章\n' + '正文内容若干字。'.repeat(10) + '末尾。';
   await files.writeDecodedText('b', fullText);
@@ -29,8 +26,7 @@ async function setup() {
     libraryRepository: library,
     projectRepository: projects,
     sourceFileStore: files,
-    receiptStore: new FakeReceiptStore(),
-  });
+    receiptStore: new FakeReceiptStore() });
   return { service, fullText };
 }
 
@@ -42,8 +38,7 @@ describe('v0.12.0 划线与笔记（service）', () => {
       projectId: 'p1',
       chapterId: 'ch1',
       startOffset: 30,
-      endOffset: 20,
-    });
+      endOffset: 20 });
     expect(bad.ok).toBe(false);
     const good = await service.addAnnotation({
       commandId: 'c1',
@@ -51,8 +46,7 @@ describe('v0.12.0 划线与笔记（service）', () => {
       chapterId: 'ch1',
       startOffset: 10,
       endOffset: 30,
-      note: '记一笔',
-    });
+      note: '记一笔' });
     expect(good.ok).toBe(true);
     const list = await service.listAnnotations('p1');
     expect(list.length).toBe(1);
@@ -85,8 +79,7 @@ describe('v0.12.0 划线与笔记（service）', () => {
       chapterId: 'ch1',
       startOffset: fullText.indexOf('正文'),
       endOffset: fullText.indexOf('正文') + 6,
-      note: '精彩',
-    });
+      note: '精彩' });
     const result = await service.exportMarkdown('p1');
     expect(result.ok).toBe(true);
     if (!result.ok) return;

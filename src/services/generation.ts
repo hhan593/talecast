@@ -18,7 +18,7 @@ import type {
   SourceFileStore,
   TtsGateway,
 } from '@/domain/ports';
-import type { BindingRecord, CharacterRecord, GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
+import type { BindingRecord, GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
 import { errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
@@ -30,7 +30,6 @@ import { errorMessage, err, ok, type Result } from '@/domain/result';
  */
 
 const PROVIDER = EDGE_TTS_PROVIDER;
-const PROVIDER_PARAMS_JSON = '{}';
 
 export interface GenerationDeps {
   /** 可选：LLM 段落级说话人归属（v0.13.0，测试可省略） */
@@ -69,7 +68,7 @@ export interface GenerationProgress {
   progress: number;
   totalSegments: number;
   error: string | null;
-  segments: Array<GenerationSegmentRecord>;
+  segments: GenerationSegmentRecord[];
 }
 
 /** 合成参数归一（issue #41）：空参数对象转 undefined，两处合成调用共用 */
@@ -271,7 +270,7 @@ export function createGenerationService(deps: GenerationDeps) {
       return resolveIdempotent(receipt, async () => {
         const loaded = await loadChapterText(command.projectId, command.chapterId);
         if (!loaded) return err('not_found', '章节或来源不存在');
-        const { chapter, chapterText } = loaded;
+        const { chapterText } = loaded;
 
         if (!checkChapterGenerationSize(chapterText.length)) {
           return err('invalid', `本章 ${chapterText.length} 字超出首版单章 3 万字上限，请拆章后生成`);
@@ -315,7 +314,7 @@ export function createGenerationService(deps: GenerationDeps) {
         const jobId = command.commandId; // 命令 id 即任务 id：重复提交天然幂等 // 命令 id 即任务 id：重复提交天然幂等
         const existences = await Promise.all(plan.map((s) => deps.audioFileStore.exists(s.textHash)));
         let reusedSegments = 0;
-        const segments: Array<GenerationSegmentRecord> = plan.map((segment, i) => {
+        const segments: GenerationSegmentRecord[] = plan.map((segment, i) => {
           const audioExists = existences[i];
           if (audioExists) reusedSegments += 1;
           return {
