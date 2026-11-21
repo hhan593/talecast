@@ -20,9 +20,9 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 - **人工保护**：确认过的角色身份、音色绑定不被模型建议覆盖
 - **幂等与可恢复**：命令带回执，生成任务按段持久化缓存，重试不重复请求
 
-## 当前状态（v0.20.2，2026-11-21）
+## 当前状态（v0.20.3，2026-11-21）
 
-**已发版**。最新版本 [v0.20.2 正式版](https://github.com/hhan593/talecast/releases/tag/v0.20.2)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.20.2`，`main` 与 `origin/main` 同步。
+**已发版**。最新版本 [v0.20.3 正式版](https://github.com/hhan593/talecast/releases/tag/v0.20.3)（非预发行），附带可直接安装的 Android APK 与 `SHA256SUMS`。`app.json` 与 `package.json` 版本均为 `0.20.3`，`main` 与 `origin/main` 同步。
 
 质量门（本地 + CI 双重执行）：`pnpm typecheck` 0 错误；`pnpm test` 231 项全绿（36 个测试文件）；`src/architecture.test.ts` 4 条守卫（3 条依赖方向 + 1 条原生补丁保留）；`pnpm lint` 0 错误（179 条既有 warning 待清理）。[CI](.github/workflows/ci.yml) 在 push/PR 上跑 typecheck + test + lint，[release.yml](.github/workflows/release.yml) 在 tag 上构建并发布 APK（版本号与 `android.versionCode` 由 tag 注入）。
 
@@ -74,6 +74,7 @@ TaleCast 是在移动端对这些创意的**全新实现**：不复用 CastGlean
 | v0.20.0 | UX 体验批次：图标/书架抽屉/详情页精简/设置重构/助手重做/更新检查 |
 | v0.20.1 | 实机反馈修复：横屏门控/听书透错/阅读器交互重做（#88–#90） |
 | v0.20.2 | 翻页方式补「上下」+ 目录左抽屉 + 面板去分层（#94） |
+| v0.20.3 | 备份补划线笔记回填 + 自动滚屏重构（#79 #78） |
 
 全部 Release 见 [GitHub Releases](https://github.com/hhan593/talecast/releases)。
 
