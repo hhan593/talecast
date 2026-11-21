@@ -1614,6 +1614,7 @@ export function ReaderView(props: ReaderViewProps) {
           style={{
             bottom: entriesHeight + insets.bottom,
             maxHeight: Math.round(windowH * 0.62),
+            ...styles.sheetOverlay,
           }}
         >
           {/* 面板内容可滚动（issue #99）：任何行都不被 maxHeight 截断 */}
@@ -1651,6 +1652,11 @@ const styles = StyleSheet.create({
   },
   footerOverlay: {
     zIndex: 20,
+  },
+  // 升起面板（issue #115）：盖住底栏（20）——v0.20.1 悬浮化后底栏带 z20，
+  // 面板无 z 值被反盖；低于抽屉（50）
+  sheetOverlay: {
+    zIndex: 30,
   },
   scrollTail: {
     flex: 1,
