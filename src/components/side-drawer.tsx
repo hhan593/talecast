@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 /**
@@ -13,6 +13,9 @@ export function SideDrawer(props: {
   children: ReactNode;
 }) {
   const anim = useRef(new Animated.Value(0)).current; // 0 收起 → 1 展开
+  // 面板实测宽度（issue #121）：原生驱动不支持 % 字符串插值（静默失效 →
+  // 面板不可见但触摸层仍拦截点击），隐藏偏移必须用数值像素
+  const [panelWidth, setPanelWidth] = useState(0);
 
   useEffect(() => {
     Animated.timing(anim, { toValue: props.open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
@@ -30,13 +33,15 @@ export function SideDrawer(props: {
         className={`absolute inset-y-0 w-[78%] bg-paper px-5 pb-6 pt-16 dark:bg-paper-night ${
           fromLeft ? 'left-0 rounded-r-2xl' : 'right-0 rounded-l-2xl'
         }`}
+        onLayout={(e) => setPanelWidth(e.nativeEvent.layout.width)}
         style={{
           transform: [
             {
-              // 百分比位移：按面板自身宽度滑出，桌面宽屏/手机都完全离屏（issue #93 自测发现）
+              // 隐藏偏移 = 实测宽度 × 1.1（数值像素，原生驱动可用）：
+              // 收起时完全离屏，open 状态与视觉严格一致（issue #121）
               translateX: anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: fromLeft ? ['-110%', '0%'] : ['110%', '0%'],
+                outputRange: fromLeft ? [-panelWidth * 1.1, 0] : [panelWidth * 1.1, 0],
               }),
             },
           ],
