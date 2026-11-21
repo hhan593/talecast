@@ -361,7 +361,8 @@ export function createGenerationService(deps: GenerationDeps) {
     async pregenNextChapter(projectId: string, currentChapterId: string): Promise<void> {
       try {
         const enabled = await deps.settingsRepository?.get('auto-pregen-next');
-        if (enabled === 'false') return;
+        // 'false' 为历史遗留值；'off' 来自设置页开关（issue #99）
+        if (enabled === 'false' || enabled === 'off') return;
         const chapters = await deps.libraryRepository.listChapters(projectId);
         const index = chapters.findIndex((c) => c.id === currentChapterId);
         const next = chapters[index + 1];
