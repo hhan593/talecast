@@ -17,6 +17,7 @@ import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
+import { AUTO_SCROLL_TICK_MS } from '@/hooks/use-auto-scroll';
 import {
   pageForOffset,
   paginateText,
@@ -154,8 +155,8 @@ export interface ReaderViewProps {
   bookmarks: ReaderBookmark[];
   onOpenBookmark(bookmark: ReaderBookmark): void;
   onDeleteBookmark(bookmarkId: string): void;
-  /** 自动滚屏：offsetRef 由父级 hook 推进，本组件驱动 FlatList；null=关闭 */
-  autoScrollOffsetRef: { current: number } | null;
+  /** 自动滚屏每 tick 步长（像素，>0 = 开启；issue #78 重构：相对步进防基准脱节） */
+  autoScrollStep: number;
   autoScrollSpeedLabel: string;
   onCycleAutoScroll(): void;
   /** 播放段级滑条：拖动跨段跳转 */
@@ -300,20 +301,17 @@ export function ReaderView(props: ReaderViewProps) {
     transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
   } as const;
 
-  // 自动滚屏驱动：hook 每帧推进 offsetRef，本组件按增量滚动 ScrollView
+  // 自动滚屏驱动（issue #78 重构）：每 tick 从实际当前位置前进一步，
+  // 手动滚动/跨章后基准天然对齐，不会停摆或直跳章尾
   useEffect(() => {
-    if (props.mode !== 'scroll' || props.autoScrollOffsetRef === null) return;
+    if (props.mode !== 'scroll' || props.autoScrollStep <= 0) return;
     const timer = setInterval(() => {
-      const target = props.autoScrollOffsetRef!.current;
-      const current = scrollOffsetRef.current;
-      if (target > current) {
-        const next = Math.max(current + (target - current), current + 1);
-        scrollRef.current?.scrollTo({ y: next, animated: false });
-        scrollOffsetRef.current = next;
-      }
-    }, 32);
+      const next = scrollOffsetRef.current + props.autoScrollStep;
+      scrollRef.current?.scrollTo({ y: next, animated: false });
+      scrollOffsetRef.current = next;
+    }, AUTO_SCROLL_TICK_MS);
     return () => clearInterval(timer);
-  }, [props.mode, props.autoScrollOffsetRef]);
+  }, [props.mode, props.autoScrollStep]);
 
   // 分页 metrics：CJK 方块字假设；排版（边距/行距/段距/缩进）全部进 metrics（RE-1 §2）
   const metrics = useMemo(() => {
@@ -889,7 +887,7 @@ export function ReaderView(props: ReaderViewProps) {
             <Pressable
               accessibilityRole="button"
               className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2 ${
-                props.autoScrollOffsetRef !== null ? theme.action : theme.bg
+                props.autoScrollStep > 0 ? theme.action : theme.bg
               }`}
               onPress={() => {
                 hapticLight();
@@ -899,14 +897,14 @@ export function ReaderView(props: ReaderViewProps) {
             >
               <Text
                 className={`text-[11px] ${
-                  props.autoScrollOffsetRef !== null ? theme.actionText : theme.text
+                  props.autoScrollStep > 0 ? theme.actionText : theme.text
                 }`}
               >
                 {t('reader.autoRead')}
               </Text>
               <Text
                 className={`text-[10px] ${
-                  props.autoScrollOffsetRef !== null ? theme.actionText : theme.muted
+                  props.autoScrollStep > 0 ? theme.actionText : theme.muted
                 }`}
               >
                 {props.autoScrollSpeedLabel}

@@ -122,23 +122,15 @@ export default function ProjectWorkbenchScreen() {
     };
   }, [view, allowRotation, orientation]);
 
-  // 自动滚屏（v0.10.0）：滚动模式 + 速度档驱动；离开阅读/切模式/关闭即停
+  // 自动滚屏（v0.10.0；issue #78 重构）：速度档真实生效，步进由 reader-view
+  // 从实际位置推进（手动滚动/跨章后天然对齐）；关闭/暂停时步长传 0
   const playPageSound = usePageSound(pageSound);
   const autoScroll = useAutoScroll({
-    enabled: autoScrollSpeed !== 'off',
+    speed: autoScrollSpeed === 'off' ? 'standard' : autoScrollSpeed,
     fontSize: readerFontSize,
     lineSpacing: readerLineSpacing,
     marginPx: MARGINS[readerMargin],
-    contentHeight: 600,
   });
-  useEffect(() => {
-    if (view === 'reader' && readerMode === 'scroll' && autoScrollSpeed !== 'off' && !autoScrollPaused) {
-      autoScroll.start();
-    } else {
-      autoScroll.stop();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, readerMode, autoScrollSpeed, autoScrollPaused, readerFontSize, readerLineSpacing, readerMargin]);
 
   // 音量键翻页（v0.11.0）：Android；监听音量变化→还原音量→下发翻页事件
   const volumeRef = useRef<number | null>(null);
@@ -613,7 +605,11 @@ export default function ProjectWorkbenchScreen() {
           setCurrentOffset(charOffset);
           saveReadingPosition(current.chapter.id, charOffset);
         }}
-        autoScrollOffsetRef={autoScrollSpeed !== 'off' ? autoScroll.offsetRef : null}
+        autoScrollStep={
+          readerMode === 'scroll' && autoScrollSpeed !== 'off' && !autoScrollPaused
+            ? autoScroll.stepPx
+            : 0
+        }
         autoScrollSpeedLabel={
           autoScrollSpeed === 'off'
             ? t('common.off')
