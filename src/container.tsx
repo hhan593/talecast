@@ -220,6 +220,8 @@ const services = {
   backup: createBackupService({
     projectRepository: adapters.projectRepository,
     bookmarkRepository: adapters.bookmarkRepository,
+    annotationRepository: adapters.annotationRepository,
+    libraryRepository: adapters.libraryRepository,
     settingsRepository: adapters.settingsRepository,
     share: (file) => shareTextFile(file.name, file.content),
     pickBackupFile: () => documentPickerBackupFile(),

@@ -228,8 +228,18 @@ export default function SettingsScreen() {
                     void services.backup
                       .importFromPicker()
                       .then((result) => {
-                        if (result.ok) setNotice(t('settings.restored', { count: result.value.restoredSettings }));
-                        else setNotice(result.error.message);
+                        if (result.ok) {
+                          const v = result.value;
+                          let message = t('settings.restored', { count: v.restoredSettings });
+                          if (v.restoredBookmarks > 0 || v.restoredAnnotations > 0 || v.skippedAnnotations > 0) {
+                            message += t('settings.restoredData', {
+                              bookmarks: v.restoredBookmarks,
+                              annotations: v.restoredAnnotations,
+                              skipped: v.skippedAnnotations,
+                            });
+                          }
+                          setNotice(message);
+                        } else setNotice(result.error.message);
                       })
                       .finally(() => setBackupBusy(false));
                   },
