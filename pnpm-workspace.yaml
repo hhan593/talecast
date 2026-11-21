@@ -1,5 +1,8 @@
 # TaleCast 独立为 pnpm workspace 根：避免被上层 ~/pnpm-workspace.yaml 吞掉 install
 packages: []
+# issue #80：better-sqlite3 原生绑定用于 SQLite 适配器的真实 SQL 测试
+allowBuilds:
+  better-sqlite3: true
 patchedDependencies:
   react-native-track-player@4.1.2: patches/react-native-track-player@4.1.2.patch
 # NativeWind 的 babel 产物直接 import 'react-native-css-interop/jsx-runtime'（传递依赖），
