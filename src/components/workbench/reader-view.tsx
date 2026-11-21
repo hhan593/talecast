@@ -19,11 +19,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReaderSlider } from '@/components/workbench/reader-slider';
 import { AUTO_SCROLL_TICK_MS } from '@/hooks/use-auto-scroll';
 import {
+  FONT_SIZES,
+  LINE_SPACINGS,
+  MARGINS,
+  PARAGRAPH_SPACINGS,
   pageForOffset,
   paginateText,
   paragraphIndexAtScrollY,
   paragraphIndexForOffset,
+  type FontSizeKey,
+  type LineSpacingKey,
+  type MarginKey,
   type PageTurnStyle,
+  type ParagraphSpacingKey,
   type ReaderPage,
 } from '@/domain/reader';
 
@@ -57,16 +65,15 @@ import type { StringKey } from '@/i18n';
  */
 
 export type ReaderMode = 'scroll' | 'paged';
-export const FONT_SIZES = { small: 14, standard: 15.5, large: 18, xlarge: 21 } as const;
-export type FontSizeKey = keyof typeof FONT_SIZES;
-export const LINE_SPACINGS = { compact: 1.5, standard: 1.7, relaxed: 1.9 } as const;
-export type LineSpacingKey = keyof typeof LINE_SPACINGS;
-export const MARGINS = { narrow: 12, standard: 20, wide: 32 } as const;
-export type MarginKey = keyof typeof MARGINS;
-/** 段间距（像素）：翻页分页按像素预算预留，滚动模式为段落纵向内边距 */
-export const PARAGRAPH_SPACINGS = { compact: 4, standard: 12, relaxed: 20 } as const;
-export type ParagraphSpacingKey = keyof typeof PARAGRAPH_SPACINGS;
 export type FontFamilyKey = 'serif' | 'sans' | 'system';
+// 排版档位常量下沉 domain（issue #81）；re-export 保持既有 import 路径兼容
+export { FONT_SIZES, LINE_SPACINGS, PARAGRAPH_SPACINGS, MARGINS } from '@/domain/reader';
+export type {
+  FontSizeKey,
+  LineSpacingKey,
+  ParagraphSpacingKey,
+  MarginKey,
+} from '@/domain/reader';
 
 /** 搜索命中区间（全文绝对偏移，半开区间 [start, end)） */
 export interface HighlightRange {

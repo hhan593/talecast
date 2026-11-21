@@ -81,6 +81,21 @@ describe('架构依赖方向守卫', () => {
     expect(violations).toEqual([]);
   });
 
+  it('hooks 不 import components / app / container（依赖方向 hooks ↓ domain，issue #81）', () => {
+    const violations: string[] = [];
+    for (const file of files) {
+      if (/\.test\.tsx?$/.test(file)) continue;
+      if (!file.includes(`${'hooks'}/`)) continue;
+      for (const spec of importsOf(file)) {
+        // container 不禁：hooks 经 useServices 取服务是既定组合根入口
+        if (/@\/components(\/|$)/.test(spec) || spec.startsWith('../')) {
+          violations.push(`${file.replace(ROOT, 'src')} → ${spec}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('track-player 原生补丁保留 RN 0.88 新架构必需的三处修复', () => {
     const patch = readFileSync(
       join(process.cwd(), 'patches/react-native-track-player@4.1.2.patch'),

@@ -188,3 +188,18 @@ export function paragraphIndexForOffset(startOffsets: number[], offset: number):
   }
   return index;
 }
+
+/**
+ * 排版常量（v0.20.x 自 reader-view 下沉，issue #81）：字号/行距/段距/边距
+ * 的档位表与 key 类型。分页 metrics 与自动滚屏共用；渲染层从 domain 引用
+ * （reader-view re-export 保持既有 import 路径兼容）。
+ */
+export const FONT_SIZES = { small: 14, standard: 15.5, large: 18, xlarge: 21 } as const;
+export type FontSizeKey = keyof typeof FONT_SIZES;
+export const LINE_SPACINGS = { compact: 1.5, standard: 1.7, relaxed: 1.9 } as const;
+export type LineSpacingKey = keyof typeof LINE_SPACINGS;
+/** 段间距（像素）：翻页分页按像素预算预留，滚动模式为段落纵向内边距 */
+export const PARAGRAPH_SPACINGS = { compact: 4, standard: 12, relaxed: 20 } as const;
+export type ParagraphSpacingKey = keyof typeof PARAGRAPH_SPACINGS;
+export const MARGINS = { narrow: 12, standard: 20, wide: 32 } as const;
+export type MarginKey = keyof typeof MARGINS;
