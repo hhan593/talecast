@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # 依赖过期检查（issue #83）：每周扫描 npm 依赖与 CI actions
+  # 注意：react-native-track-player 锁定 4.1.2（patches/react-native-track-player@4.1.2.patch
+  # 为 RN 0.88 新架构热修，v0.16.2）， Dependabot 升级会打穿补丁，故 ignore
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: react-native-track-player
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

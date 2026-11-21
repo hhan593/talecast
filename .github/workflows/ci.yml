@@ -22,6 +22,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 依赖健康门（issue #83）：peer 缺失 / SDK 版本漂移 / 重复原生模块即红
+      - run: npx expo-doctor
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm lint
