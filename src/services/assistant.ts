@@ -42,7 +42,7 @@ export interface AssistantMessageView {
 
 function partsToText(partsJson: string): string {
   try {
-    const parts = JSON.parse(partsJson) as Array<{ type?: string; text?: string }>;
+    const parts = JSON.parse(partsJson) as { type?: string; text?: string }[];
     return parts
       .filter((part) => part.type === 'text' && typeof part.text === 'string')
       .map((part) => part.text)
@@ -54,7 +54,7 @@ function partsToText(partsJson: string): string {
 
 function partsToProposalId(partsJson: string): string | null {
   try {
-    const parts = JSON.parse(partsJson) as Array<{ type?: string; proposalId?: string }>;
+    const parts = JSON.parse(partsJson) as { type?: string; proposalId?: string }[];
     const candidate = parts.find((part) => part.type === 'resplit_candidate');
     return candidate?.proposalId ?? null;
   } catch {
@@ -64,7 +64,7 @@ function partsToProposalId(partsJson: string): string | null {
 
 function partsToScopeNotice(partsJson: string): string | null {
   try {
-    const parts = JSON.parse(partsJson) as Array<{ type?: string; text?: string }>;
+    const parts = JSON.parse(partsJson) as { type?: string; text?: string }[];
     const part = parts.find((p) => p.type === 'scope_notice');
     return part?.text ?? null;
   } catch {
@@ -233,7 +233,7 @@ export function createAssistantService(deps: AssistantDeps) {
         }
       }
 
-      const parts: Array<{ type: string; text?: string; proposalId?: string }> = [
+      const parts: { type: string; text?: string; proposalId?: string }[] = [
         { type: 'text', text: assistantText },
       ];
       if (proposalId) parts.push({ type: 'resplit_candidate', proposalId });

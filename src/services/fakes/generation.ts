@@ -1,21 +1,18 @@
 import { EDGE_TTS_PROVIDER } from '@/domain/contracts';
-import { utf8Bytes } from '@/domain/hash';
-import type { JobStatus, SegmentStatus } from '@/domain/jobs';
+
+
 import type {
   BindingRecord,
   BindingTargetType,
   CharacterRecord,
   GenerationJobRecord,
-  GenerationSegmentRecord,
-  VoiceRecord,
-} from '@/domain/types';
+  GenerationSegmentRecord } from '@/domain/types';
 import type {
   AudioFileStore,
   BindingRepository,
   CharacterRepository,
   GenerationStore,
-  TtsGateway,
-} from '@/domain/ports';
+  TtsGateway } from '@/domain/ports';
 
 export class FakeTtsGateway implements TtsGateway {
   /** 合成请求计数：验证"重试请求数 = 缺失段数" */
@@ -42,7 +39,7 @@ export class FakeTtsGateway implements TtsGateway {
   }
 
   /** 时间线：首两词固定（'夜里'@100ms、'落了'@500ms），供卡拉OK对齐测试 */
-  async synthesizeWithTimeline(input: { text: string; voiceId: string; prosody?: { rate?: string; pitch?: string; volume?: string } }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+  async synthesizeWithTimeline(input: { text: string; voiceId: string; prosody?: { rate?: string; pitch?: string; volume?: string } }): Promise<{ audio: Uint8Array; words: { offsetMs: number; durationMs: number; word: string }[] }> {
     const index = this.synthCalls.length;
     if (this.synthDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.synthDelayMs));
@@ -58,8 +55,7 @@ export class FakeTtsGateway implements TtsGateway {
       words: [
         { offsetMs: 100, durationMs: 400, word: input.text.slice(0, 2) },
         { offsetMs: 500, durationMs: 400, word: input.text.slice(2, 4) },
-      ],
-    };
+      ] };
   }
 }
 
@@ -125,8 +121,7 @@ export class FakeBindingRepository implements BindingRepository {
       voiceId: record.voiceId,
       providerParamsJson: record.providerParamsJson,
       revision: 1,
-      updatedAt: Date.now(),
-    };
+      updatedAt: Date.now() };
     this.rows.push(created);
     return { ...created };
   }
@@ -165,7 +160,7 @@ export class FakeGenerationStore implements GenerationStore {
   public jobs = new Map<string, GenerationJobRecord>();
   public segments = new Map<string, GenerationSegmentRecord[]>();
 
-  async createJob(job: GenerationJobRecord, segments: Array<GenerationSegmentRecord>): Promise<void> {
+  async createJob(job: GenerationJobRecord, segments: GenerationSegmentRecord[]): Promise<void> {
     this.jobs.set(job.id, { ...job });
     this.segments.set(job.id, segments.map((s) => ({ ...s })));
   }

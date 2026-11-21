@@ -53,7 +53,7 @@ interface LineRange {
   end: number;
 }
 
-const QUOTE_PAIRS: Array<[string, string]> = [
+const QUOTE_PAIRS: [string, string][] = [
   ['「', '」'],
   ['『', '』'],
   ['“', '”'],
@@ -178,7 +178,7 @@ export function planVoiceSpans(
   const lines = computeLines(chapterText);
 
   // 旁白补集（引号区之外的文本片段）
-  const narrationPieces: Array<{ start: number; end: number }> = [];
+  const narrationPieces: { start: number; end: number }[] = [];
   let cursor = 0;
   for (const quote of quotes) {
     if (quote.start > cursor) narrationPieces.push({ start: cursor, end: quote.start });
@@ -254,7 +254,7 @@ export function planVoiceSpans(
 export function applyAttributionOverrides(
   spans: VoiceSpan[],
   chapterText: string,
-  overrides: Array<{ paragraphStart: number; characterId: string }>,
+  overrides: { paragraphStart: number; characterId: string }[],
 ): VoiceSpan[] {
   if (overrides.length === 0) return spans;
   const paragraphs = computeLines(chapterText);
@@ -281,8 +281,8 @@ export function applyAttributionOverrides(
  * 无绑定的角色命中后仍只能是旁白，直接剔除——services 层只做装配。
  */
 export function buildDialogueCandidates(
-  characters: Array<{ id: string; name: string; aliasesJson: string; confirmed: boolean }>,
-  bindings: Array<{ targetType: string; targetId: string | null }>,
+  characters: { id: string; name: string; aliasesJson: string; confirmed: boolean }[],
+  bindings: { targetType: string; targetId: string | null }[],
 ): DialogueCandidate[] {
   const boundIds = new Set(
     bindings

@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   assertAdoptable,
   assertUndoable,
-  buildChapterDrafts,
   buildInitialChapterDrafts,
-  detectChapterHeadingsInText,
-} from './split';
+  detectChapterHeadingsInText } from './split';
 
 describe('detectChapterHeadingsInText', () => {
   it('命中标题并给出行号与字符偏移', () => {

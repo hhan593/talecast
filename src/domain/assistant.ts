@@ -25,7 +25,7 @@ export interface ResolvedAssistantScope {
 /** 解析范围并返回人话告知；章节不存在/选区越界返回 null（服务层据此拒绝，不静默降级） */
 export function resolveAssistantScope(
   scope: AssistantScope,
-  chapters: Array<Pick<Chapter, 'id' | 'title' | 'startOffset' | 'endOffset'>>,
+  chapters: Pick<Chapter, 'id' | 'title' | 'startOffset' | 'endOffset'>[],
 ): ResolvedAssistantScope | null {
   if (scope.kind === 'book') {
     return {
@@ -74,7 +74,7 @@ export const ASSISTANT_SYSTEM_PROMPT =
 
 export interface ResplitProposalBlock {
   type: 'resplit_proposal';
-  chapters: Array<{ title: string; startOffset: number; endOffset: number }>;
+  chapters: { title: string; startOffset: number; endOffset: number }[];
 }
 
 /**
@@ -99,7 +99,7 @@ export function parseResplitProposalBlock(output: string, textLength: number): R
   const candidate = parsed as { type?: string; chapters?: unknown };
   if (candidate.type !== 'resplit_proposal' || !Array.isArray(candidate.chapters)) return null;
 
-  const chapters: Array<{ title: string; startOffset: number; endOffset: number }> = [];
+  const chapters: { title: string; startOffset: number; endOffset: number }[] = [];
   let cursor = 0;
   for (const raw of candidate.chapters) {
     const item = raw as { title?: unknown; startOffset?: unknown; endOffset?: unknown };

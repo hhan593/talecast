@@ -189,7 +189,7 @@ export default function BookshelfScreen() {
 
       {allTags.length > 0 ? (
         <View className="mt-3 flex-row flex-wrap items-center gap-2">
-          {([null, ...allTags] as Array<string | null>).map((tag) => (
+          {([null, ...allTags] as (string | null)[]).map((tag) => (
             <Pressable
               key={tag ?? '__all'}
               accessibilityRole="button"

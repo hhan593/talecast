@@ -1,7 +1,7 @@
 import type { RequestLogRepository, SettingsRepository } from '@/domain/ports';
 
 export class FakeRequestLogRepository implements RequestLogRepository {
-  public rows: Array<{ kind: 'tts' | 'llm'; ok: boolean; note: string }> = [];
+  public rows: { kind: 'tts' | 'llm'; ok: boolean; note: string }[] = [];
 
   async log(kind: 'tts' | 'llm', ok: boolean, note: string): Promise<void> {
     this.rows.push({ kind, ok, note });

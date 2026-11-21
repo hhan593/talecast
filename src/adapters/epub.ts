@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 
-import { parseEpub, type EpubDeps } from '@/domain/epub';
+import { type EpubDeps } from '@/domain/epub';
 
 /** 解压防护上限（v0.10.0）：条目数与总解压字节数，防 zip bomb */
 const MAX_EPUB_ENTRIES = 4096;

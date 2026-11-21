@@ -32,7 +32,7 @@ const EXTRACTION_SYSTEM_PROMPT =
   '要求：1) 只列真实出场且有名字的角色，合并同一角色的不同称呼（主名取最常用者）；' +
   '2) 无名群众/龙套不列；3) profile 不超过 40 字；4) 如果没有明确角色，返回 {"characters":[]}。';
 
-function parseCharacterJson(raw: string): Array<{ name: string; aliases?: string[]; profile?: string }> {
+function parseCharacterJson(raw: string): { name: string; aliases?: string[]; profile?: string }[] {
   const cleaned = raw.replace(/```json|```/g, '').trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
@@ -40,7 +40,7 @@ function parseCharacterJson(raw: string): Array<{ name: string; aliases?: string
     throw new Error('模型未返回可解析的 JSON');
   }
   const parsed = JSON.parse(cleaned.slice(start, end + 1)) as {
-    characters?: Array<{ name?: string; aliases?: string[]; profile?: string }>;
+    characters?: { name?: string; aliases?: string[]; profile?: string }[];
   };
   const characters = Array.isArray(parsed.characters) ? parsed.characters : [];
   return characters
@@ -80,7 +80,7 @@ export function createCharactersService(deps: CharactersDeps) {
           return err(remoteErrorCode(error), message);
         }
 
-        let candidates: Array<{ name: string; aliases?: string[]; profile?: string }>;
+        let candidates: { name: string; aliases?: string[]; profile?: string }[];
         try {
           candidates = parseCharacterJson(raw);
         } catch (error) {

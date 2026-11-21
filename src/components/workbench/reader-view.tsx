@@ -186,7 +186,7 @@ export interface ReaderViewProps {
   /** 沉浸全屏：滚动模式下工具条 3 秒无操作自动收起 */
   immersive: boolean;
   /** 划线区间（书级偏移） */
-  annotations: Array<{ start: number; end: number }>;
+  annotations: { start: number; end: number }[];
   /** 词级卡拉OK当前词（书级偏移；null=关闭） */
   wordHighlight: { start: number; end: number } | null;
   /**
@@ -552,7 +552,7 @@ export function ReaderView(props: ReaderViewProps) {
 
   // 高亮渲染：搜索命中 + 划线区间合并切片（字符级，重叠合并）
   const highlightSpans = (text: string, absoluteStart: number): ReactNode => {
-    const ranges: Array<{ start: number; end: number }> = [];
+    const ranges: { start: number; end: number }[] = [];
     const searchRange = props.highlightRange;
     if (searchRange && searchRange.end > absoluteStart && searchRange.start < absoluteStart + text.length) {
       ranges.push({
@@ -662,7 +662,7 @@ export function ReaderView(props: ReaderViewProps) {
 
   /** 分段选择器：点哪个就是哪个（不再「循环到下一个」） */
   const renderSegmented = <K extends string>(
-    options: Array<{ key: K; label: string }>,
+    options: { key: K; label: string }[],
     /** null = 当前状态不适用（例如滚动模式下的翻页动画），不高亮任何一项 */
     value: K | null,
     onSelect: (key: K) => void,
@@ -691,7 +691,7 @@ export function ReaderView(props: ReaderViewProps) {
   /** 带标签的整行（左侧标签，右侧分段） */
   const renderSegRow = <K extends string>(
     label: string,
-    options: Array<{ key: K; label: string }>,
+    options: { key: K; label: string }[],
     value: K | null,
     onSelect: (key: K) => void,
   ) => (

@@ -111,7 +111,7 @@ export function buildSegmentPlan(
   segmentInput: Omit<GenerationSegmentInput, 'segmentText'>,
   segmentForTtsImpl: (text: string, maxLength?: number) => Segment[],
   maxLength?: number,
-): Array<{ ordinal: number; text: string; textHash: string }> {
+): { ordinal: number; text: string; textHash: string }[] {
   const segments = segmentForTtsImpl(chapterText, maxLength);
   return segments.map((segment) => ({
     ordinal: segment.ordinal,

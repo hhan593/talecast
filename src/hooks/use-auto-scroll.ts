@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
-import { FONT_SIZES, LINE_SPACINGS, type FontSizeKey, type LineSpacingKey } from '@/domain/reader';
+import { FONT_SIZES, type FontSizeKey, type LineSpacingKey } from '@/domain/reader';
 
 const SPEED_MULTIPLIERS = { slow: 1, standard: 2, fast: 4 } as const;
 /** reader-view 的匀速滚动 tick 周期（毫秒） */

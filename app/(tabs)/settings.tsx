@@ -38,7 +38,6 @@ export default function SettingsScreen() {
   const { t, changeLanguage } = useI18n();
   const { checkAndPrompt } = useUpdatePrompt();
   const colorScheme = useColorScheme();
-  const inkColor = colorScheme === 'dark' ? '#EAE3D5' : '#2C2822';
   const [updateChecking, setUpdateChecking] = useState(false);
   const [stats, setStats] = useState<ReadingStats | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -52,7 +51,7 @@ export default function SettingsScreen() {
   const [autoNext, setAutoNext] = useState(true);
   const [autoPregen, setAutoPregen] = useState(true);
   const [appLanguage, setAppLanguage] = useState<'system' | 'zh' | 'en'>('system');
-  const [crashEntries, setCrashEntries] = useState<Array<{ at: number; source: string; message: string }> | null>(null);
+  const [crashEntries, setCrashEntries] = useState<{ at: number; source: string; message: string }[] | null>(null);
   const [endpoint, setEndpoint] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');

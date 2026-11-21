@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
-import { errorMessage, ok, type Result } from '@/domain/result';
+import { errorMessage, type Result } from '@/domain/result';
 import type { Chapter, SourceInfo } from '@/domain/types';
 
 /**

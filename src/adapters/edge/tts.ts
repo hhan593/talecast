@@ -139,7 +139,7 @@ export class EdgeTtsGateway implements TtsGateway {
     text: string;
     voiceId: string;
     prosody?: TtsProsody;
-  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+  }): Promise<{ audio: Uint8Array; words: { offsetMs: number; durationMs: number; word: string }[] }> {
     return this.synthesizeInternal(input);
   }
 
@@ -147,7 +147,7 @@ export class EdgeTtsGateway implements TtsGateway {
     text: string;
     voiceId: string;
     prosody?: TtsProsody;
-  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+  }): Promise<{ audio: Uint8Array; words: { offsetMs: number; durationMs: number; word: string }[] }> {
     return this.attemptSynthesize(input).catch(async (error: unknown) => {
       // 握手被拒/连接被关通常是令牌窗口错位：校准时钟后重试一次
       const retryable = error instanceof Error && error.name === "EdgeRetryableError";
@@ -161,13 +161,13 @@ export class EdgeTtsGateway implements TtsGateway {
     text: string;
     voiceId: string;
     prosody?: TtsProsody;
-  }): Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }> {
+  }): Promise<{ audio: Uint8Array; words: { offsetMs: number; durationMs: number; word: string }[] }> {
     const requestId = newHexId();
     const url = buildWssUrl(nowMs(), newHexId());
     const chunks: Uint8Array[] = [];
-    const words: Array<{ offsetMs: number; durationMs: number; word: string }> = [];
+    const words: { offsetMs: number; durationMs: number; word: string }[] = [];
 
-    return new Promise<{ audio: Uint8Array; words: Array<{ offsetMs: number; durationMs: number; word: string }> }>((resolve, reject) => {
+    return new Promise<{ audio: Uint8Array; words: { offsetMs: number; durationMs: number; word: string }[] }>((resolve, reject) => {
       let settled = false;
       const ws = new (WebSocket as unknown as RnWebSocketConstructor)(
         url,

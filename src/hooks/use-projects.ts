@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useServices } from '@/container';
-import { errorMessage, type Result } from '@/domain/result';
+import { errorMessage } from '@/domain/result';
 import type { Project } from '@/domain/types';
 
 export function useProjects() {

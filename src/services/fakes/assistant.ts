@@ -6,7 +6,7 @@ import type {
 } from '@/domain/ports';
 
 export class FakeLlmGateway implements LlmGateway {
-  public calls: Array<{ system: string; user: string }> = [];
+  public calls: { system: string; user: string }[] = [];
   public response: string | null = null;
   /** 分块流式：设置后按块回调 onDelta，块间等待 chunkDelayMs（模拟真实网络） */
   public streamChunks: string[] | null = null;

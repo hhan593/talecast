@@ -11,11 +11,10 @@ import {
   sandboxAudioFileStore,
   sandboxSourceFileStore,
   shareTextFile,
-} from '@/adapters/files';
+ coverFileStore } from '@/adapters/files';
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { createGithubReleaseGateway } from '@/adapters/github-release';
-import { coverFileStore } from '@/adapters/files';
 import { createCrashLogService, installCrashLog } from '@/adapters/crash-log';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';

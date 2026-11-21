@@ -157,12 +157,12 @@ export interface LlmGateway {
 
 export interface VoiceRecordRepository {
   /** 音色快照整体刷新（voices/list 拉取后入库） */
-  replaceAllForProvider(provider: string, voices: Array<Omit<VoiceRecord, 'id'>>): Promise<void>;
-  list(provider: string): Promise<Array<VoiceRecord>>;
+  replaceAllForProvider(provider: string, voices: Omit<VoiceRecord, 'id'>[]): Promise<void>;
+  list(provider: string): Promise<VoiceRecord[]>;
 }
 
 export interface CharacterRepository {
-  list(projectId: Project['id']): Promise<Array<CharacterRecord>>;
+  list(projectId: Project['id']): Promise<CharacterRecord[]>;
   get(id: string): Promise<CharacterRecord | null>;
   insert(record: CharacterRecord): Promise<void>;
   update(id: string, patch: Partial<Pick<CharacterRecord, 'name' | 'aliasesJson' | 'profileJson' | 'confirmed' | 'manualProtected'>>): Promise<void>;
@@ -171,19 +171,19 @@ export interface CharacterRepository {
 
 export interface BindingRepository {
   getForTarget(projectId: Project['id'], targetType: BindingTargetType, targetId: string | null): Promise<BindingRecord | null>;
-  list(projectId: Project['id']): Promise<Array<BindingRecord>>;
+  list(projectId: Project['id']): Promise<BindingRecord[]>;
   /** 幂等回执语义由 services 层保证；upsert 时 revision+1 */
   upsert(record: Omit<BindingRecord, 'id' | 'revision' | 'updatedAt'>): Promise<BindingRecord>;
 }
 
 export interface GenerationStore {
-  createJob(job: GenerationJobRecord, segments: Array<GenerationSegmentRecord>): Promise<void>;
+  createJob(job: GenerationJobRecord, segments: GenerationSegmentRecord[]): Promise<void>;
   getJob(id: string): Promise<GenerationJobRecord | null>;
   findByInputHash(projectId: Project['id'], inputHash: string): Promise<GenerationJobRecord | null>;
   getActiveJobByChapter(projectId: Project['id'], chapterId: string): Promise<GenerationJobRecord | null>;
-  listJobsByChapter(projectId: Project['id'], chapterId: string): Promise<Array<GenerationJobRecord>>;
+  listJobsByChapter(projectId: Project['id'], chapterId: string): Promise<GenerationJobRecord[]>;
   updateJob(id: string, patch: Partial<Pick<GenerationJobRecord, 'status' | 'progress' | 'error'>>): Promise<void>;
-  listSegments(jobId: string): Promise<Array<GenerationSegmentRecord>>;
+  listSegments(jobId: string): Promise<GenerationSegmentRecord[]>;
   updateSegment(id: string, patch: Partial<Pick<GenerationSegmentRecord, 'status' | 'filePath' | 'error'>>): Promise<void>;
   /** 应用启动恢复：运行中任务标记为失败（可重试，已完成段保留） */
   markInterruptedJobsFailed(): Promise<number>;
@@ -208,7 +208,7 @@ export interface ChapterExporter {
 }
 
 export interface BookmarkRepository {
-  list(projectId: Project['id']): Promise<Array<BookmarkRecord>>;
+  list(projectId: Project['id']): Promise<BookmarkRecord[]>;
   /** 同一章节同一偏移幂等（UNIQUE 约束语义，冲突返回 exists） */
   add(record: BookmarkRecord): Promise<'added' | 'exists'>;
   remove(id: string): Promise<void>;
@@ -216,7 +216,7 @@ export interface BookmarkRepository {
 
 /** 划线与笔记（v0.12.0）：书级偏移区间，章节重排后按偏移尽力回位 */
 export interface AnnotationRepository {
-  list(projectId: string): Promise<Array<import('./annotations').AnnotationRecord>>;
+  list(projectId: string): Promise<import('./annotations').AnnotationRecord[]>;
   insert(record: import('./annotations').AnnotationRecord): Promise<void>;
   update(id: string, patch: { note?: string; kind?: 'underline' }): Promise<void>;
   remove(id: string): Promise<void>;
@@ -269,7 +269,7 @@ export interface AssistantMessageRecord {
 
 export interface AssistantRepository {
   getOrCreateSession(projectId: Project['id']): Promise<AssistantSessionRecord>;
-  listMessages(sessionId: string, options: { limit: number; beforeOrdinal?: number }): Promise<Array<AssistantMessageRecord>>;
+  listMessages(sessionId: string, options: { limit: number; beforeOrdinal?: number }): Promise<AssistantMessageRecord[]>;
   appendMessage(record: AssistantMessageRecord): Promise<void>;
   /** 流式追加：更新 parts_json 并 version+1（按会话内 ordinal 定位） */
   updateMessageParts(sessionId: string, ordinal: number, partsJson: string, nextVersion: number): Promise<void>;

@@ -54,7 +54,7 @@ const SHA256_BLOCK_CONSTANTS = [
 const SHA256_SIGMA0_ADJUSTMENT = 0x059c0b80;
 const SHA256_SIGMA1_ADJUSTMENT = 0x000b92c0;
 
-const CS64_COEFFICIENTS: ReadonlyArray<readonly [number, number]> = [
+const CS64_COEFFICIENTS: readonly (readonly [number, number])[] = [
   [0xe82e91b1, 0xb32700d0],
   [0x44de24c6, 0x88dff51d],
   [0x3beb65bc, 0x29514038],

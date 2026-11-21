@@ -35,7 +35,7 @@ export class TrackPlayerAudioService implements AudioPlayer {
   private progressCb: ((positionMs: number) => void) | null = null;
   private endCb: (() => void) | null = null;
   private endFired = false;
-  private bound: Array<{ remove(): void }> = [];
+  private bound: { remove(): void }[] = [];
 
   constructor(private readonly options: TrackPlayerAudioServiceOptions) {
     // 远程控制（锁屏/通知栏按钮）必须在应用启动时注册一次

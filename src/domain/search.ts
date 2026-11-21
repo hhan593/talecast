@@ -50,9 +50,9 @@ export interface SearchHitInput {
 export function searchBook(
   text: string,
   query: string,
-  chapters: Array<SearchHitInput>,
-): Array<SearchHit & SearchHitInput> {
-  const hits: Array<SearchHit & SearchHitInput> = [];
+  chapters: SearchHitInput[],
+): (SearchHit & SearchHitInput)[] {
+  const hits: (SearchHit & SearchHitInput)[] = [];
   for (const offset of findHitOffsets(text, query)) {
     const chapter =
       chapters.find((c) => offset >= c.startOffset && offset < c.endOffset) ??

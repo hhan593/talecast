@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { parseProsodyJson, type TtsProsody } from '@/domain/jobs';
 import { useServices } from '@/container';
-import { errorMessage, type Result } from '@/domain/result';
+import { errorMessage } from '@/domain/result';
 import type { BindingRecord, CharacterRecord, VoiceRecord } from '@/domain/types';
 
 export function useCharacters(projectId: string) {

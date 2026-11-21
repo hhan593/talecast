@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createSseParser } from './parse-sse';
 
 function collect() {
-  const events: Array<{ event: string | null; data: string }> = [];
+  const events: { event: string | null; data: string }[] = [];
   const parser = createSseParser((event) => events.push(event));
   return { events, parser };
 }
