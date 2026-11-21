@@ -27,7 +27,7 @@
     "fast-xml-parser": "^5.12.1",
     "jszip": "^3.10.2",
     "nativewind": "^4.2.7",
-    "react": "19.3.0",
+    "react": "19.3.1",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-css-interop": "0.2.7",
