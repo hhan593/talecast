@@ -275,14 +275,30 @@ export default function ProjectWorkbenchScreen() {
     [chapters],
   );
 
-  // 听书发起（悬浮球/两处抽屉共用）：失败弹窗透出原因，不再静默（issue #89）
+  // 听书发起（悬浮球/两处抽屉共用）：失败弹窗透出原因 + 一键「生成本章」（issue #89/#99）
+  const startGenerationAlert = useCallback(
+    (chapterId: string) => {
+      void generation.start(chapterId).then((result) => {
+        Alert.alert(
+          t('workbench.generateChapter'),
+          result.ok ? t('workbench.generateStarted') : result.error.message,
+        );
+      });
+    },
+    [generation, t],
+  );
   const playWithAlert = useCallback(
     (chapterId: string) => {
       void playback.playChapter(chapterId).then((result) => {
-        if (!result.ok) Alert.alert(t('reader.playChapter'), result.error.message);
+        if (!result.ok) {
+          Alert.alert(t('reader.playChapter'), result.error.message, [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('workbench.generateChapter'), onPress: () => startGenerationAlert(chapterId) },
+          ]);
+        }
       });
     },
-    [playback, t],
+    [playback, startGenerationAlert, t],
   );
 
   // 重新分章（issue #65 收进右侧抽屉）：提案生成后跳审阅
@@ -476,7 +492,14 @@ export default function ProjectWorkbenchScreen() {
   const pausedThisBook =
     playback.state.chapterId !== null && chapterIds.has(playback.state.chapterId) && playback.state.status === 'paused';
   const drawerEntry = (params: {
-    icon: 'headset-outline' | 'people-outline' | 'chatbubble-ellipses-outline' | 'document-text-outline' | 'mic-outline' | 'time-outline';
+    icon:
+      | 'headset-outline'
+      | 'people-outline'
+      | 'chatbubble-ellipses-outline'
+      | 'document-text-outline'
+      | 'mic-outline'
+      | 'time-outline'
+      | 'musical-notes-outline';
     label: string;
     active?: boolean;
     onPress: () => void;
@@ -671,6 +694,14 @@ export default function ProjectWorkbenchScreen() {
             if (listeningHere) void playback.pause();
             else if (pausedHere) void playback.resume();
             else playWithAlert(current.chapter.id);
+          },
+        })}
+        {drawerEntry({
+          icon: 'musical-notes-outline',
+          label: t('workbench.generateChapter'),
+          onPress: () => {
+            setReaderDrawerOpen(false);
+            startGenerationAlert(current.chapter.id);
           },
         })}
         {drawerEntry({

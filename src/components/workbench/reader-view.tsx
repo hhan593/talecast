@@ -301,18 +301,6 @@ export function ReaderView(props: ReaderViewProps) {
     transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
   } as const;
 
-  // 自动滚屏驱动（issue #78 重构）：每 tick 从实际当前位置前进一步，
-  // 手动滚动/跨章后基准天然对齐，不会停摆或直跳章尾
-  useEffect(() => {
-    if (props.mode !== 'scroll' || props.autoScrollStep <= 0) return;
-    const timer = setInterval(() => {
-      const next = scrollOffsetRef.current + props.autoScrollStep;
-      scrollRef.current?.scrollTo({ y: next, animated: false });
-      scrollOffsetRef.current = next;
-    }, AUTO_SCROLL_TICK_MS);
-    return () => clearInterval(timer);
-  }, [props.mode, props.autoScrollStep]);
-
   // 分页 metrics：CJK 方块字假设；排版（边距/行距/段距/缩进）全部进 metrics（RE-1 §2）
   const metrics = useMemo(() => {
     if (!contentSize) return null;
@@ -355,11 +343,27 @@ export function ReaderView(props: ReaderViewProps) {
   }, [pages, contentSize, coverScrollX]);
 
   const pageWidth = contentSize?.w ?? 0;
-  /** 平移/上下/瞬切共用 PagerView：vertical 纵向翻页（issue #94），瞬切只是不带动画的 setPage */
-  const pagerMode =
-    props.pageTurnStyle === 'slide' ||
-    props.pageTurnStyle === 'vertical' ||
-    props.pageTurnStyle === 'none';
+  /** 平移/瞬切共用 PagerView：瞬切只是不带动画的 setPage */
+  const pagerMode = props.pageTurnStyle === 'slide' || props.pageTurnStyle === 'none';
+  /**
+   * 「上下」实时滚动（issue #99）：vertical 不再走 PagerView 按页吸附，
+   * 改为与滚动模式同一套连续 ScrollView 渲染与位置跟踪——滑动多少就
+   * 向下多少，跟手不吸附。
+   */
+  const scrollLike =
+    props.mode === 'scroll' || (props.mode === 'paged' && props.pageTurnStyle === 'vertical');
+
+  // 自动滚屏驱动（issue #78 重构）：每 tick 从实际当前位置前进一步，
+  // 手动滚动/跨章后基准天然对齐，不会停摆或直跳章尾
+  useEffect(() => {
+    if (!scrollLike || props.autoScrollStep <= 0) return;
+    const timer = setInterval(() => {
+      const next = scrollOffsetRef.current + props.autoScrollStep;
+      scrollRef.current?.scrollTo({ y: next, animated: false });
+      scrollOffsetRef.current = next;
+    }, AUTO_SCROLL_TICK_MS);
+    return () => clearInterval(timer);
+  }, [props.mode, props.autoScrollStep]);
 
   // 字体族：CJK 方块字假设下同字号不改变分页 metrics
   const bodyFontClass =
@@ -371,6 +375,16 @@ export function ReaderView(props: ReaderViewProps) {
     const event = props.volumeEvent;
     if (!event || event.seq === volumeSeqRef.current) return;
     volumeSeqRef.current = event.seq;
+    if (scrollLike) {
+      // 上下（连续滚动）：音量键滚动约一屏
+      hapticLight();
+      const page = (contentSize?.h ?? windowH) * 0.85;
+      scrollRef.current?.scrollTo({
+        y: Math.max(scrollOffsetRef.current + (event.direction === 'up' ? -page : page), 0),
+        animated: true,
+      });
+      return;
+    }
     if (props.mode !== 'paged') return;
     hapticLight();
     if (event.direction === 'up') {
@@ -422,7 +436,7 @@ export function ReaderView(props: ReaderViewProps) {
 
   // 页定位：章节切换 → 恢复/起始偏移；同章排版变化（含工具条显隐导致的高度变化）→ 当前页首
   useEffect(() => {
-    if (props.mode !== 'paged' || pages.length === 0) return;
+    if (scrollLike || props.mode !== 'paged' || pages.length === 0) return;
     const chapterChanged = chapterBaseRef.current !== props.chapterBaseOffset;
     chapterBaseRef.current = props.chapterBaseOffset;
     const offset = chapterChanged
@@ -450,7 +464,7 @@ export function ReaderView(props: ReaderViewProps) {
     visibleIndexRef.current = null;
     const chapterChanged = scrollChapterBaseRef.current !== props.chapterBaseOffset;
     scrollChapterBaseRef.current = props.chapterBaseOffset;
-    if (props.mode !== 'scroll') return;
+    if (!scrollLike) return;
     if (!chapterChanged) return;
     const targetOffset =
       props.initialOffset > 0 ? props.initialOffset : props.chapterBaseOffset;
@@ -459,7 +473,7 @@ export function ReaderView(props: ReaderViewProps) {
       startOffsets.length > 0 ? paragraphIndexForOffset(startOffsets, targetOffset) : null;
     tryScrollToPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.paragraphs, props.mode]);
+  }, [props.paragraphs, props.mode, props.pageTurnStyle]);
 
   // 滚动位置上报：顶边段变化时通知父级（统计/ETA/节流落库），替代 FlatList 的可视区回调
   const handleScroll = (event: { nativeEvent: { contentOffset: { y: number } } }): void => {
@@ -515,8 +529,8 @@ export function ReaderView(props: ReaderViewProps) {
       setControlsVisible(false);
       return;
     }
-    if (props.mode === 'scroll') {
-      // 滚动模式没有分区翻页，整屏点击即显隐；自动阅读中仍按旧语义暂停/继续
+    if (scrollLike) {
+      // 滚动式交互没有分区翻页，整屏点击即显隐；自动阅读中仍按旧语义暂停/继续
       props.onScrollTap();
       if (controlsVisible) {
         setControlsVisible(false);
@@ -883,7 +897,7 @@ export function ReaderView(props: ReaderViewProps) {
 
         {/* 第五行：自动阅读 + 更多设置项 */}
         <View className="flex-row items-center justify-between">
-          {props.mode === 'scroll' ? (
+          {scrollLike ? (
             <Pressable
               accessibilityRole="button"
               className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2 ${
@@ -1383,7 +1397,7 @@ export function ReaderView(props: ReaderViewProps) {
             />
           </View>
         ) : null}
-        {props.mode === 'scroll' ? (
+        {scrollLike ? (
           <ScrollView
             ref={scrollRef}
             className="flex-1"
@@ -1595,7 +1609,8 @@ export function ReaderView(props: ReaderViewProps) {
             maxHeight: Math.round(windowH * 0.62),
           }}
         >
-          {renderSheetBody()}
+          {/* 面板内容可滚动（issue #99）：任何行都不被 maxHeight 截断 */}
+          <ScrollView nestedScrollEnabled>{renderSheetBody()}</ScrollView>
         </View>
       ) : null}
 

@@ -48,6 +48,9 @@ export default function SettingsScreen() {
   const [pageSound, setPageSound] = useState(false);
   const [wordKaraoke, setWordKaraoke] = useState(false);
   const [allowRotation, setAllowRotation] = useState(false);
+  // 听书自动化开关（issue #99）：默认开，维持既有行为；关闭即停在当前章
+  const [autoNext, setAutoNext] = useState(true);
+  const [autoPregen, setAutoPregen] = useState(true);
   const [appLanguage, setAppLanguage] = useState<'system' | 'zh' | 'en'>('system');
   const [crashEntries, setCrashEntries] = useState<Array<{ at: number; source: string; message: string }> | null>(null);
   const [endpoint, setEndpoint] = useState('');
@@ -71,6 +74,8 @@ export default function SettingsScreen() {
     setPageSound((await services.settings.getSetting('reader-page-sound')) === 'on');
     setWordKaraoke((await services.settings.getSetting('word-karaoke')) === 'on');
     setAllowRotation((await services.settings.getSetting('reader-allow-rotation')) === 'on');
+    setAutoNext((await services.settings.getSetting('auto-next-chapter')) !== 'off');
+    setAutoPregen((await services.settings.getSetting('auto-pregen-next')) !== 'off');
     const lang = await services.settings.getSetting('app-language');
     setAppLanguage(lang === 'zh' || lang === 'en' ? lang : 'system');
     void services.crashLog.recent().then(setCrashEntries);
@@ -181,6 +186,8 @@ export default function SettingsScreen() {
             ['reader-page-sound', t('settings.readingPageSound'), pageSound, setPageSound],
             ['word-karaoke', t('settings.readingKaraoke'), wordKaraoke, setWordKaraoke],
             ['reader-allow-rotation', t('settings.readingRotation'), allowRotation, setAllowRotation],
+            ['auto-next-chapter', t('settings.autoNextChapter'), autoNext, setAutoNext],
+            ['auto-pregen-next', t('settings.autoPregenNext'), autoPregen, setAutoPregen],
           ] as const).map(([key, label, value, setter]) => toggleRow(key, label, value, setter))}
         </View>
         <Text className="mt-2 text-xs text-faint">{t('settings.readingHint')}</Text>
