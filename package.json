@@ -1,6 +1,6 @@
 {
   "name": "talecast",
-  "version": "0.20.8",
+  "version": "0.21.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@exodus/bytes": "1.16.0",
