@@ -1,6 +1,6 @@
 import { searchBook } from '@/domain/search';
 import type { LibraryRepository, SourceFileStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 
 /**
  * 全文搜索服务（docs/design/2026-11-19-manual-reading-plan.md R3）：
@@ -25,8 +25,8 @@ export function createSearchService(deps: SearchDeps) {
       query: string,
     ): Promise<Result<BookSearchResult[]>> {
       const source = await deps.libraryRepository.getSource(projectId);
-      if (!source) return err('invalid', '书籍还没有导入来源');
-      if (query.trim().length === 0) return err('invalid', '搜索词不能为空');
+      if (!source) return errError('noSource');
+      if (query.trim().length === 0) return errError('queryEmpty');
       const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
       const chapters = await deps.libraryRepository.listChapters(projectId);
       const hits = searchBook(

@@ -15,7 +15,7 @@ import type {
   SourceFileStore,
   SplitProposalRepository,
 } from '@/domain/ports';
-import { errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
 
 
 export type { AssistantScope } from '@/domain/assistant';
@@ -93,7 +93,7 @@ export function createAssistantService(deps: AssistantDeps) {
     const source = await deps.libraryRepository.getSource(projectId);
     const chapters = await deps.libraryRepository.listChapters(projectId);
     const resolved = resolveAssistantScope(scope, chapters);
-    if (!resolved) return err('invalid', '助手上下文范围无效：章节不存在或选区越界');
+    if (!resolved) return errError('scopeInvalid');
     const chapterMeta = chapters
       .map((chapter) => `- 《${chapter.title}》 偏移 ${chapter.startOffset}–${chapter.endOffset}`)
       .join('\n');
@@ -128,7 +128,7 @@ export function createAssistantService(deps: AssistantDeps) {
       scope?: AssistantScope;
       onDelta?: (delta: string) => void;
     }): Promise<Result<{ assistantText: string; proposalId: string | null; scopeNotice: string }>> {
-      if (command.userText.trim().length === 0) return err('invalid', '消息不能为空');
+      if (command.userText.trim().length === 0) return errError('messageEmpty');
       const scope: AssistantScope = command.scope ?? { kind: 'book' };
       const session = await deps.assistantRepository.getOrCreateSession(command.projectId);
       const contextResult = await buildContext(command.projectId, scope);

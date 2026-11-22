@@ -5,7 +5,7 @@ import type {
   ProjectRepository,
   SettingsRepository,
 } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
  * JSON 数据备份（RE-4⑤）：导出书架+偏好+书签+划线笔记为可读 JSON，文件分享。
@@ -103,7 +103,7 @@ export function createBackupService(deps: BackupDeps) {
         };
         return ok(backup);
       } catch (error) {
-        return err('storage', `备份导出失败：${error instanceof Error ? error.message : String(error)}`);
+        return errError('exportFailed', { reason: error instanceof Error ? error.message : String(error) });
       }
     },
 
@@ -111,7 +111,7 @@ export function createBackupService(deps: BackupDeps) {
     async exportAndShare(): Promise<Result<null>> {
       const backup = await this.exportBackup();
       if (!backup.ok) return backup;
-      if (!deps.share) return err('invalid', '当前环境不支持分享');
+      if (!deps.share) return errError('shareUnsupported');
       try {
         const filename = `talecast-backup-${backup.value.exportedAt.slice(0, 10)}.json`;
         await deps.share({ name: filename, content: JSON.stringify(backup.value, null, 2) });
@@ -132,18 +132,18 @@ export function createBackupService(deps: BackupDeps) {
       try {
         parsed = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
-        return err('invalid', '备份文件不是有效的 JSON');
+        return errError('invalidJson');
       }
-      if (typeof parsed !== 'object' || parsed === null) return err('invalid', '备份文件格式不正确');
+      if (typeof parsed !== 'object' || parsed === null) return errError('invalidFormat');
       const data = parsed as {
         version?: unknown;
         settings?: unknown;
         bookmarks?: unknown;
         annotations?: unknown;
       };
-      if (data.version !== 1) return err('invalid', '备份版本不受支持，请升级应用后再导入');
+      if (data.version !== 1) return errError('versionUnsupported');
       if (typeof data.settings !== 'object' || data.settings === null) {
-        return err('invalid', '备份缺少设置项');
+        return errError('missingSettings');
       }
       const entries = Object.entries(data.settings as Record<string, unknown>).filter(
         ([key, value]) => typeof value === 'string' && !key.startsWith('llm-'),
@@ -237,7 +237,7 @@ export function createBackupService(deps: BackupDeps) {
 
     /** 从系统文件选取备份并恢复（未注入 picker 时返回明确错误） */
     async importFromPicker(): Promise<Result<ImportSummary>> {
-      if (!deps.pickBackupFile) return err('invalid', '当前环境不支持导入');
+      if (!deps.pickBackupFile) return errError('importUnsupported');
       const picked = await deps.pickBackupFile();
       if (!picked) {
         return ok({ restoredSettings: 0, restoredBookmarks: 0, restoredAnnotations: 0, skippedAnnotations: 0 });

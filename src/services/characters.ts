@@ -7,7 +7,7 @@ import type {
   RequestLogRepository,
   SourceFileStore,
 } from '@/domain/ports';
-import { errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, remoteErrorCode, type Result } from '@/domain/result';
 import type { CharacterRecord } from '@/domain/types';
 
 export interface CharactersDeps {
@@ -58,9 +58,9 @@ export function createCharactersService(deps: CharactersDeps) {
       const receipt = await deps.receiptStore.get<{ count: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const source = await deps.libraryRepository.getSource(command.projectId);
-        if (!source) return err('invalid', '本书还没有导入文本');
+        if (!source) return errError('noText');
         const chapters = await deps.libraryRepository.listChapters(command.projectId);
-        if (chapters.length === 0) return err('invalid', '还没有章节');
+        if (chapters.length === 0) return errError('noChapters');
 
         const maxChapters = Math.min(Math.max(command.maxChapters ?? 3, 1), chapters.length);
         const maxChars = command.maxCharsPerChapter ?? 2000;
@@ -122,7 +122,7 @@ export function createCharactersService(deps: CharactersDeps) {
       const receipt = await deps.receiptStore.get<null>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const character = await deps.characterRepository.get(command.characterId);
-        if (!character) return err('not_found', '角色不存在');
+        if (!character) return errError('characterMissing');
         await deps.characterRepository.update(command.characterId, { confirmed: true, manualProtected: true });
         await deps.receiptStore.put({
           commandId: command.commandId,
@@ -135,18 +135,18 @@ export function createCharactersService(deps: CharactersDeps) {
 
     async renameCharacter(characterId: string, newName: string): Promise<Result<null>> {
       const name = newName.trim();
-      if (name.length === 0 || name.length > 30) return err('invalid', '角色名需为 1-30 个字符');
+      if (name.length === 0 || name.length > 30) return errError('characterNameLength');
       const character = await deps.characterRepository.get(characterId);
-      if (!character) return err('not_found', '角色不存在');
+      if (!character) return errError('characterMissing');
       await deps.characterRepository.update(characterId, { name });
       return ok(null);
     },
 
     async deleteCharacter(characterId: string): Promise<Result<null>> {
       const character = await deps.characterRepository.get(characterId);
-      if (!character) return err('not_found', '角色不存在');
+      if (!character) return errError('characterMissing');
       if (character.manualProtected && character.confirmed) {
-        return err('busy', '已确认角色受人工保护；请先在书籍内解除引用后再删除（P2 提供删除入口前，可直接改名）');
+        return errError('characterProtected');
       }
       await deps.characterRepository.delete(characterId);
       return ok(null);

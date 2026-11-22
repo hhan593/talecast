@@ -6,7 +6,7 @@ import { sha256Bytes, sha256Text } from '@/domain/hash';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import { parseMobi } from '@/domain/mobi';
 import type { FilePicker, LibraryRepository, ReceiptStore, SourceFileStore } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 import type { SourceInfo } from '@/domain/types';
 
 /**
@@ -74,7 +74,7 @@ async function runMobiImport(
 ): Promise<Result<ImportSourceResult>> {
   const existing = await deps.libraryRepository.getSource(command.projectId);
   if (existing) {
-    return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
+    return errError('alreadyImported', { name: existing.filename });
   }
   try {
     const parsed = parseMobi(command.bytes, stripHtml);
@@ -111,10 +111,10 @@ async function runEpubImport(
   deps: ImportDeps,
   command: ImportSourceCommand,
 ): Promise<Result<ImportSourceResult>> {
-  if (!deps.epubParser) return err('invalid', 'EPUB 支持未启用');
+  if (!deps.epubParser) return errError('epubDisabled');
   const existing = await deps.libraryRepository.getSource(command.projectId);
   if (existing) {
-    return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
+    return errError('alreadyImported', { name: existing.filename });
   }
   try {
     const parsed = await deps.epubParser.parseEpub(command.bytes);
@@ -167,7 +167,7 @@ async function runEpubImport(
 function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Result<ImportSourceResult>> {
   const { bytes, projectId } = command;
 
-  if (bytes.length === 0) return Promise.resolve(err('invalid', '文件内容为空'));
+  if (bytes.length === 0) return Promise.resolve(errError('emptyFile'));
   // EPUB 分支（v0.5.0）：二进制 ZIP 容器；在 TXT 编码识别之前分流
   if (deps.epubParser && (command.fileName.toLowerCase().endsWith('.epub') || (bytes[0] === 0x50 && bytes[1] === 0x4b))) {
     return runEpubImport(deps, command);
@@ -177,13 +177,13 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
   if (lowerName.endsWith('.mobi') || lowerName.endsWith('.azw3') || lowerName.endsWith('.prc')) {
     // 大小校验（issue #34）：MOBI/EPUB 分支此前绕过 TXT 的 16MB 上限
     if (command.bytes.length > 16 * 1024 * 1024) {
-      return Promise.resolve(err('invalid', `文件超出 16MB 上限（${(command.bytes.length / 1024 / 1024).toFixed(1)}MB）`));
+      return Promise.resolve(errError('urlFileTooLarge', { size: (command.bytes.length / 1024 / 1024).toFixed(1) }));
     }
     return runMobiImport(deps, command);
   }
   if (!checkImportSize(bytes.length)) {
     return Promise.resolve(
-      err('invalid', `文件超出首版 16MB 上限（当前 ${(bytes.length / 1024 / 1024).toFixed(1)}MB），请拆分后导入`),
+      errError('fileTooLarge', { size: (bytes.length / 1024 / 1024).toFixed(1) }),
     );
   }
   const decoded = decodeSourceText(bytes, command.encoding ?? 'auto');
@@ -191,7 +191,7 @@ function runImport(deps: ImportDeps, command: ImportSourceCommand): Promise<Resu
 
   return deps.libraryRepository.getSource(projectId).then((existing) => {
     if (existing) {
-      return err('invalid', `本书已导入《${existing.filename}》。一本书只支持一份文本来源`);
+      return errError('alreadyImported', { name: existing.filename });
     }
 
     const rawSha256 = sha256Bytes(bytes);

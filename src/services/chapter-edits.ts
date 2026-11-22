@@ -1,6 +1,6 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { ChapterEditKind, LibraryRepository, ProjectRepository , ReceiptStore } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 import type { Chapter, Project } from '@/domain/types';
 
 
@@ -51,9 +51,9 @@ function runEdit<T extends Command & { projectId: string; chapterId: string }>(
   return deps.receiptStore.get<EditResult>(command.commandId).then((receipt) =>
     resolveIdempotent(receipt, async () => {
       const project = await deps.projectRepository.get(command.projectId);
-      if (!project) return err('not_found', '书籍不存在');
+      if (!project) return errError('bookMissing');
       if (project.revision !== command.expectedRevision) {
-        return err('conflict', '书籍已被其他操作修改，请刷新后重试');
+        return errError('revisionConflict');
       }
       try {
         const result = await deps.libraryRepository.mutateChapters(
@@ -84,7 +84,7 @@ export function createChapterEditService(deps: ChapterEditDeps) {
     renameChapter(command: RenameChapterCommand): Promise<Result<EditResult>> {
       const newTitle = command.newTitle.trim();
       if (newTitle.length === 0 || newTitle.length > 60) {
-        return Promise.resolve(err('invalid', '标题需为 1-60 个字符'));
+        return Promise.resolve(errError('titleLength'));
       }
       return runEdit(deps, command, 'rename', { newTitle }, (chapters) => {
         const { chapter, index } = requireChapter(chapters, command.chapterId);

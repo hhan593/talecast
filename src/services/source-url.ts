@@ -1,5 +1,5 @@
 import { assertPublicHttpUrlDeep } from '@/domain/url-guard';
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 
 /**
  * 在线书源阶段一（docs/design/2026-11-19-phase2-plan.md §6）：
@@ -22,21 +22,21 @@ export function createUrlTxtService(deps: UrlTxtDeps) {
       try {
         parsed = new URL(url);
       } catch {
-        return err('invalid', 'URL 格式不正确');
+        return errError('urlInvalid');
       }
       // SSRF 防护（v0.10.0）：协议/凭据/字面私网主机拦截（DNS 复检经 deps 可选注入）
       const guard = await assertPublicHttpUrlDeep(url, { resolveHost: deps.resolveHost });
       if (!guard.ok) return err('invalid', guard.message);
       try {
         const response = await deps.download(url);
-        if (response.length === 0) return err('invalid', '下载内容为空');
+        if (response.length === 0) return errError('downloadEmpty');
         if (response.length > MAX_URL_TXT_BYTES) {
-          return err('invalid', `文件超出 16MB 上限（${(response.length / 1024 / 1024).toFixed(1)}MB）`);
+          return errError('urlFileTooLarge', { size: (response.length / 1024 / 1024).toFixed(1) });
         }
         const fileName = decodeURIComponent(parsed.pathname.split('/').pop() || 'remote.txt');
         return ok({ fileName, bytes: response });
       } catch (error) {
-        return err('network', `下载失败：${error instanceof Error ? error.message : String(error)}`);
+        return errError('downloadFailed', { reason: error instanceof Error ? error.message : String(error) });
       }
     },
   };

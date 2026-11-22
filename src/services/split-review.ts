@@ -13,7 +13,7 @@ import type {
   SourceFileStore,
   SplitProposalRepository,
 } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 
 
 export interface SplitReviewDeps {
@@ -47,7 +47,7 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<ResplitResult>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const source = await deps.libraryRepository.getSource(command.projectId);
-        if (!source) return err('invalid', '还没有导入文本，先导入 TXT');
+        if (!source) return errError('noText');
 
         const text = await deps.sourceFileStore.readDecodedText(source.textSha256);
         const drafts = buildInitialChapterDrafts(text);
@@ -79,10 +79,10 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<{ chapterCount: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '书籍不存在');
+        if (!project) return errError('bookMissing');
         const proposal = await deps.splitProposalRepository.get(command.proposalId);
         if (!proposal || proposal.projectId !== command.projectId) {
-          return err('not_found', '候选不存在');
+          return errError('proposalMissing');
         }
         const guardError = assertAdoptable(proposal.status, project.revision, command.expectedRevision);
         if (guardError) return err('conflict', guardError);
@@ -113,10 +113,10 @@ export function createSplitReviewService(deps: SplitReviewDeps) {
       const receipt = await deps.receiptStore.get<{ chapterCount: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '书籍不存在');
+        if (!project) return errError('bookMissing');
         const proposal = await deps.splitProposalRepository.get(command.proposalId);
         if (!proposal || proposal.projectId !== command.projectId) {
-          return err('not_found', '候选不存在');
+          return errError('proposalMissing');
         }
         const guardError = assertUndoable(proposal.status, project.revision, command.expectedRevision);
         if (guardError) return err('conflict', guardError);

@@ -1,6 +1,6 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { ChapterExporter, GenerationStore, ReceiptStore } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 
 /**
  * 章节音频导出（docs/design/2026-11-18-v0.2.0-spec.md F-3）：
@@ -37,12 +37,12 @@ export function createExportService(deps: ExportDeps) {
       const receipt = await deps.receiptStore.get<{ uri: string; segmentCount: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const paths = await doneSegmentPaths(command.projectId, command.chapterId);
-        if (paths === null) return err('invalid', '本章还没有已完成的生成音频，请先生成本章');
+        if (paths === null) return errError('noDoneAudio');
         const outputPath = `${deps.cacheDirUri}exports/${command.projectId}-${command.chapterId}.mp3`;
         try {
           await deps.exporter.concatToFile(paths, outputPath);
         } catch (error) {
-          return err('storage', `导出失败：${error instanceof Error ? error.message : String(error)}`);
+          return errError('exportFailed', { reason: error instanceof Error ? error.message : String(error) });
         }
         const result = { uri: outputPath, segmentCount: paths.length };
         await deps.receiptStore.put({
@@ -59,7 +59,7 @@ export function createExportService(deps: ExportDeps) {
         await deps.exporter.share(uri);
         return ok(null);
       } catch (error) {
-        return err('storage', `分享失败：${error instanceof Error ? error.message : String(error)}`);
+        return errError('shareFailed', { reason: error instanceof Error ? error.message : String(error) });
       }
     },
   };

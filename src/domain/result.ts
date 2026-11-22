@@ -1,3 +1,7 @@
+import { getLocale } from '@/i18n';
+
+
+import { ERRORS } from './errors';
 
 export type CommandErrorCode =
   | 'busy' // 有活动任务占用
@@ -21,6 +25,17 @@ export const err = (code: CommandErrorCode, message: string): Result<never> => (
   ok: false,
   error: { code, message },
 });
+
+/**
+ * 错误码化文案（issue #82）：以 errors 表的键创建错误——message 按**当前界面
+ * 语言**就地解析（创建即显示，误差可忽略），展示层零改动。
+ */
+export function errError(key: keyof typeof ERRORS, params?: Record<string, string>): Result<never> {
+  const entry = ERRORS[key];
+  const template = getLocale() === 'en' ? entry.en : entry.zh;
+  const message = typeof template === 'function' ? template(params ?? {}) : template;
+  return { ok: false, error: { code: entry.code, message } };
+}
 
 /** 文本模型未配置：网关抛出，服务层据此归为 invalid 而非 network（与提示文案解耦） */
 export class LlmNotConfiguredError extends Error {

@@ -4,7 +4,7 @@
  * （GitHub 匿名限额 60 次/小时/IP），Release 元数据缓存进 settings。
  * 网络失败静默降级为 unavailable——不阻塞启动、不弹错误。
  */
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 import type { ApkInstaller, SettingsRepository, UpdateGateway } from '@/domain/ports';
 import {
   findAndroidApkAsset,
@@ -99,9 +99,9 @@ export function createUpdateService(deps: UpdateDeps) {
       onPhase: (event: InstallPhaseEvent) => void,
     ): Promise<Result<'launched'>> {
       const installer = deps.apkInstaller;
-      if (!installer) return err('invalid', '当前版本不支持站内安装，请到 Release 页手动下载');
+      if (!installer) return errError('inAppUnsupported');
       const apk = findAndroidApkAsset(release.assets);
-      if (!apk) return err('not_found', '该 Release 缺少 Android APK 产物，请到 Release 页下载');
+      if (!apk) return errError('missingApkAsset');
       const sums = findChecksumAsset(release.assets);
 
       onPhase({ phase: 'downloading', progress: 0 });
@@ -111,7 +111,7 @@ export function createUpdateService(deps: UpdateDeps) {
       });
       if (!downloaded) {
         onPhase({ phase: 'failed', error: '下载失败，请检查网络后重试' });
-        return err('network', 'APK 下载失败，请检查网络后重试');
+        return errError('apkDownloadFailed');
       }
 
       onPhase({ phase: 'verifying' });
@@ -119,14 +119,14 @@ export function createUpdateService(deps: UpdateDeps) {
         const sumsText = await deps.gateway.fetchText(sums.url);
         if (sumsText === null) {
           onPhase({ phase: 'failed', error: '校验和文件下载失败' });
-          return err('network', '校验和文件下载失败，请稍后重试');
+          return errError('checksumDownloadFailed');
         }
         const expected = parseChecksumFor(sumsText, apk.name);
         if (expected) {
           const actual = await installer.sha256File(downloaded.localUri);
           if (actual === null || actual.toLowerCase() !== expected.toLowerCase()) {
             onPhase({ phase: 'failed', error: 'APK 校验失败，已放弃安装' });
-            return err('storage', 'APK 校验失败，文件可能损坏，已放弃安装');
+            return errError('apkChecksumMismatch');
           }
         }
         // 校验和文件缺失该条目时跳过校验（保留下载产物）
@@ -136,7 +136,7 @@ export function createUpdateService(deps: UpdateDeps) {
       const installed = await installer.install(downloaded.localUri);
       if (installed !== 'launched') {
         onPhase({ phase: 'failed', error: '无法拉起安装器，请到 Release 页手动下载' });
-        return err('storage', '无法拉起安装器，请到 Release 页手动下载');
+        return errError('installerLaunchFailed');
       }
       return ok('launched');
     },
