@@ -36,7 +36,7 @@ interface ReadingStats {
 export default function SettingsScreen() {
   const services = useServices();
   const { t, changeLanguage } = useI18n();
-  const { checkAndPrompt } = useUpdatePrompt();
+  const { checkAndPrompt, installPhase, installProgress } = useUpdatePrompt();
   const colorScheme = useColorScheme();
   const [updateChecking, setUpdateChecking] = useState(false);
   const [stats, setStats] = useState<ReadingStats | null>(null);
@@ -165,8 +165,16 @@ export default function SettingsScreen() {
               void checkAndPrompt({ manual: true }).finally(() => setUpdateChecking(false));
             }}
           >
-            <Text className="flex-1 text-sm text-ink dark:text-ink-night">{t('settings.updateCheck')}</Text>
-            {updateChecking ? (
+            <Text className="flex-1 text-sm text-ink dark:text-ink-night">
+              {installPhase === 'downloading'
+                ? t('settings.installDownloading', { progress: installProgress })
+                : installPhase === 'verifying'
+                  ? t('settings.installVerifying')
+                  : installPhase === 'ready'
+                    ? t('settings.installReady')
+                    : t('settings.updateCheck')}
+            </Text>
+            {updateChecking || installPhase === 'downloading' || installPhase === 'verifying' ? (
               <ActivityIndicator size="small" />
             ) : (
               <Text className="text-xs text-faint">v{Constants.expoConfig?.version ?? '—'}</Text>

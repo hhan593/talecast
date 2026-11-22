@@ -125,6 +125,21 @@ export interface KeyStore {
 /** 应用内更新检查（issue #58）：远端最新 Release 元数据；失败由实现返回 null，不抛错 */
 export interface UpdateGateway {
   fetchLatestRelease(): Promise<ReleaseInfo | null>;
+  /** 下载 release 附件文本（SHA256SUMS 等，issue #85 P2）；失败返回 null */
+  fetchText(url: string): Promise<string | null>;
+}
+
+/** APK 下载与安装（issue #85 P2）：失败一律返回 null/failed，由服务层编排 */
+export interface ApkInstaller {
+  /** 下载到应用缓存；onProgress(written, total) 按字节上报 */
+  download(
+    url: string,
+    onProgress: (written: number, total: number) => void,
+  ): Promise<{ localUri: string } | null>;
+  /** 增量 SHA-256（hex 小写）；读取失败返回 null */
+  sha256File(fileUri: string): Promise<string | null>;
+  /** 拉起系统安装器；未授权/失败返回 'failed' */
+  install(fileUri: string): Promise<'launched' | 'failed'>;
 }
 
 export interface WordTimelineItem {

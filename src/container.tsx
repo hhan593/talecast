@@ -15,6 +15,7 @@ import {
 import { EXPORTS_DIR_URI, Mp3ChapterExporter } from '@/adapters/audio-export';
 import { createOpenAiCompatibleLlmGateway } from '@/adapters/llm/client';
 import { createGithubReleaseGateway } from '@/adapters/github-release';
+import { createApkInstaller } from '@/adapters/apk-installer';
 import { createCrashLogService, installCrashLog } from '@/adapters/crash-log';
 import { ScreenOrientationAdapter } from '@/adapters/screen';
 import { createSqliteAdapters } from '@/adapters/sqlite';
@@ -209,6 +210,7 @@ const services = {
     gateway: createGithubReleaseGateway('hhan593/talecast'),
     settingsRepository: adapters.settingsRepository,
     currentVersion: Constants.expoConfig?.version ?? '0.0.0',
+    apkInstaller: createApkInstaller(),
   }),
   annotations: createAnnotationsService({
     annotationRepository: adapters.annotationRepository,
