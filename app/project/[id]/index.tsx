@@ -27,6 +27,7 @@ import { useLibrary } from '@/hooks/use-library';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { usePageSound } from '@/hooks/use-page-sound';
 import { usePlayback } from '@/hooks/use-playback';
+import { useCharacters } from '@/hooks/use-characters';
 import { useProject } from '@/hooks/use-project';
 import { useServices } from '@/container';
 import { useI18n } from '@/hooks/use-i18n';
@@ -43,6 +44,7 @@ export default function ProjectWorkbenchScreen() {
   const { t } = useI18n();
   const library = useLibrary(projectId, project?.revision ?? -1);
   const generation = useGeneration(projectId);
+  const bookVoices = useCharacters(projectId);
   const router = useRouter();
 
   const playback = usePlayback(projectId);
@@ -659,6 +661,11 @@ export default function ProjectWorkbenchScreen() {
         onDeleteBookmark={(bookmarkId) => void bookmarks.remove(bookmarkId)}
         onOpenDrawer={() => setReaderDrawerOpen(true)}
         onOpenCatalog={() => setCatalogDrawerOpen(true)}
+        narratorVoiceName={bookVoices.voiceName(bookVoices.narratorBinding?.voiceId ?? null)}
+        voices={bookVoices.voices}
+        voicesRefreshing={bookVoices.busy}
+        onRefreshVoices={() => void bookVoices.refreshVoices()}
+        onPickNarratorVoice={(voiceId) => void bookVoices.bindNarrator(voiceId)}
         onPlayChapter={() => playWithAlert(current.chapter.id)}
       />
       {/* 阅读器右侧抽屉（issue #90）：··· = 更多菜单；设置面板入口仍在底栏「设置」 */}
