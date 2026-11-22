@@ -17,6 +17,7 @@ import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ReaderSlider } from '@/components/workbench/reader-slider';
+import { VoicePickerSheet } from '@/components/voice-picker-sheet';
 import { AUTO_SCROLL_TICK_MS } from '@/hooks/use-auto-scroll';
 import {
   FONT_SIZES,
@@ -38,6 +39,7 @@ import {
 import { sliceStyledText } from '@/domain/annotations';
 import { READER_THEMES, THEME_CYCLE, type ReaderThemeKey } from '@/domain/reader-theme';
 import type { Paragraph } from '@/domain/source';
+import type { VoiceRecord } from '@/domain/types';
 import { useI18n } from '@/hooks/use-i18n';
 import type { StringKey } from '@/i18n';
 
@@ -205,6 +207,12 @@ export interface ReaderViewProps {
   onOpenDrawer(): void;
   /** 底栏「目录」：打开左侧章节抽屉（issue #94，不再用底部面板） */
   onOpenCatalog(): void;
+  /** 旁白音色（issue #124）：当前音色名 / 音色列表 / 列表刷新 / 选择即绑定 */
+  narratorVoiceName: string | null;
+  voices: VoiceRecord[];
+  voicesRefreshing?: boolean;
+  onRefreshVoices(): void;
+  onPickNarratorVoice(voiceId: string): void;
 }
 
 /** 翻页页渲染窗口：PagerView 不虚拟化，只渲染当前页 ±3 页（长章首屏速度） */
@@ -648,6 +656,8 @@ export function ReaderView(props: ReaderViewProps) {
 
   // 章节拖动预览（拖动中显示目标章名，松手跳章）
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
+  // 旁白音色选择（issue #124）：从听书面板打开 VoicePickerSheet
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const percent =
     props.chapterCount > 0 ? Math.round(((props.chapterIndex + 1) / props.chapterCount) * 100) : 0;
   const progressLabel =
@@ -1163,6 +1173,22 @@ export function ReaderView(props: ReaderViewProps) {
       ) : (
         <Text className={`text-[11px] ${theme.muted}`}>{t('reader.segmentHint')}</Text>
       )}
+
+      {/* 旁白音色（issue #124）：即选即绑，绑定 revision 变化 → 重新生成本章自动用新音色 */}
+      <Pressable
+        accessibilityRole="button"
+        className="mt-2 flex-row items-center justify-between rounded-xl bg-raised px-3 py-2.5 dark:bg-card-night"
+        onPress={() => setVoicePickerOpen(true)}
+      >
+        <Text className="text-xs text-muted">{t('reader.narratorVoice')}</Text>
+        <View className="flex-1 flex-row items-center justify-end gap-1">
+          <Text className={`text-xs ${theme.text}`} numberOfLines={1}>
+            {props.narratorVoiceName ?? t('characters.unbound')}
+          </Text>
+          <Ionicons name="chevron-forward" size={12} color={theme.mutedHex} />
+        </View>
+      </Pressable>
+      <Text className="mt-1 text-[10px] text-faint">{t('reader.voiceApplyHint')}</Text>
     </View>
   );
 
@@ -1621,6 +1647,20 @@ export function ReaderView(props: ReaderViewProps) {
           <ScrollView nestedScrollEnabled>{renderSheetBody()}</ScrollView>
         </View>
       ) : null}
+
+      {/* 旁白音色选择（issue #124）：Modal 组件，独立于底部升起面板 */}
+      <VoicePickerSheet
+        visible={voicePickerOpen}
+        title={t('reader.narratorVoice')}
+        voices={props.voices}
+        refreshing={props.voicesRefreshing}
+        onRefresh={() => props.onRefreshVoices()}
+        onSelect={(voice) => {
+          setVoicePickerOpen(false);
+          props.onPickNarratorVoice(voice.voiceId);
+        }}
+        onClose={() => setVoicePickerOpen(false)}
+      />
 
       {/* 亮度遮罩（黑）与护眼遮罩（琥珀）：不申请系统亮度权限，只压在本页上 */}
       <View
