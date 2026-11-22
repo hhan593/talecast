@@ -5,6 +5,11 @@
  * 任一侧非法时宁可不提示（false），不做 best-effort 猜测。
  */
 
+export interface ReleaseAsset {
+  name: string;
+  url: string;
+}
+
 export interface ReleaseInfo {
   /** Release tag，如 "v0.19.1" */
   tagName: string;
@@ -12,6 +17,17 @@ export interface ReleaseInfo {
   htmlUrl: string;
   /** Release 说明（弹窗展示，超长由 truncateNotes 截断） */
   notes: string;
+  /** 产物列表（v0.21.1，issue #85 P2：APK 与 SHA256SUMS）；旧网关实现可缺省 */
+  assets?: ReleaseAsset[];
+}
+
+/** 从产物列表里找出 Android APK 与校验和文件 */
+export function findAndroidApkAsset(assets: ReleaseAsset[] | undefined): ReleaseAsset | null {
+  return assets?.find((a) => /-android\.apk$/i.test(a.name)) ?? null;
+}
+
+export function findChecksumAsset(assets: ReleaseAsset[] | undefined): ReleaseAsset | null {
+  return assets?.find((a) => /SHA256SUMS$/i.test(a.name)) ?? null;
 }
 
 /** "v0.19.1" → [0, 19, 1]；非法（空段 / 非数字段）→ null */

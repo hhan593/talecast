@@ -20,9 +20,23 @@ export function createGithubReleaseGateway(repo: string): UpdateGateway {
           tag_name?: string;
           html_url?: string;
           body?: string | null;
+          assets?: Array<{ name?: string; browser_download_url?: string }>;
         };
         if (!data.tag_name || !data.html_url) return null;
-        return { tagName: data.tag_name, htmlUrl: data.html_url, notes: data.body ?? '' };
+        const assets = (data.assets ?? [])
+          .filter((a) => typeof a.name === 'string' && typeof a.browser_download_url === 'string')
+          .map((a) => ({ name: a.name as string, url: a.browser_download_url as string }));
+        return { tagName: data.tag_name, htmlUrl: data.html_url, notes: data.body ?? '', assets };
+      } catch {
+        return null;
+      }
+    },
+
+    async fetchText(url) {
+      try {
+        const response = await fetch(url, { headers: { Accept: 'text/plain' } });
+        if (!response.ok) return null;
+        return await response.text();
       } catch {
         return null;
       }
