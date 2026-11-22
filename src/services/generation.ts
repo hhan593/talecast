@@ -19,7 +19,7 @@ import type {
   TtsGateway,
 } from '@/domain/ports';
 import type { BindingRecord, GenerationJobRecord, GenerationSegmentRecord } from '@/domain/types';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
  * 生成任务（docs/plan.md 4.1.5 / 5.3 生成流程）：
@@ -269,11 +269,11 @@ export function createGenerationService(deps: GenerationDeps) {
       const receipt = await deps.receiptStore.get<{ jobId: string; totalSegments: number; reusedSegments: number }>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         const loaded = await loadChapterText(command.projectId, command.chapterId);
-        if (!loaded) return err('not_found', '章节或来源不存在');
+        if (!loaded) return errError('chapterOrSourceMissing');
         const { chapterText } = loaded;
 
         if (!checkChapterGenerationSize(chapterText.length)) {
-          return err('invalid', `本章 ${chapterText.length} 字超出首版单章 3 万字上限，请拆章后生成`);
+          return errError('chapterTooLarge', { size: String(chapterText.length) });
         }
 
         const binding = await resolveNarratorBinding(command.projectId);
@@ -381,9 +381,9 @@ export function createGenerationService(deps: GenerationDeps) {
     /** 重试：只请求缺失/失败段（done 段直接跳过）——provider 请求数 = 缺失段数 */
     async retryGeneration(command: { projectId: string; jobId: string }): Promise<Result<{ jobId: string }>> {
       const job = await deps.generationStore.getJob(command.jobId);
-      if (!job || job.projectId !== command.projectId) return err('not_found', '任务不存在');
+      if (!job || job.projectId !== command.projectId) return errError('jobMissing');
       if (job.status === 'running' || job.status === 'pending') {
-        return err('busy', '任务仍在进行中，稍候刷新进度');
+        return errError('jobRunning');
       }
       cancelledJobs.delete(job.id);
       await deps.generationStore.updateJob(job.id, { status: 'pending', error: null });
@@ -394,9 +394,9 @@ export function createGenerationService(deps: GenerationDeps) {
     /** 取消进行中的任务：已完成段保留为缓存（未落盘的合成结果也不浪费），重试续跑 */
     async cancelGeneration(command: { projectId: string; jobId: string }): Promise<Result<null>> {
       const job = await deps.generationStore.getJob(command.jobId);
-      if (!job || job.projectId !== command.projectId) return err('not_found', '任务不存在');
+      if (!job || job.projectId !== command.projectId) return errError('jobMissing');
       if (job.status !== 'running' && job.status !== 'pending') {
-        return err('busy', '任务已结束，无需取消');
+        return errError('jobFinished');
       }
       cancelledJobs.add(job.id);
       return ok(null);
@@ -405,13 +405,13 @@ export function createGenerationService(deps: GenerationDeps) {
     /** 单段试听：不建任务；音频按 text_hash 落盘，生成时自动转正 */
     async previewSegment(command: { projectId: string; chapterId: string }): Promise<Result<{ filePath: string; textHash: string; cached: boolean }>> {
       const loaded = await loadChapterText(command.projectId, command.chapterId);
-      if (!loaded) return err('not_found', '章节或来源不存在');
+      if (!loaded) return errError('chapterOrSourceMissing');
       const binding = await resolveNarratorBinding(command.projectId);
       const chapterText = loaded.chapterText;
-      if (chapterText.length === 0) return err('invalid', '本章内容为空');
+      if (chapterText.length === 0) return errError('chapterEmpty');
       // 试听与生成共用同一计划（v0.9.0）：段哈希一致 → 试听文件生成时零请求转正
       const { plan } = await planChapterSegments(command.projectId, command.chapterId, chapterText, binding);
-      if (plan.length === 0) return err('invalid', '本章内容为空');
+      if (plan.length === 0) return errError('chapterEmpty');
       const first = plan.find((segment) => segment.text.length >= PREVIEW_MIN_CHARS) ?? plan[0];
       const existingPath = deps.audioFileStore.pathFor(first.textHash);
       if (await deps.audioFileStore.exists(first.textHash)) {
@@ -429,7 +429,7 @@ export function createGenerationService(deps: GenerationDeps) {
       } catch (error) {
         const message = errorMessage(error);
         await deps.requestLogRepository.log('tts', false, message.slice(0, 200));
-        return err('network', `试听合成失败：${message}`);
+        return errError('previewFailed', { reason: message });
       }
     },
 

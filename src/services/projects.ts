@@ -1,6 +1,6 @@
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { ProjectRepository, ReceiptStore } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 import type { Project } from '@/domain/types';
 
 /**
@@ -34,7 +34,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
       return resolveIdempotent(receipt, async () => {
         const title = command.title.trim();
         if (title.length === 0 || title.length > 60) {
-          return err('invalid', '书名需为 1-60 个字符');
+          return errError('titleLength');
         }
         try {
           const project = await deps.projectRepository.create({
@@ -58,11 +58,11 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
     /** 书架标签更新（v0.14.0）：全量替换，去重去空 */
     async updateTags(projectId: string, tags: string[]): Promise<Result<Project>> {
       try {
-        if (!deps.projectRepository.updateTags) return err('invalid', '当前存储不支持标签');
+        if (!deps.projectRepository.updateTags) return errError('tagsUnsupported');
         const clean = [...new Set(tags.map((t) => t.trim()).filter((t) => t.length > 0 && t.length <= 12))].slice(0, 8);
         await deps.projectRepository.updateTags(projectId, clean);
         const project = await deps.projectRepository.get(projectId);
-        if (!project) return err('not_found', '书籍不存在');
+        if (!project) return errError('bookMissing');
         return ok(project);
       } catch (error) {
         return err('storage', `标签更新失败：${errorMessage(error)}`);
@@ -73,7 +73,7 @@ export function createProjectsService(deps: ProjectsServiceDeps) {
     async deleteProject(command: { projectId: string }): Promise<Result<null>> {
       try {
         const project = await deps.projectRepository.get(command.projectId);
-        if (!project) return err('not_found', '书籍不存在');
+        if (!project) return errError('bookMissing');
         await deps.projectRepository.delete(command.projectId);
         return ok(null);
       } catch (error) {

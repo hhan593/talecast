@@ -8,7 +8,7 @@ import {
 } from '@/domain/annotations';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { AnnotationRepository, LibraryRepository, ProjectRepository, ReceiptStore, SourceFileStore } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
  * 划线与笔记服务（v0.12.0）：添加（幂等回执）/ 删除 / 笔记编辑 / Markdown 导出。
@@ -37,7 +37,7 @@ export function createAnnotationsService(deps: AnnotationsDeps) {
       return resolveIdempotent(receipt, async () => {
         const chapters = await deps.libraryRepository.listChapters(command.projectId);
         const chapter = chapters.find((c) => c.id === command.chapterId);
-        if (!chapter) return err('not_found', '章节不存在');
+        if (!chapter) return errError('chapterMissing');
         const spanError = assertAnnotationSpan(command.startOffset, command.endOffset, chapter.endOffset);
         if (spanError) return err('invalid', spanError);
         const note = command.note ?? '';

@@ -1,7 +1,7 @@
 import { splitParagraphs, type Paragraph } from '@/domain/source';
 import { applyReplacements, deserializeRules } from '@/domain/replacement';
 import type { ReadingStateRepository } from '@/domain/ports';
-import { err, ok, type Result } from '@/domain/result';
+import { errError, err, ok, type Result } from '@/domain/result';
 import type { Chapter } from '@/domain/types';
 
 /**
@@ -88,7 +88,7 @@ export function createReadingService(deps: ReadingDeps) {
     /** 章节正文读取：解码文本按章节偏移切片 + 分段（正文高亮/播放映射共用） */
     async getChapterText(projectId: string, chapterId: string): Promise<Result<ChapterTextResult>> {
       const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
-      if (!slice) return err('not_found', '章节不存在');
+      if (!slice) return errError('chapterMissing');
       const { chapter, chapterText: rawText } = slice;
       // 净化（RE-3）：展示层变换，来源不变
       let chapterText = rawText;

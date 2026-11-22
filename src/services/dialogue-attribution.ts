@@ -2,7 +2,7 @@ import { buildDialogueCandidates } from '@/domain/dialogue';
 
 import type { CharacterRepository, LlmGateway, LibraryRepository, SettingsRepository, SourceFileStore, BindingRepository } from '@/domain/ports';
 import { sha256Text } from '@/domain/hash';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 
 /**
  * LLM 段落级说话人归属（v0.13.0，可选增强）：
@@ -44,7 +44,7 @@ export function createDialogueAttributionService(deps: DialogueAttributionDeps) 
       chapterText: string,
     ): Promise<Result<SpeakerOverride[]>> {
       const enabled = await deps.settingsRepository.get('llm-attribute-dialogue');
-      if (enabled !== 'on') return err('invalid', 'LLM 归属未开启');
+      if (enabled !== 'on') return errError('attributionDisabled');
       const list = await candidates(projectId);
       if (list.length === 0) return ok([]);
       const cacheKey = `speaker-attribution:${projectId}:${chapterId}`;
@@ -101,7 +101,7 @@ ${text}`;
           overrides.push({ paragraphStart: paragraphStarts[item.p], characterId });
         }
       } catch {
-        return err('invalid', 'LLM 归属输出无法解析');
+        return errError('attributionUnparsable');
       }
       await deps.settingsRepository.set(
         cacheKey,

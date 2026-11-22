@@ -3,7 +3,7 @@ import type {
   GenerationStore,
   ReadingStateRepository,
   SettingsRepository } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 import type { GenerationService } from '@/services/generation';
 
 
@@ -227,15 +227,15 @@ export function createPlaybackService(deps: PlaybackDeps) {
   async function buildQueue(projectId: string, chapterId: string): Promise<Result<{ segmentCount: number }>> {
     const jobs = await deps.generationStore.listJobsByChapter(projectId, chapterId);
     const doneJob = jobs.find((job) => job.status === 'done');
-    if (!doneJob) return err('invalid', '本章还没有已完成的生成音频，请先点"生成本章"');
+    if (!doneJob) return errError('noDoneAudio');
 
     const segments = (await deps.generationStore.listSegments(doneJob.id)).filter(
       (segment) => segment.status === 'done' && segment.filePath !== null,
     );
-    if (segments.length === 0) return err('invalid', '本章没有可用音频段');
+    if (segments.length === 0) return errError('noAudioSegments');
 
     const slice = await deps.libraryQuery.readChapterSlice(projectId, chapterId);
-    if (!slice) return err('not_found', '章节或来源不存在');
+    if (!slice) return errError('chapterOrSourceMissing');
     const { chapter, chapterText } = slice;
 
     let cursor = 0;
@@ -362,7 +362,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
 
     /** 点段跳转 / 拖动进度到某段起点 */
     async seekToSegment(index: number, offsetMs = 0): Promise<Result<null>> {
-      if (queue.length === 0 || state.chapterId === null) return err('invalid', '当前没有播放队列');
+      if (queue.length === 0 || state.chapterId === null) return errError('noQueue');
       // 跳段是新播放行为：旧渐弱链不得继续降音量/暂停（issue #28）
       invalidateFadeForNewPlayback();
       const clamped = Math.min(Math.max(index, 0), queue.length - 1);
@@ -416,7 +416,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
       if (mode === 'minutes') {
         if (!minutes || minutes <= 0 || minutes > 240) {
           cancelSleepTimerInternal();
-          return err('invalid', '定时时长需为 1-240 分钟');
+          return errError('sleepRange');
         }
         const deadline = Date.now() + minutes * 60_000;
         const tick = (): void => {
@@ -440,7 +440,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
 
     /** 倍速：播放端即时生效，settings 持久化（F-1） */
     async setRate(next: number): Promise<Result<null>> {
-      if (next < 0.5 || next > 3) return err('invalid', '倍速超出支持范围');
+      if (next < 0.5 || next > 3) return errError('rateRange');
       rate = next;
       setState({ rate: next });
       try {
@@ -448,7 +448,7 @@ export function createPlaybackService(deps: PlaybackDeps) {
         await deps.settingsRepository.set('playback-speed', String(rate));
         return ok(null);
       } catch (error) {
-        return err('network', `倍速设置失败：${error instanceof Error ? error.message : String(error)}`);
+        return errError('rateSetFailed', { reason: error instanceof Error ? error.message : String(error) });
       }
     },
 

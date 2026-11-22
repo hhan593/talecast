@@ -1,7 +1,7 @@
 import { buildProsodyJson, type TtsProsody } from '@/domain/jobs';
 import { resolveIdempotent, type Command } from '@/domain/commands';
 import type { BindingRepository, CharacterRepository, ReceiptStore } from '@/domain/ports';
-import { errorMessage, err, ok, type Result } from '@/domain/result';
+import { errError, errorMessage, err, ok, type Result } from '@/domain/result';
 import type { BindingRecord, BindingTargetType } from '@/domain/types';
 
 /**
@@ -32,11 +32,11 @@ export function createBindingsService(deps: BindingDeps) {
       const receipt = await deps.receiptStore.get<BindingRecord>(command.commandId);
       return resolveIdempotent(receipt, async () => {
         if (command.targetType === 'character') {
-          if (!command.targetId) return err('invalid', '角色绑定缺少目标角色');
+          if (!command.targetId) return errError('characterTargetMissing');
           const character = await deps.characterRepository.get(command.targetId);
-          if (!character) return err('not_found', '角色不存在');
+          if (!character) return errError('characterMissing');
           if (!character.confirmed) {
-            return err('invalid', '只有人工确认过的角色才能绑定音色');
+            return errError('characterUnconfirmed');
           }
         }
         try {
